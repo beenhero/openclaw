@@ -876,6 +876,7 @@ describe("spawnAcpDirect", () => {
     expect(accepted.inlineDelivery).toBe(true);
     expectCreatedSessionFields({
       spawnedBy: "agent:main:main",
+      parentSessionKey: "agent:main:main",
       createdVia: "spawn",
       createdActor: { type: "agent", id: "agent:main:main" },
       createdAt: expect.any(Number),
