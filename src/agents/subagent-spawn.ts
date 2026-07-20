@@ -363,6 +363,9 @@ function buildDirectChildSessionPatch(patch: Record<string, unknown>): Partial<S
   if (typeof patch.spawnedBy === "string" && patch.spawnedBy.trim()) {
     entry.spawnedBy = patch.spawnedBy.trim();
   }
+  if (typeof patch.parentSessionKey === "string" && patch.parentSessionKey.trim()) {
+    entry.parentSessionKey = patch.parentSessionKey.trim();
+  }
   if (typeof patch.spawnedWorkspaceDir === "string" && patch.spawnedWorkspaceDir.trim()) {
     entry.spawnedWorkspaceDir = patch.spawnedWorkspaceDir.trim();
   }
