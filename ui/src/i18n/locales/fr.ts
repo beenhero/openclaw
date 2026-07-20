@@ -287,6 +287,7 @@ export const fr: TranslationMap = {
     staleTitle: "Une nouvelle version est disponible",
     staleSubtitle:
       "OpenClaw a été mis à jour en arrière-plan. Rechargez la page pour obtenir le panneau le plus récent.",
+    reloading: "Rechargement…",
     retry: "Réessayer",
   },
   nodes: {
@@ -1975,6 +1976,8 @@ export const fr: TranslationMap = {
     requestFailed: "OpenClaw n’a pas pu répondre. Réessayez.",
     connectionChanged:
       "La connexion au Gateway a changé. Réessayez pour poursuivre cette configuration.",
+    sessionRestarted:
+      "{error} OpenClaw a démarré une nouvelle session ; les messages précédents sont conservés pour le contexte.",
     unsupportedGateway: "Mettez à jour le Gateway pour poursuivre la configuration avec OpenClaw.",
     history: {
       button: "Historique",
@@ -2013,6 +2016,10 @@ export const fr: TranslationMap = {
     add: "Ajouter un serveur",
     adding: "Ajout…",
     nameLabel: "Nom",
+    transportLabel: "Transport",
+    transportStreamableHttp: "HTTP avec diffusion en continu",
+    transportSse: "SSE",
+    transportStdio: "Stdio",
     targetLabel: "URL ou commande",
     nameInvalid:
       "Les noms de serveur utilisent des lettres, des chiffres, des points, des tirets ou des traits de soulignement.",
@@ -2223,6 +2230,7 @@ export const fr: TranslationMap = {
       title: "Essaim",
       description: "Permet au Mode Code d’orchestrer en parallèle des groupes de sous-agents.",
       empty: "Aucun essaim actif.",
+      defaultPhase: "Sans phase",
     },
   },
   aboutPage: {
@@ -2711,11 +2719,23 @@ export const fr: TranslationMap = {
       remove: "Supprimer",
       needsApproval: "Approbation requise",
       needsApprovalDetail: "Ce widget a demandé un accès supplémentaire.",
+      networkAccess: "Origines réseau",
+      hostTools: "Outils et données de l’hôte",
+      activeCapabilities: "Fonctionnalités actives du widget",
+      networkCapability: "Réseau : {capability}",
+      toolCapability: "Outil : {capability}",
+      granted: "Accordée",
       allow: "Autoriser",
       reject: "Rejeter",
       rejected: "Accès refusé",
       rejectedDetail: "Ce widget reste inactif jusqu’à ce qu’il soit supprimé ou remplacé.",
+      appLoading: "Restauration de l’application…",
+      appStaleTitle: "Cette application épinglée est obsolète",
+      appStaleDetail:
+        "Son serveur, sa ressource ou la transcription dont elle provient n’est plus disponible.",
+      retry: "Réessayer",
       frameResolverMissing: "Le contenu du widget n’est pas disponible.",
+      sandboxUnavailable: "L’hôte de l’environnement isolé du widget est indisponible.",
       frameAuthorizationFailed:
         "L’autorisation du widget a échoué après plusieurs tentatives d’actualisation.",
       errorTitle: "Impossible de charger ce widget",
@@ -3715,6 +3735,7 @@ export const fr: TranslationMap = {
         title: "Incompatibilité de protocole",
         summary:
           "La Control UI servie et le Gateway en cours d’exécution ne sont pas d’accord sur le protocole de connexion pris en charge.",
+        refresh: "Actualiser la page",
         stepDashboard:
           "Rouvrez le dashboard servi avec openclaw dashboard afin que l’UI et le Gateway viennent de la même installation.",
         stepDevUi:
@@ -3737,6 +3758,7 @@ export const fr: TranslationMap = {
   },
   chat: {
     disconnected: "Déconnecté du Gateway.",
+    waitingForApproval: "En attente d’approbation…",
     archivedSessionDisabled: "Restaurez cette session pour envoyer des messages.",
     loadOlder: "Charger les plus anciens",
     sessionHeader: {
@@ -4287,8 +4309,9 @@ export const fr: TranslationMap = {
       show: "Afficher la discussion",
       disconnected: "Gateway est déconnecté.",
       loading: "Chargement de la discussion…",
-      open: "Ouvrir la discussion",
       opening: "Ouverture de la discussion…",
+      requiresWriteAccess:
+        "Un accès en écriture en tant qu’opérateur est requis pour ouvrir cette discussion.",
       opened: "Discussion de la session",
       openExternal: "Ouvrir la discussion dans un nouvel onglet",
       frameTitle: "Discussion de la session",

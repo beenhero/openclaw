@@ -283,6 +283,7 @@ export const fa: TranslationMap = {
     staleTitle: "نسخه جدیدی در دسترس است",
     staleSubtitle:
       "OpenClaw در پس‌زمینه به‌روزرسانی شد. برای دریافت جدیدترین پنل، دوباره بارگذاری کنید.",
+    reloading: "در حال بارگذاری مجدد…",
     retry: "تلاش دوباره",
   },
   nodes: {
@@ -1946,6 +1947,8 @@ export const fa: TranslationMap = {
     earlier: "پیش‌تر",
     requestFailed: "OpenClaw نتوانست پاسخ دهد. دوباره تلاش کنید.",
     connectionChanged: "اتصال Gateway تغییر کرد. برای ادامه این راه‌اندازی دوباره تلاش کنید.",
+    sessionRestarted:
+      "{error} OpenClaw جلسه‌ای تازه آغاز کرد؛ پیام‌های قبلی برای حفظ زمینه باقی می‌مانند.",
     unsupportedGateway: "برای ادامه راه‌اندازی با OpenClaw، Gateway را به‌روزرسانی کنید.",
     history: {
       button: "تاریخچه",
@@ -1982,6 +1985,10 @@ export const fa: TranslationMap = {
     add: "افزودن سرور",
     adding: "در حال افزودن…",
     nameLabel: "نام",
+    transportLabel: "انتقال",
+    transportStreamableHttp: "HTTP جریانی",
+    transportSse: "SSE",
+    transportStdio: "Stdio",
     targetLabel: "URL یا فرمان",
     nameInvalid: "نام سرورها می‌تواند شامل حروف، اعداد، نقطه، خط تیره یا زیرخط باشد.",
     targetInvalid: "یک URL از نوع http(s) یا یک خط فرمان وارد کنید.",
@@ -2170,6 +2177,7 @@ export const fa: TranslationMap = {
       title: "گروه",
       description: "به Code Mode اجازه دهید گروه‌های زیرعامل‌ها را به‌صورت موازی هماهنگ کند.",
       empty: "هیچ گروه فعالی وجود ندارد.",
+      defaultPhase: "بدون فاز",
     },
   },
   aboutPage: {
@@ -2652,11 +2660,22 @@ export const fa: TranslationMap = {
       remove: "حذف",
       needsApproval: "نیازمند تأیید",
       needsApprovalDetail: "این ویجت درخواست دسترسی بیشتری کرده است.",
+      networkAccess: "مبدأهای شبکه",
+      hostTools: "ابزارها و داده‌های میزبان",
+      activeCapabilities: "قابلیت‌های فعال ویجت",
+      networkCapability: "شبکه: {capability}",
+      toolCapability: "ابزار: {capability}",
+      granted: "اعطا شد",
       allow: "اجازه دادن",
       reject: "رد کردن",
       rejected: "دسترسی رد شد",
       rejectedDetail: "این ویجت تا زمانی که حذف یا جایگزین نشود، غیرفعال می‌ماند.",
+      appLoading: "در حال بازیابی برنامه…",
+      appStaleTitle: "این برنامه سنجاق‌شده منسوخ شده است",
+      appStaleDetail: "سرور، منبع یا رونوشت مبدأ آن دیگر در دسترس نیست.",
+      retry: "تلاش مجدد",
       frameResolverMissing: "محتوای ویجت در دسترس نیست.",
+      sandboxUnavailable: "میزبان محیط ایزوله ویجت در دسترس نیست.",
       frameAuthorizationFailed: "مجوز ویجت پس از چندین تلاش برای تازه‌سازی ناموفق بود.",
       errorTitle: "این ویجت بارگیری نشد",
       errorDetail: "مشکل فقط به این کارت محدود شده است.",
@@ -3638,6 +3657,7 @@ export const fa: TranslationMap = {
         title: "عدم تطابق پروتکل",
         summary:
           "Control UI سرو شده و Gateway در حال اجرا درباره پروتکل اتصال پشتیبانی شده توافق ندارند.",
+        refresh: "تازه‌سازی صفحه",
         stepDashboard:
           "داشبورد سرو شده را با openclaw dashboard دوباره باز کنید تا UI و Gateway از همان نصب باشند.",
         stepDevUi:
@@ -3660,6 +3680,7 @@ export const fa: TranslationMap = {
   },
   chat: {
     disconnected: "اتصال از Gateway قطع شد.",
+    waitingForApproval: "در انتظار تأیید…",
     archivedSessionDisabled: "برای ارسال پیام، این نشست را بازیابی کنید.",
     loadOlder: "بارگیری قدیمی‌ترها",
     sessionHeader: {
@@ -4199,8 +4220,8 @@ export const fa: TranslationMap = {
       show: "نمایش گفت‌وگو",
       disconnected: "Gateway قطع است.",
       loading: "در حال بارگیری گفت‌وگو…",
-      open: "باز کردن گفت‌وگو",
       opening: "در حال باز کردن گفت‌وگو…",
+      requiresWriteAccess: "برای باز کردن این گفت‌وگو، دسترسی نوشتن اپراتور لازم است.",
       opened: "گفت‌وگوی نشست",
       openExternal: "باز کردن گفت‌وگو در زبانه‌ای جدید",
       frameTitle: "گفت‌وگوی نشست",

@@ -282,6 +282,7 @@ export const ru: TranslationMap = {
     staleTitle: "Доступна новая версия",
     staleSubtitle:
       "OpenClaw был обновлён в фоновом режиме. Перезагрузите страницу, чтобы получить последнюю версию панели.",
+    reloading: "Обновление…",
     retry: "Повторить",
   },
   nodes: {
@@ -1962,6 +1963,8 @@ export const ru: TranslationMap = {
     requestFailed: "OpenClaw не смог ответить. Повторите попытку.",
     connectionChanged:
       "Подключение к Gateway изменилось. Повторите попытку, чтобы продолжить настройку.",
+    sessionRestarted:
+      "{error} OpenClaw начал новый сеанс; предыдущие сообщения сохранены для контекста.",
     unsupportedGateway: "Обновите Gateway, чтобы продолжить настройку с OpenClaw.",
     history: {
       button: "История",
@@ -1999,6 +2002,10 @@ export const ru: TranslationMap = {
     add: "Добавить сервер",
     adding: "Добавление…",
     nameLabel: "Имя",
+    transportLabel: "Транспорт",
+    transportStreamableHttp: "Потоковый HTTP",
+    transportSse: "SSE",
+    transportStdio: "Stdio",
     targetLabel: "URL или команда",
     nameInvalid:
       "Имена серверов могут содержать буквы, цифры, точки, дефисы и символы подчёркивания.",
@@ -2196,6 +2203,7 @@ export const ru: TranslationMap = {
       title: "Swarm",
       description: "Позволяет Code Mode параллельно координировать группы субагентов.",
       empty: "Нет активных групп.",
+      defaultPhase: "Без фазы",
     },
   },
   aboutPage: {
@@ -2679,11 +2687,22 @@ export const ru: TranslationMap = {
       remove: "Удалить",
       needsApproval: "Требуется одобрение",
       needsApprovalDetail: "Этот виджет запросил дополнительный доступ.",
+      networkAccess: "Сетевые источники",
+      hostTools: "Инструменты и данные хоста",
+      activeCapabilities: "Активные возможности виджета",
+      networkCapability: "Сеть: {capability}",
+      toolCapability: "Инструмент: {capability}",
+      granted: "Разрешено",
       allow: "Разрешить",
       reject: "Отклонить",
       rejected: "Доступ отклонён",
       rejectedDetail: "Этот виджет останется неактивным, пока его не удалят или не заменят.",
+      appLoading: "Восстановление приложения…",
+      appStaleTitle: "Это закреплённое приложение устарело",
+      appStaleDetail: "Его сервер, ресурс или исходная расшифровка больше недоступны.",
+      retry: "Повторить",
       frameResolverMissing: "Содержимое виджета недоступно.",
+      sandboxUnavailable: "Хост песочницы виджета недоступен.",
       frameAuthorizationFailed:
         "Не удалось авторизовать виджет после нескольких попыток обновления.",
       errorTitle: "Не удалось загрузить этот виджет",
@@ -3674,6 +3693,7 @@ export const ru: TranslationMap = {
         title: "Несоответствие протокола",
         summary:
           "Обслуживаемый Control UI и запущенный Gateway не согласованы по поддерживаемому протоколу подключения.",
+        refresh: "Обновить страницу",
         stepDashboard:
           "Повторно откройте обслуживаемую панель командой openclaw dashboard, чтобы UI и Gateway были из одной установки.",
         stepDevUi:
@@ -3696,6 +3716,7 @@ export const ru: TranslationMap = {
   },
   chat: {
     disconnected: "Отключено от gateway.",
+    waitingForApproval: "Ожидание одобрения…",
     archivedSessionDisabled: "Восстановите этот сеанс, чтобы отправлять сообщения.",
     loadOlder: "Загрузить более ранние",
     sessionHeader: {
@@ -4241,8 +4262,8 @@ export const ru: TranslationMap = {
       show: "Показать обсуждение",
       disconnected: "Gateway отключен.",
       loading: "Загрузка обсуждения…",
-      open: "Открыть обсуждение",
       opening: "Открытие обсуждения…",
+      requiresWriteAccess: "Для открытия этого обсуждения оператору необходим доступ на запись.",
       opened: "Обсуждение сессии",
       openExternal: "Открыть обсуждение в новой вкладке",
       frameTitle: "Обсуждение сеанса",

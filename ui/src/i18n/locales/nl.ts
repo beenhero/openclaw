@@ -284,6 +284,7 @@ export const nl: TranslationMap = {
     staleTitle: "Er is een nieuwe versie beschikbaar",
     staleSubtitle:
       "OpenClaw is op de achtergrond bijgewerkt. Laad opnieuw om het nieuwste paneel te zien.",
+    reloading: "Opnieuw laden…",
     retry: "Opnieuw proberen",
   },
   nodes: {
@@ -1959,6 +1960,8 @@ export const nl: TranslationMap = {
     requestFailed: "OpenClaw kon niet antwoorden. Probeer het opnieuw.",
     connectionChanged:
       "De Gateway-verbinding is gewijzigd. Probeer het opnieuw om door te gaan met deze configuratie.",
+    sessionRestarted:
+      "{error} OpenClaw heeft een nieuwe sessie gestart; eerdere berichten blijven beschikbaar als context.",
     unsupportedGateway: "Werk de Gateway bij om door te gaan met de configuratie van OpenClaw.",
     history: {
       button: "Geschiedenis",
@@ -1997,6 +2000,10 @@ export const nl: TranslationMap = {
     add: "Server toevoegen",
     adding: "Toevoegen…",
     nameLabel: "Naam",
+    transportLabel: "Transport",
+    transportStreamableHttp: "Streambare HTTP",
+    transportSse: "SSE",
+    transportStdio: "Stdio",
     targetLabel: "URL of opdracht",
     nameInvalid: "Servernamen gebruiken letters, cijfers, punten, streepjes of underscores.",
     targetInvalid: "Voer een http(s)-URL of een opdrachtregel in.",
@@ -2192,6 +2199,7 @@ export const nl: TranslationMap = {
       title: "Zwerm",
       description: "Laat Codemodus groepen subagents parallel aansturen.",
       empty: "Geen actieve zwermen.",
+      defaultPhase: "Zonder fase",
     },
   },
   aboutPage: {
@@ -2674,11 +2682,23 @@ export const nl: TranslationMap = {
       remove: "Verwijderen",
       needsApproval: "Goedkeuring vereist",
       needsApprovalDetail: "Deze widget heeft om aanvullende toegang gevraagd.",
+      networkAccess: "Netwerkbronnen",
+      hostTools: "Hosttools en -gegevens",
+      activeCapabilities: "Actieve widgetmogelijkheden",
+      networkCapability: "Netwerk: {capability}",
+      toolCapability: "Tool: {capability}",
+      granted: "Toegestaan",
       allow: "Toestaan",
       reject: "Weigeren",
       rejected: "Toegang geweigerd",
       rejectedDetail: "Deze widget blijft inactief totdat deze wordt verwijderd of vervangen.",
+      appLoading: "App herstellen…",
+      appStaleTitle: "Deze vastgemaakte app is verouderd",
+      appStaleDetail:
+        "De server, resource of oorspronkelijke transcriptie is niet meer beschikbaar.",
+      retry: "Opnieuw proberen",
       frameResolverMissing: "Widgetinhoud is niet beschikbaar.",
+      sandboxUnavailable: "De sandboxhost van de widget is niet beschikbaar.",
       frameAuthorizationFailed: "Widgetautorisatie is mislukt na herhaalde vernieuwingspogingen.",
       errorTitle: "Deze widget kon niet worden geladen",
       errorDetail: "Het probleem is beperkt tot deze kaart.",
@@ -3665,6 +3685,7 @@ export const nl: TranslationMap = {
         title: "Protocol komt niet overeen",
         summary:
           "De geserveerde Control UI en de draaiende Gateway zijn het niet eens over het ondersteunde verbindingsprotocol.",
+        refresh: "Pagina vernieuwen",
         stepDashboard:
           "Open het geserveerde dashboard opnieuw met openclaw dashboard zodat UI en Gateway uit dezelfde installatie komen.",
         stepDevUi:
@@ -3686,6 +3707,7 @@ export const nl: TranslationMap = {
   },
   chat: {
     disconnected: "Verbinding met Gateway verbroken.",
+    waitingForApproval: "Wachten op goedkeuring…",
     archivedSessionDisabled: "Herstel deze sessie om berichten te verzenden.",
     loadOlder: "Oudere laden",
     sessionHeader: {
@@ -4233,8 +4255,8 @@ export const nl: TranslationMap = {
       show: "Discussie tonen",
       disconnected: "Gateway is niet verbonden.",
       loading: "Discussie laden…",
-      open: "Discussie openen",
       opening: "Discussie openen…",
+      requiresWriteAccess: "Schrijftoegang voor operators is vereist om deze discussie te openen.",
       opened: "Sessiediscussie",
       openExternal: "Discussie openen in een nieuw tabblad",
       frameTitle: "Sessiediscussie",

@@ -284,6 +284,7 @@ export const pl: TranslationMap = {
     genericSubtitle: "Coś poszło nie tak podczas ładowania tego panelu.",
     staleTitle: "Dostępna jest nowa wersja",
     staleSubtitle: "OpenClaw został zaktualizowany w tle. Odśwież, aby pobrać najnowszy panel.",
+    reloading: "Ponowne wczytywanie…",
     retry: "Spróbuj ponownie",
   },
   nodes: {
@@ -1959,6 +1960,8 @@ export const pl: TranslationMap = {
     requestFailed: "OpenClaw nie mógł odpowiedzieć. Spróbuj ponownie.",
     connectionChanged:
       "Połączenie z Gateway uległo zmianie. Spróbuj ponownie, aby kontynuować tę konfigurację.",
+    sessionRestarted:
+      "{error} OpenClaw rozpoczął nową sesję; wcześniejsze wiadomości pozostają dostępne jako kontekst.",
     unsupportedGateway: "Zaktualizuj Gateway, aby kontynuować konfigurację z OpenClaw.",
     history: {
       button: "Historia",
@@ -1998,6 +2001,10 @@ export const pl: TranslationMap = {
     add: "Dodaj serwer",
     adding: "Dodawanie…",
     nameLabel: "Nazwa",
+    transportLabel: "Transport",
+    transportStreamableHttp: "Strumieniowy HTTP",
+    transportSse: "SSE",
+    transportStdio: "Stdio",
     targetLabel: "Adres URL lub polecenie",
     nameInvalid: "Nazwy serwerów mogą zawierać litery, cyfry, kropki, łączniki i podkreślenia.",
     targetInvalid: "Wprowadź adres URL http(s) lub wiersz polecenia.",
@@ -2198,6 +2205,7 @@ export const pl: TranslationMap = {
       title: "Rój",
       description: "Pozwól trybowi Code Mode koordynować równolegle grupy subagentów.",
       empty: "Brak aktywnych rojów.",
+      defaultPhase: "Bez fazy",
     },
   },
   aboutPage: {
@@ -2680,12 +2688,23 @@ export const pl: TranslationMap = {
       remove: "Usuń",
       needsApproval: "Wymaga zatwierdzenia",
       needsApprovalDetail: "Ten widżet poprosił o dodatkowy dostęp.",
+      networkAccess: "Źródła sieciowe",
+      hostTools: "Narzędzia i dane hosta",
+      activeCapabilities: "Aktywne możliwości widżetu",
+      networkCapability: "Sieć: {capability}",
+      toolCapability: "Narzędzie: {capability}",
+      granted: "Przyznano",
       allow: "Zezwól",
       reject: "Odrzuć",
       rejected: "Odmowa dostępu",
       rejectedDetail:
         "Ten widżet pozostanie nieaktywny, dopóki nie zostanie usunięty lub zastąpiony.",
+      appLoading: "Przywracanie aplikacji…",
+      appStaleTitle: "Ta przypięta aplikacja jest nieaktualna",
+      appStaleDetail: "Jej serwer, zasób lub źródłowy zapis rozmowy nie jest już dostępny.",
+      retry: "Ponów",
       frameResolverMissing: "Zawartość widżetu jest niedostępna.",
+      sandboxUnavailable: "Host piaskownicy widżetu jest niedostępny.",
       frameAuthorizationFailed:
         "Autoryzacja widżetu nie powiodła się po wielokrotnych próbach odświeżenia.",
       errorTitle: "Nie udało się wczytać tego widżetu",
@@ -3672,6 +3691,7 @@ export const pl: TranslationMap = {
         title: "Niezgodność protokołu",
         summary:
           "Udostępniana Control UI i działający Gateway nie zgadzają się co do obsługiwanego protokołu połączenia.",
+        refresh: "Odśwież stronę",
         stepDashboard:
           "Otwórz ponownie udostępniany dashboard poleceniem openclaw dashboard, aby UI i Gateway pochodziły z tej samej instalacji.",
         stepDevUi:
@@ -3693,6 +3713,7 @@ export const pl: TranslationMap = {
   },
   chat: {
     disconnected: "Rozłączono z Gateway.",
+    waitingForApproval: "Oczekiwanie na zatwierdzenie…",
     archivedSessionDisabled: "Przywróć tę sesję, aby wysyłać wiadomości.",
     loadOlder: "Załaduj starsze",
     sessionHeader: {
@@ -4238,8 +4259,8 @@ export const pl: TranslationMap = {
       show: "Pokaż dyskusję",
       disconnected: "Gateway jest rozłączony.",
       loading: "Wczytywanie dyskusji…",
-      open: "Otwórz dyskusję",
       opening: "Otwieranie dyskusji…",
+      requiresWriteAccess: "Do otwarcia tej dyskusji wymagane są uprawnienia operatora do zapisu.",
       opened: "Dyskusja sesji",
       openExternal: "Otwórz dyskusję w nowej karcie",
       frameTitle: "Dyskusja sesji",

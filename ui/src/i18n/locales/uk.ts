@@ -283,6 +283,7 @@ export const uk: TranslationMap = {
     staleTitle: "Доступна нова версія",
     staleSubtitle:
       "OpenClaw оновлено у фоновому режимі. Перезавантажте, щоб отримати найновішу панель.",
+    reloading: "Перезавантаження…",
     retry: "Повторити",
   },
   nodes: {
@@ -1957,6 +1958,8 @@ export const uk: TranslationMap = {
     requestFailed: "OpenClaw не зміг відповісти. Спробуйте ще раз.",
     connectionChanged:
       "З’єднання з Gateway змінилося. Повторіть спробу, щоб продовжити це налаштування.",
+    sessionRestarted:
+      "{error} OpenClaw розпочав новий сеанс; попередні повідомлення збережено для контексту.",
     unsupportedGateway: "Оновіть Gateway, щоб продовжити налаштування з OpenClaw.",
     history: {
       button: "Історія",
@@ -1993,6 +1996,10 @@ export const uk: TranslationMap = {
     add: "Додати сервер",
     adding: "Додавання…",
     nameLabel: "Назва",
+    transportLabel: "Транспорт",
+    transportStreamableHttp: "Потоковий HTTP",
+    transportSse: "SSE",
+    transportStdio: "Stdio",
     targetLabel: "URL-адреса або команда",
     nameInvalid:
       "Імена серверів можуть містити літери, цифри, крапки, дефіси або символи підкреслення.",
@@ -2189,6 +2196,7 @@ export const uk: TranslationMap = {
       title: "Рій",
       description: "Дозвольте Code Mode паралельно координувати групи субагентів.",
       empty: "Немає активних роїв.",
+      defaultPhase: "Без фази",
     },
   },
   aboutPage: {
@@ -2670,12 +2678,23 @@ export const uk: TranslationMap = {
       remove: "Видалити",
       needsApproval: "Потребує схвалення",
       needsApprovalDetail: "Цей віджет запросив додатковий доступ.",
+      networkAccess: "Мережеві джерела",
+      hostTools: "Інструменти та дані хоста",
+      activeCapabilities: "Активні можливості віджета",
+      networkCapability: "Мережа: {capability}",
+      toolCapability: "Інструмент: {capability}",
+      granted: "Надано",
       allow: "Дозволити",
       reject: "Відхилити",
       rejected: "Доступ відхилено",
       rejectedDetail:
         "Цей віджет залишатиметься неактивним, доки його не буде видалено або замінено.",
+      appLoading: "Відновлення застосунку…",
+      appStaleTitle: "Цей закріплений застосунок застарів",
+      appStaleDetail: "Його сервер, ресурс або вихідна стенограма більше недоступні.",
+      retry: "Повторити",
       frameResolverMissing: "Вміст віджета недоступний.",
+      sandboxUnavailable: "Хост пісочниці віджета недоступний.",
       frameAuthorizationFailed: "Не вдалося авторизувати віджет після кількох спроб оновлення.",
       errorTitle: "Не вдалося завантажити цей віджет",
       errorDetail: "Проблема стосується лише цієї картки.",
@@ -3654,6 +3673,7 @@ export const uk: TranslationMap = {
         title: "Невідповідність протоколу",
         summary:
           "Надана Control UI і запущений Gateway не узгоджуються щодо підтримуваного протоколу з’єднання.",
+        refresh: "Оновити сторінку",
         stepDashboard:
           "Знову відкрийте наданий dashboard через openclaw dashboard, щоб UI і Gateway походили з однієї інсталяції.",
         stepDevUi:
@@ -3676,6 +3696,7 @@ export const uk: TranslationMap = {
   },
   chat: {
     disconnected: "Відключено від шлюзу.",
+    waitingForApproval: "Очікування схвалення…",
     archivedSessionDisabled: "Відновіть цей сеанс, щоб надсилати повідомлення.",
     loadOlder: "Завантажити старіші",
     sessionHeader: {
@@ -4221,8 +4242,8 @@ export const uk: TranslationMap = {
       show: "Показати обговорення",
       disconnected: "Gateway відключено.",
       loading: "Завантаження обговорення…",
-      open: "Відкрити обговорення",
       opening: "Відкриття обговорення…",
+      requiresWriteAccess: "Щоб відкрити це обговорення, оператору потрібен доступ на запис.",
       opened: "Обговорення сеансу",
       openExternal: "Відкрити обговорення в новій вкладці",
       frameTitle: "Обговорення сеансу",

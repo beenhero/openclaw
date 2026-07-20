@@ -285,6 +285,7 @@ export const ja_JP: TranslationMap = {
     staleTitle: "新しいバージョンが利用可能です",
     staleSubtitle:
       "OpenClaw がバックグラウンドで更新されました。最新のパネルを表示するには再読み込みしてください。",
+    reloading: "再読み込み中…",
     retry: "再試行",
   },
   nodes: {
@@ -1958,6 +1959,8 @@ export const ja_JP: TranslationMap = {
     requestFailed: "OpenClawは返信できませんでした。もう一度お試しください。",
     connectionChanged:
       "Gatewayの接続が変更されました。このセットアップを続行するには、再試行してください。",
+    sessionRestarted:
+      "{error} OpenClawが新しいセッションを開始しました。以前のメッセージはコンテキストとして保持されます。",
     unsupportedGateway: "OpenClawでセットアップを続行するには、Gatewayを更新してください。",
     history: {
       button: "履歴",
@@ -1995,6 +1998,10 @@ export const ja_JP: TranslationMap = {
     add: "サーバーを追加",
     adding: "追加中…",
     nameLabel: "名前",
+    transportLabel: "トランスポート",
+    transportStreamableHttp: "ストリーミング対応HTTP",
+    transportSse: "SSE",
+    transportStdio: "Stdio",
     targetLabel: "URLまたはコマンド",
     nameInvalid:
       "サーバー名には、英字、数字、ドット、ダッシュ、またはアンダースコアを使用できます。",
@@ -2189,6 +2196,7 @@ export const ja_JP: TranslationMap = {
       description:
         "Code Mode で複数のサブエージェントのグループを並列にオーケストレーションできます。",
       empty: "アクティブなスウォームはありません。",
+      defaultPhase: "フェーズ未設定",
     },
   },
   aboutPage: {
@@ -2671,11 +2679,22 @@ export const ja_JP: TranslationMap = {
       remove: "削除",
       needsApproval: "承認が必要です",
       needsApprovalDetail: "このウィジェットが追加のアクセス権をリクエストしました。",
+      networkAccess: "ネットワークオリジン",
+      hostTools: "ホストのツールとデータ",
+      activeCapabilities: "有効なウィジェット機能",
+      networkCapability: "ネットワーク: {capability}",
+      toolCapability: "ツール: {capability}",
+      granted: "許可済み",
       allow: "許可",
       reject: "拒否",
       rejected: "アクセスが拒否されました",
       rejectedDetail: "このウィジェットは、削除または置換されるまで無効のままです。",
+      appLoading: "アプリを復元中…",
+      appStaleTitle: "このピン留めされたアプリは古くなっています",
+      appStaleDetail: "サーバー、リソース、または元のトランスクリプトは利用できなくなりました。",
+      retry: "再試行",
       frameResolverMissing: "ウィジェットのコンテンツを利用できません。",
+      sandboxUnavailable: "ウィジェットのサンドボックスホストを利用できません。",
       frameAuthorizationFailed: "更新を繰り返しましたが、ウィジェットの認証に失敗しました。",
       errorTitle: "このウィジェットを読み込めませんでした",
       errorDetail: "問題はこのカード内に限定されています。",
@@ -3660,6 +3679,7 @@ export const ja_JP: TranslationMap = {
         title: "プロトコルが一致しません",
         summary:
           "提供された Control UI と実行中の Gateway で、サポートされる接続プロトコルが一致していません。",
+        refresh: "ページを更新",
         stepDashboard:
           "openclaw dashboard で提供元の dashboard を開き直し、UI と Gateway が同じインストールから来るようにします。",
         stepDevUi:
@@ -3681,6 +3701,7 @@ export const ja_JP: TranslationMap = {
   },
   chat: {
     disconnected: "Gateway から切断されました。",
+    waitingForApproval: "承認を待っています…",
     archivedSessionDisabled: "メッセージを送信するには、このセッションを復元してください。",
     loadOlder: "以前の項目を読み込む",
     sessionHeader: {
@@ -4225,8 +4246,9 @@ export const ja_JP: TranslationMap = {
       show: "ディスカッションを表示",
       disconnected: "Gateway が切断されています。",
       loading: "ディスカッションを読み込み中…",
-      open: "ディスカッションを開く",
       opening: "ディスカッションを開いています…",
+      requiresWriteAccess:
+        "このディスカッションを開くには、オペレーターの書き込みアクセス権が必要です。",
       opened: "セッションのディスカッション",
       openExternal: "ディスカッションを新しいタブで開く",
       frameTitle: "セッションのディスカッション",

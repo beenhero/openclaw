@@ -282,6 +282,7 @@ export const hi: TranslationMap = {
     genericSubtitle: "इस पैनल को लोड करते समय कुछ गड़बड़ हो गई।",
     staleTitle: "एक नया संस्करण उपलब्ध है",
     staleSubtitle: "OpenClaw को बैकग्राउंड में अपडेट किया गया था। नवीनतम पैनल पाने के लिए फिर से लोड करें।",
+    reloading: "रीलोड हो रहा है…",
     retry: "फिर से प्रयास करें",
   },
   nodes: {
@@ -1929,6 +1930,7 @@ export const hi: TranslationMap = {
     earlier: "पहले",
     requestFailed: "OpenClaw उत्तर नहीं दे सका। फिर से कोशिश करें।",
     connectionChanged: "Gateway कनेक्शन बदल गया है। यह सेटअप जारी रखने के लिए फिर से कोशिश करें।",
+    sessionRestarted: "{error} OpenClaw ने एक नया सत्र शुरू किया; पिछले संदेश संदर्भ के लिए उपलब्ध हैं।",
     unsupportedGateway: "OpenClaw के साथ सेटअप जारी रखने के लिए Gateway को अपडेट करें।",
     history: {
       button: "इतिहास",
@@ -1965,6 +1967,10 @@ export const hi: TranslationMap = {
     add: "सर्वर जोड़ें",
     adding: "जोड़ा जा रहा है…",
     nameLabel: "नाम",
+    transportLabel: "ट्रांसपोर्ट",
+    transportStreamableHttp: "स्ट्रीम करने योग्य HTTP",
+    transportSse: "SSE",
+    transportStdio: "Stdio",
     targetLabel: "URL या कमांड",
     nameInvalid: "सर्वर नामों में अक्षर, संख्याएँ, डॉट, डैश या अंडरस्कोर इस्तेमाल किए जा सकते हैं।",
     targetInvalid: "कोई http(s) URL या कमांड लाइन दर्ज करें।",
@@ -2149,6 +2155,7 @@ export const hi: TranslationMap = {
       title: "Swarm",
       description: "Code Mode को subagents के समूहों को समानांतर रूप से संचालित करने दें।",
       empty: "कोई सक्रिय स्वार्म नहीं है।",
+      defaultPhase: "चरणरहित",
     },
   },
   aboutPage: {
@@ -2626,11 +2633,22 @@ export const hi: TranslationMap = {
       remove: "हटाएँ",
       needsApproval: "अनुमोदन आवश्यक है",
       needsApprovalDetail: "इस विजेट ने अतिरिक्त एक्सेस का अनुरोध किया है।",
+      networkAccess: "नेटवर्क स्रोत",
+      hostTools: "होस्ट टूल और डेटा",
+      activeCapabilities: "सक्रिय विजेट क्षमताएँ",
+      networkCapability: "नेटवर्क: {capability}",
+      toolCapability: "टूल: {capability}",
+      granted: "अनुमति दी गई",
       allow: "अनुमति दें",
       reject: "अस्वीकार करें",
       rejected: "एक्सेस अस्वीकार किया गया",
       rejectedDetail: "यह विजेट हटाए या बदले जाने तक निष्क्रिय रहेगा।",
+      appLoading: "ऐप पुनर्स्थापित किया जा रहा है…",
+      appStaleTitle: "यह पिन किया गया ऐप पुराना हो गया है",
+      appStaleDetail: "इसका सर्वर, संसाधन या मूल ट्रांसक्रिप्ट अब उपलब्ध नहीं है।",
+      retry: "पुनः प्रयास करें",
       frameResolverMissing: "विजेट की सामग्री उपलब्ध नहीं है।",
+      sandboxUnavailable: "विजेट सैंडबॉक्स होस्ट उपलब्ध नहीं है।",
       frameAuthorizationFailed: "बार-बार रीफ़्रेश करने के प्रयासों के बाद Widget प्राधिकरण विफल रहा।",
       errorTitle: "यह विजेट लोड नहीं हो सका",
       errorDetail: "समस्या केवल इस कार्ड तक सीमित है।",
@@ -3599,6 +3617,7 @@ export const hi: TranslationMap = {
       protocol: {
         title: "प्रोटोकॉल मेल नहीं खाता",
         summary: "सर्व किया गया Control UI और चल रहा Gateway समर्थित कनेक्शन प्रोटोकॉल पर सहमत नहीं हैं।",
+        refresh: "पेज रीफ़्रेश करें",
         stepDashboard:
           "openclaw dashboard के साथ सर्व किया गया dashboard फिर से खोलें ताकि UI और Gateway एक ही install से आएँ।",
         stepDevUi:
@@ -3620,6 +3639,7 @@ export const hi: TranslationMap = {
   },
   chat: {
     disconnected: "Gateway से डिस्कनेक्ट हो गया।",
+    waitingForApproval: "स्वीकृति की प्रतीक्षा की जा रही है…",
     archivedSessionDisabled: "संदेश भेजने के लिए इस सत्र को बहाल करें।",
     loadOlder: "पुराने लोड करें",
     sessionHeader: {
@@ -4160,8 +4180,8 @@ export const hi: TranslationMap = {
       show: "चर्चा दिखाएँ",
       disconnected: "Gateway डिस्कनेक्ट है।",
       loading: "चर्चा लोड हो रही है…",
-      open: "चर्चा खोलें",
       opening: "चर्चा खोली जा रही है…",
+      requiresWriteAccess: "इस चर्चा को खोलने के लिए ऑपरेटर की लेखन पहुँच आवश्यक है।",
       opened: "सत्र की चर्चा",
       openExternal: "चर्चा को नए टैब में खोलें",
       frameTitle: "सत्र की चर्चा",

@@ -279,6 +279,7 @@ export const ar: TranslationMap = {
     genericSubtitle: "حدث خطأ ما أثناء تحميل هذه اللوحة.",
     staleTitle: "يتوفر إصدار جديد",
     staleSubtitle: "تم تحديث OpenClaw في الخلفية. أعد التحميل للحصول على أحدث لوحة.",
+    reloading: "جارٍ إعادة التحميل…",
     retry: "إعادة المحاولة",
   },
   nodes: {
@@ -1933,6 +1934,7 @@ export const ar: TranslationMap = {
     earlier: "سابقًا",
     requestFailed: "تعذّر على OpenClaw الرد. حاول مرة أخرى.",
     connectionChanged: "تغيّر اتصال Gateway. أعد المحاولة لمتابعة هذا الإعداد.",
+    sessionRestarted: "{error} بدأ OpenClaw جلسة جديدة؛ تظل الرسائل السابقة متاحة للسياق.",
     unsupportedGateway: "حدّث Gateway لمتابعة الإعداد باستخدام OpenClaw.",
     history: {
       button: "السجل",
@@ -1969,6 +1971,10 @@ export const ar: TranslationMap = {
     add: "إضافة خادم",
     adding: "جارٍ الإضافة…",
     nameLabel: "الاسم",
+    transportLabel: "النقل",
+    transportStreamableHttp: "HTTP قابل للبث",
+    transportSse: "SSE",
+    transportStdio: "Stdio",
     targetLabel: "عنوان URL أو أمر",
     nameInvalid: "تستخدم أسماء الخوادم الأحرف والأرقام والنقاط والشرطات أو الشرطات السفلية.",
     targetInvalid: "أدخل عنوان URL يبدأ بـ http(s) أو سطر أوامر.",
@@ -2155,6 +2161,7 @@ export const ar: TranslationMap = {
       title: "السرب",
       description: "دع وضع البرمجة ينسّق مجموعات من الوكلاء الفرعيين بالتوازي.",
       empty: "لا توجد أسراب نشطة.",
+      defaultPhase: "بلا مرحلة",
     },
   },
   aboutPage: {
@@ -2632,11 +2639,22 @@ export const ar: TranslationMap = {
       remove: "إزالة",
       needsApproval: "يتطلب الموافقة",
       needsApprovalDetail: "طلبت هذه الأداة وصولًا إضافيًا.",
+      networkAccess: "مصادر الشبكة",
+      hostTools: "أدوات المضيف وبياناته",
+      activeCapabilities: "إمكانات الأداة النشطة",
+      networkCapability: "الشبكة: {capability}",
+      toolCapability: "الأداة: {capability}",
+      granted: "مسموح بها",
       allow: "سماح",
       reject: "رفض",
       rejected: "رُفض الوصول",
       rejectedDetail: "تظل هذه الأداة غير نشطة حتى تتم إزالتها أو استبدالها.",
+      appLoading: "جارٍ استعادة التطبيق…",
+      appStaleTitle: "هذا التطبيق المثبّت قديم",
+      appStaleDetail: "لم يعد خادمه أو مورده أو نص المحادثة الذي نشأ منه متاحًا.",
+      retry: "إعادة المحاولة",
       frameResolverMissing: "محتوى الأداة غير متاح.",
+      sandboxUnavailable: "مضيف البيئة المعزولة للأداة غير متاح.",
       frameAuthorizationFailed: "فشل تفويض الأداة بعد محاولات تحديث متكررة.",
       errorTitle: "تعذر تحميل هذه الأداة",
       errorDetail: "تقتصر المشكلة على هذه البطاقة.",
@@ -3607,6 +3625,7 @@ export const ar: TranslationMap = {
       protocol: {
         title: "عدم تطابق البروتوكول",
         summary: "لا يتفق Control UI المقدم مع Gateway العامل على بروتوكول الاتصال المدعوم.",
+        refresh: "تحديث الصفحة",
         stepDashboard:
           "أعد فتح لوحة المعلومات المقدمة باستخدام openclaw dashboard حتى يأتي UI وGateway من التثبيت نفسه.",
         stepDevUi:
@@ -3627,6 +3646,7 @@ export const ar: TranslationMap = {
   },
   chat: {
     disconnected: "تم قطع الاتصال بـ Gateway.",
+    waitingForApproval: "في انتظار الموافقة…",
     archivedSessionDisabled: "استعِد هذه الجلسة لإرسال الرسائل.",
     loadOlder: "تحميل الأقدم",
     sessionHeader: {
@@ -4166,8 +4186,8 @@ export const ar: TranslationMap = {
       show: "إظهار المناقشة",
       disconnected: "Gateway غير متصل.",
       loading: "جارٍ تحميل المناقشة…",
-      open: "فتح المناقشة",
       opening: "جارٍ فتح المناقشة…",
+      requiresWriteAccess: "يلزم أن يمتلك المشغّل صلاحية الكتابة لفتح هذه المناقشة.",
       opened: "مناقشة الجلسة",
       openExternal: "فتح المناقشة في علامة تبويب جديدة",
       frameTitle: "مناقشة الجلسة",

@@ -283,6 +283,7 @@ export const pt_BR: TranslationMap = {
     staleTitle: "Uma nova versão está disponível",
     staleSubtitle:
       "O OpenClaw foi atualizado em segundo plano. Recarregue para obter o painel mais recente.",
+    reloading: "Recarregando…",
     retry: "Tentar novamente",
   },
   nodes: {
@@ -1953,6 +1954,8 @@ export const pt_BR: TranslationMap = {
     requestFailed: "O OpenClaw não conseguiu responder. Tente novamente.",
     connectionChanged:
       "A conexão com o Gateway foi alterada. Tente novamente para continuar esta configuração.",
+    sessionRestarted:
+      "{error} O OpenClaw iniciou uma nova sessão; as mensagens anteriores permanecem como contexto.",
     unsupportedGateway: "Atualize o Gateway para continuar a configuração com o OpenClaw.",
     history: {
       button: "Histórico",
@@ -1990,6 +1993,10 @@ export const pt_BR: TranslationMap = {
     add: "Adicionar servidor",
     adding: "Adicionando…",
     nameLabel: "Nome",
+    transportLabel: "Transporte",
+    transportStreamableHttp: "HTTP com streaming",
+    transportSse: "SSE",
+    transportStdio: "Stdio",
     targetLabel: "URL ou comando",
     nameInvalid:
       "Os nomes dos servidores devem usar letras, números, pontos, hifens ou sublinhados.",
@@ -2187,6 +2194,7 @@ export const pt_BR: TranslationMap = {
       title: "Enxame",
       description: "Permita que o Modo de Código orquestre grupos de subagentes em paralelo.",
       empty: "Nenhum enxame ativo.",
+      defaultPhase: "Sem fase",
     },
   },
   aboutPage: {
@@ -2669,11 +2677,22 @@ export const pt_BR: TranslationMap = {
       remove: "Remover",
       needsApproval: "Requer aprovação",
       needsApprovalDetail: "Este widget solicitou acesso adicional.",
+      networkAccess: "Origens de rede",
+      hostTools: "Ferramentas e dados do host",
+      activeCapabilities: "Recursos ativos do widget",
+      networkCapability: "Rede: {capability}",
+      toolCapability: "Ferramenta: {capability}",
+      granted: "Concedido",
       allow: "Permitir",
       reject: "Rejeitar",
       rejected: "Acesso rejeitado",
       rejectedDetail: "Este widget permanecerá inativo até ser removido ou substituído.",
+      appLoading: "Restaurando o app…",
+      appStaleTitle: "Este app fixado está desatualizado",
+      appStaleDetail: "O servidor, o recurso ou a transcrição de origem não está mais disponível.",
+      retry: "Tentar novamente",
       frameResolverMissing: "O conteúdo do widget não está disponível.",
+      sandboxUnavailable: "O host do sandbox do widget não está disponível.",
       frameAuthorizationFailed:
         "A autorização do widget falhou após várias tentativas de atualização.",
       errorTitle: "Não foi possível carregar este widget",
@@ -3660,6 +3679,7 @@ export const pt_BR: TranslationMap = {
         title: "Protocolo incompatível",
         summary:
           "O Control UI servido e o Gateway em execução não concordam sobre o protocolo de conexão compatível.",
+        refresh: "Atualizar página",
         stepDashboard:
           "Reabra o dashboard servido com openclaw dashboard para que UI e Gateway venham da mesma instalação.",
         stepDevUi:
@@ -3682,6 +3702,7 @@ export const pt_BR: TranslationMap = {
   },
   chat: {
     disconnected: "Desconectado do gateway.",
+    waitingForApproval: "Aguardando aprovação…",
     archivedSessionDisabled: "Restaure esta sessão para enviar mensagens.",
     loadOlder: "Carregar anteriores",
     sessionHeader: {
@@ -4227,8 +4248,9 @@ export const pt_BR: TranslationMap = {
       show: "Mostrar discussão",
       disconnected: "Gateway está desconectado.",
       loading: "Carregando discussão…",
-      open: "Abrir discussão",
       opening: "Abrindo discussão…",
+      requiresWriteAccess:
+        "É necessário ter acesso de gravação de operador para abrir esta discussão.",
       opened: "Discussão da sessão",
       openExternal: "Abrir discussão em uma nova aba",
       frameTitle: "Discussão da sessão",

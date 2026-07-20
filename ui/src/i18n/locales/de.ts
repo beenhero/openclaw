@@ -286,6 +286,7 @@ export const de: TranslationMap = {
     staleTitle: "Eine neue Version ist verfügbar",
     staleSubtitle:
       "OpenClaw wurde im Hintergrund aktualisiert. Laden Sie die Seite neu, um das neueste Panel zu erhalten.",
+    reloading: "Wird neu geladen…",
     retry: "Erneut versuchen",
   },
   nodes: {
@@ -1967,6 +1968,8 @@ export const de: TranslationMap = {
     requestFailed: "OpenClaw konnte nicht antworten. Versuchen Sie es erneut.",
     connectionChanged:
       "Die Gateway-Verbindung hat sich geändert. Versuchen Sie es erneut, um mit dieser Einrichtung fortzufahren.",
+    sessionRestarted:
+      "{error} OpenClaw hat eine neue Sitzung gestartet; frühere Nachrichten bleiben als Kontext erhalten.",
     unsupportedGateway:
       "Aktualisieren Sie das Gateway, um die Einrichtung mit OpenClaw fortzusetzen.",
     history: {
@@ -2008,6 +2011,10 @@ export const de: TranslationMap = {
     add: "Server hinzufügen",
     adding: "Wird hinzugefügt…",
     nameLabel: "Name",
+    transportLabel: "Transport",
+    transportStreamableHttp: "Streamfähiges HTTP",
+    transportSse: "SSE",
+    transportStdio: "Stdio",
     targetLabel: "URL oder Befehl",
     nameInvalid:
       "Servernamen dürfen Buchstaben, Zahlen, Punkte, Bindestriche oder Unterstriche enthalten.",
@@ -2213,6 +2220,7 @@ export const de: TranslationMap = {
       title: "Swarm",
       description: "Lassen Sie Code Mode Gruppen von Subagenten parallel orchestrieren.",
       empty: "Keine aktiven Swarms.",
+      defaultPhase: "Ohne Phase",
     },
   },
   aboutPage: {
@@ -2696,11 +2704,23 @@ export const de: TranslationMap = {
       remove: "Entfernen",
       needsApproval: "Genehmigung erforderlich",
       needsApprovalDetail: "Dieses Widget hat zusätzlichen Zugriff angefordert.",
+      networkAccess: "Netzwerkursprünge",
+      hostTools: "Host-Tools und -Daten",
+      activeCapabilities: "Aktive Widget-Funktionen",
+      networkCapability: "Netzwerk: {capability}",
+      toolCapability: "Tool: {capability}",
+      granted: "Erteilt",
       allow: "Zulassen",
       reject: "Ablehnen",
       rejected: "Zugriff abgelehnt",
       rejectedDetail: "Dieses Widget bleibt inaktiv, bis es entfernt oder ersetzt wird.",
+      appLoading: "App wird wiederhergestellt…",
+      appStaleTitle: "Diese angeheftete App ist veraltet",
+      appStaleDetail:
+        "Ihr Server, ihre Ressource oder das ursprüngliche Transkript ist nicht mehr verfügbar.",
+      retry: "Erneut versuchen",
       frameResolverMissing: "Der Widget-Inhalt ist nicht verfügbar.",
+      sandboxUnavailable: "Der Widget-Sandbox-Host ist nicht verfügbar.",
       frameAuthorizationFailed:
         "Die Widget-Autorisierung ist nach wiederholten Aktualisierungsversuchen fehlgeschlagen.",
       errorTitle: "Dieses Widget konnte nicht geladen werden",
@@ -3693,6 +3713,7 @@ export const de: TranslationMap = {
         title: "Protokoll stimmt nicht überein",
         summary:
           "Die bereitgestellte Control UI und das laufende Gateway stimmen beim unterstützten Verbindungsprotokoll nicht überein.",
+        refresh: "Seite aktualisieren",
         stepDashboard:
           "Öffne das bereitgestellte Dashboard mit openclaw dashboard erneut, damit UI und Gateway aus derselben Installation stammen.",
         stepDevUi:
@@ -3715,6 +3736,7 @@ export const de: TranslationMap = {
   },
   chat: {
     disconnected: "Verbindung zum Gateway getrennt.",
+    waitingForApproval: "Warten auf Genehmigung…",
     archivedSessionDisabled: "Stellen Sie diese Sitzung wieder her, um Nachrichten zu senden.",
     loadOlder: "Ältere laden",
     sessionHeader: {
@@ -4267,8 +4289,9 @@ export const de: TranslationMap = {
       show: "Diskussion anzeigen",
       disconnected: "Gateway ist getrennt.",
       loading: "Diskussion wird geladen…",
-      open: "Diskussion öffnen",
       opening: "Diskussion wird geöffnet…",
+      requiresWriteAccess:
+        "Zum Öffnen dieser Diskussion ist Schreibzugriff für Operatoren erforderlich.",
       opened: "Sitzungsdiskussion",
       openExternal: "Diskussion in einem neuen Tab öffnen",
       frameTitle: "Sitzungsdiskussion",

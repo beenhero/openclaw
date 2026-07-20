@@ -284,6 +284,7 @@ export const tr: TranslationMap = {
     genericSubtitle: "Bu panel yüklenirken bir sorun oluştu.",
     staleTitle: "Yeni bir sürüm mevcut",
     staleSubtitle: "OpenClaw arka planda güncellendi. En son paneli almak için yeniden yükleyin.",
+    reloading: "Yeniden yükleniyor…",
     retry: "Tekrar dene",
   },
   nodes: {
@@ -1953,6 +1954,8 @@ export const tr: TranslationMap = {
     earlier: "Daha önce",
     requestFailed: "OpenClaw yanıt veremedi. Tekrar deneyin.",
     connectionChanged: "Gateway bağlantısı değişti. Bu kuruluma devam etmek için yeniden deneyin.",
+    sessionRestarted:
+      "{error} OpenClaw yeni bir oturum başlattı; önceki mesajlar bağlam için korunuyor.",
     unsupportedGateway: "OpenClaw ile kuruluma devam etmek için Gateway'i güncelleyin.",
     history: {
       button: "Geçmiş",
@@ -1990,6 +1993,10 @@ export const tr: TranslationMap = {
     add: "Sunucu ekle",
     adding: "Ekleniyor…",
     nameLabel: "Ad",
+    transportLabel: "Aktarım",
+    transportStreamableHttp: "Akış destekli HTTP",
+    transportSse: "SSE",
+    transportStdio: "Stdio",
     targetLabel: "URL veya komut",
     nameInvalid:
       "Sunucu adlarında harfler, rakamlar, noktalar, kısa çizgiler veya alt çizgiler kullanılabilir.",
@@ -2197,6 +2204,7 @@ export const tr: TranslationMap = {
       title: "Sürü",
       description: "Code Mode'un alt aracı gruplarını paralel olarak yönetmesini sağlayın.",
       empty: "Etkin sürü yok.",
+      defaultPhase: "Aşamasız",
     },
   },
   aboutPage: {
@@ -2678,11 +2686,22 @@ export const tr: TranslationMap = {
       remove: "Kaldır",
       needsApproval: "Onay gerekiyor",
       needsApprovalDetail: "Bu widget ek erişim talep etti.",
+      networkAccess: "Ağ kaynakları",
+      hostTools: "Ana makine araçları ve verileri",
+      activeCapabilities: "Etkin widget yetenekleri",
+      networkCapability: "Ağ: {capability}",
+      toolCapability: "Araç: {capability}",
+      granted: "Verildi",
       allow: "İzin ver",
       reject: "Reddet",
       rejected: "Erişim reddedildi",
       rejectedDetail: "Bu widget kaldırılana veya değiştirilene kadar devre dışı kalır.",
+      appLoading: "Uygulama geri yükleniyor…",
+      appStaleTitle: "Bu sabitlenmiş uygulama güncelliğini yitirmiş",
+      appStaleDetail: "Sunucusu, kaynağı veya kaynak transkripti artık kullanılamıyor.",
+      retry: "Tekrar dene",
       frameResolverMissing: "Widget içeriği kullanılamıyor.",
+      sandboxUnavailable: "Widget korumalı alan ana makinesi kullanılamıyor.",
       frameAuthorizationFailed:
         "Yinelenen yenileme denemelerinin ardından widget yetkilendirmesi başarısız oldu.",
       errorTitle: "Bu widget yüklenemedi",
@@ -3667,6 +3686,7 @@ export const tr: TranslationMap = {
         title: "Protokol uyuşmazlığı",
         summary:
           "Sunulan Control UI ile çalışan Gateway desteklenen bağlantı protokolü konusunda uyuşmuyor.",
+        refresh: "Sayfayı yenile",
         stepDashboard:
           "UI ve Gateway aynı kurulumdan gelsin diye sunulan dashboardı openclaw dashboard ile yeniden açın.",
         stepDevUi:
@@ -3689,6 +3709,7 @@ export const tr: TranslationMap = {
   },
   chat: {
     disconnected: "Gateway bağlantısı kesildi.",
+    waitingForApproval: "Onay bekleniyor…",
     archivedSessionDisabled: "Mesaj göndermek için bu oturumu geri yükleyin.",
     loadOlder: "Daha eskileri yükle",
     sessionHeader: {
@@ -4231,8 +4252,8 @@ export const tr: TranslationMap = {
       show: "Tartışmayı göster",
       disconnected: "Gateway bağlantısı kesildi.",
       loading: "Tartışma yükleniyor…",
-      open: "Tartışmayı aç",
       opening: "Tartışma açılıyor…",
+      requiresWriteAccess: "Bu tartışmayı açmak için operatör yazma erişimi gereklidir.",
       opened: "Oturum tartışması",
       openExternal: "Tartışmayı yeni bir sekmede aç",
       frameTitle: "Oturum tartışması",

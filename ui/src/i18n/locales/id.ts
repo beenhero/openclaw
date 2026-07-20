@@ -283,6 +283,7 @@ export const id: TranslationMap = {
     staleTitle: "Versi baru tersedia",
     staleSubtitle:
       "OpenClaw telah diperbarui di latar belakang. Muat ulang untuk mendapatkan panel terbaru.",
+    reloading: "Memuat ulang…",
     retry: "Coba lagi",
   },
   nodes: {
@@ -1946,6 +1947,8 @@ export const id: TranslationMap = {
     earlier: "Sebelumnya",
     requestFailed: "OpenClaw tidak dapat membalas. Coba lagi.",
     connectionChanged: "Koneksi Gateway berubah. Coba lagi untuk melanjutkan penyiapan ini.",
+    sessionRestarted:
+      "{error} OpenClaw memulai sesi baru; pesan sebelumnya tetap tersedia sebagai konteks.",
     unsupportedGateway: "Perbarui Gateway untuk melanjutkan penyiapan dengan OpenClaw.",
     history: {
       button: "Riwayat",
@@ -1984,6 +1987,10 @@ export const id: TranslationMap = {
     add: "Tambahkan server",
     adding: "Menambahkan…",
     nameLabel: "Nama",
+    transportLabel: "Transport",
+    transportStreamableHttp: "HTTP yang dapat dialirkan",
+    transportSse: "SSE",
+    transportStdio: "Stdio",
     targetLabel: "URL atau perintah",
     nameInvalid: "Nama server menggunakan huruf, angka, titik, tanda hubung, atau garis bawah.",
     targetInvalid: "Masukkan URL http(s) atau baris perintah.",
@@ -2176,6 +2183,7 @@ export const id: TranslationMap = {
       title: "Swarm",
       description: "Biarkan Mode Kode mengatur kelompok subagen secara paralel.",
       empty: "Tidak ada swarm aktif.",
+      defaultPhase: "Tanpa fase",
     },
   },
   aboutPage: {
@@ -2658,11 +2666,22 @@ export const id: TranslationMap = {
       remove: "Hapus",
       needsApproval: "Memerlukan persetujuan",
       needsApprovalDetail: "Widget ini meminta akses tambahan.",
+      networkAccess: "Asal jaringan",
+      hostTools: "Alat dan data host",
+      activeCapabilities: "Kemampuan widget aktif",
+      networkCapability: "Jaringan: {capability}",
+      toolCapability: "Alat: {capability}",
+      granted: "Diizinkan",
       allow: "Izinkan",
       reject: "Tolak",
       rejected: "Akses ditolak",
       rejectedDetail: "Widget ini tetap tidak aktif hingga dihapus atau diganti.",
+      appLoading: "Memulihkan aplikasi…",
+      appStaleTitle: "Aplikasi yang disematkan ini sudah kedaluwarsa",
+      appStaleDetail: "Server, sumber daya, atau transkrip asalnya sudah tidak tersedia.",
+      retry: "Coba lagi",
       frameResolverMissing: "Konten widget tidak tersedia.",
+      sandboxUnavailable: "Host sandbox widget tidak tersedia.",
       frameAuthorizationFailed:
         "Otorisasi widget gagal setelah upaya pemuatan ulang berulang kali.",
       errorTitle: "Widget ini tidak dapat dimuat",
@@ -3645,6 +3664,7 @@ export const id: TranslationMap = {
         title: "Protokol tidak cocok",
         summary:
           "Control UI yang disajikan dan Gateway yang berjalan tidak sepakat tentang protokol koneksi yang didukung.",
+        refresh: "Muat ulang halaman",
         stepDashboard:
           "Buka kembali dashboard yang disajikan dengan openclaw dashboard agar UI dan Gateway berasal dari instalasi yang sama.",
         stepDevUi:
@@ -3666,6 +3686,7 @@ export const id: TranslationMap = {
   },
   chat: {
     disconnected: "Terputus dari gateway.",
+    waitingForApproval: "Menunggu persetujuan…",
     archivedSessionDisabled: "Pulihkan sesi ini untuk mengirim pesan.",
     loadOlder: "Muat yang lebih lama",
     sessionHeader: {
@@ -4206,8 +4227,8 @@ export const id: TranslationMap = {
       show: "Tampilkan diskusi",
       disconnected: "Gateway terputus.",
       loading: "Memuat diskusi…",
-      open: "Buka diskusi",
       opening: "Membuka diskusi…",
+      requiresWriteAccess: "Akses tulis operator diperlukan untuk membuka diskusi ini.",
       opened: "Diskusi sesi",
       openExternal: "Buka diskusi di tab baru",
       frameTitle: "Diskusi sesi",

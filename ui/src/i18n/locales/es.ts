@@ -285,6 +285,7 @@ export const es: TranslationMap = {
     staleTitle: "Hay una nueva versión disponible",
     staleSubtitle:
       "OpenClaw se actualizó en segundo plano. Recarga para obtener el panel más reciente.",
+    reloading: "Recargando…",
     retry: "Reintentar",
   },
   nodes: {
@@ -1964,6 +1965,8 @@ export const es: TranslationMap = {
     requestFailed: "OpenClaw no pudo responder. Inténtalo de nuevo.",
     connectionChanged:
       "La conexión del Gateway ha cambiado. Vuelve a intentarlo para continuar con esta configuración.",
+    sessionRestarted:
+      "{error} OpenClaw inició una sesión nueva; los mensajes anteriores se conservan como contexto.",
     unsupportedGateway: "Actualiza el Gateway para continuar la configuración con OpenClaw.",
     history: {
       button: "Historial",
@@ -2001,6 +2004,10 @@ export const es: TranslationMap = {
     add: "Añadir servidor",
     adding: "Añadiendo…",
     nameLabel: "Nombre",
+    transportLabel: "Transporte",
+    transportStreamableHttp: "HTTP transmisible",
+    transportSse: "SSE",
+    transportStdio: "Stdio",
     targetLabel: "URL o comando",
     nameInvalid: "Los nombres de servidor usan letras, números, puntos, guiones o guiones bajos.",
     targetInvalid: "Introduce una URL http(s) o una línea de comandos.",
@@ -2202,6 +2209,7 @@ export const es: TranslationMap = {
       title: "Enjambre",
       description: "Permite que el Modo Código coordine grupos de subagentes en paralelo.",
       empty: "No hay enjambres activos.",
+      defaultPhase: "Sin fase",
     },
   },
   aboutPage: {
@@ -2683,11 +2691,22 @@ export const es: TranslationMap = {
       remove: "Eliminar",
       needsApproval: "Requiere aprobación",
       needsApprovalDetail: "Este widget solicitó acceso adicional.",
+      networkAccess: "Orígenes de red",
+      hostTools: "Herramientas y datos del host",
+      activeCapabilities: "Capacidades activas del widget",
+      networkCapability: "Red: {capability}",
+      toolCapability: "Herramienta: {capability}",
+      granted: "Concedido",
       allow: "Permitir",
       reject: "Rechazar",
       rejected: "Acceso rechazado",
       rejectedDetail: "Este widget permanecerá inactivo hasta que se elimine o sustituya.",
+      appLoading: "Restaurando la aplicación…",
+      appStaleTitle: "Esta aplicación fijada está obsoleta",
+      appStaleDetail: "Su servidor, recurso o transcripción de origen ya no está disponible.",
+      retry: "Reintentar",
       frameResolverMissing: "El contenido del widget no está disponible.",
+      sandboxUnavailable: "El host del entorno aislado del widget no está disponible.",
       frameAuthorizationFailed:
         "La autorización del widget falló tras varios intentos de actualización.",
       errorTitle: "No se pudo cargar este widget",
@@ -3680,6 +3699,7 @@ export const es: TranslationMap = {
         title: "El protocolo no coincide",
         summary:
           "La Control UI servida y el Gateway en ejecución no coinciden en el protocolo de conexión admitido.",
+        refresh: "Actualizar la página",
         stepDashboard:
           "Vuelve a abrir el dashboard servido con openclaw dashboard para que UI y Gateway provengan de la misma instalación.",
         stepDevUi:
@@ -3702,6 +3722,7 @@ export const es: TranslationMap = {
   },
   chat: {
     disconnected: "Desconectado de la puerta de enlace.",
+    waitingForApproval: "Esperando aprobación…",
     archivedSessionDisabled: "Restaura esta sesión para enviar mensajes.",
     loadOlder: "Cargar anteriores",
     sessionHeader: {
@@ -4251,8 +4272,9 @@ export const es: TranslationMap = {
       show: "Mostrar discusión",
       disconnected: "Gateway está desconectado.",
       loading: "Cargando discusión…",
-      open: "Abrir discusión",
       opening: "Abriendo la discusión…",
+      requiresWriteAccess:
+        "Se requiere acceso de escritura de operador para abrir esta conversación.",
       opened: "Discusión de la sesión",
       openExternal: "Abrir la discusión en una pestaña nueva",
       frameTitle: "Discusión de la sesión",

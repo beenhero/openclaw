@@ -281,6 +281,7 @@ export const ko: TranslationMap = {
     staleTitle: "새 버전을 사용할 수 있습니다",
     staleSubtitle:
       "OpenClaw가 백그라운드에서 업데이트되었습니다. 최신 패널을 사용하려면 새로고침하세요.",
+    reloading: "다시 불러오는 중…",
     retry: "다시 시도",
   },
   nodes: {
@@ -1937,6 +1938,8 @@ export const ko: TranslationMap = {
     earlier: "이전",
     requestFailed: "OpenClaw가 응답하지 못했습니다. 다시 시도하세요.",
     connectionChanged: "Gateway 연결이 변경되었습니다. 이 설정을 계속하려면 다시 시도하세요.",
+    sessionRestarted:
+      "{error} OpenClaw가 새 세션을 시작했습니다. 이전 메시지는 맥락을 위해 유지됩니다.",
     unsupportedGateway: "OpenClaw로 설정을 계속하려면 Gateway를 업데이트하세요.",
     history: {
       button: "기록",
@@ -1973,6 +1976,10 @@ export const ko: TranslationMap = {
     add: "서버 추가",
     adding: "추가 중…",
     nameLabel: "이름",
+    transportLabel: "전송 방식",
+    transportStreamableHttp: "스트리밍 가능 HTTP",
+    transportSse: "SSE",
+    transportStdio: "Stdio",
     targetLabel: "URL 또는 명령",
     nameInvalid: "서버 이름에는 문자, 숫자, 마침표, 대시 또는 밑줄을 사용할 수 있습니다.",
     targetInvalid: "http(s) URL 또는 명령줄을 입력하세요.",
@@ -2166,6 +2173,7 @@ export const ko: TranslationMap = {
       title: "스웜",
       description: "Code Mode가 여러 하위 에이전트 그룹을 병렬로 조율하도록 합니다.",
       empty: "활성 스웜이 없습니다.",
+      defaultPhase: "단계 미지정",
     },
   },
   aboutPage: {
@@ -2644,11 +2652,22 @@ export const ko: TranslationMap = {
       remove: "제거",
       needsApproval: "승인 필요",
       needsApprovalDetail: "이 위젯에서 추가 접근 권한을 요청했습니다.",
+      networkAccess: "네트워크 출처",
+      hostTools: "호스트 도구 및 데이터",
+      activeCapabilities: "활성 위젯 기능",
+      networkCapability: "네트워크: {capability}",
+      toolCapability: "도구: {capability}",
+      granted: "허용됨",
       allow: "허용",
       reject: "거부",
       rejected: "액세스 거부됨",
       rejectedDetail: "이 위젯은 제거하거나 교체할 때까지 비활성 상태로 유지됩니다.",
+      appLoading: "앱 복원 중…",
+      appStaleTitle: "이 고정된 앱은 더 이상 최신 상태가 아닙니다",
+      appStaleDetail: "해당 서버, 리소스 또는 원본 대화 기록을 더 이상 사용할 수 없습니다.",
+      retry: "재시도",
       frameResolverMissing: "위젯 콘텐츠를 사용할 수 없습니다.",
+      sandboxUnavailable: "위젯 샌드박스 호스트를 사용할 수 없습니다.",
       frameAuthorizationFailed: "새로 고침을 여러 번 시도했지만 위젯 인증에 실패했습니다.",
       errorTitle: "이 위젯을 불러올 수 없습니다",
       errorDetail: "문제는 이 카드에만 국한됩니다.",
@@ -3621,6 +3640,7 @@ export const ko: TranslationMap = {
         title: "프로토콜 불일치",
         summary:
           "제공된 Control UI와 실행 중인 Gateway가 지원되는 연결 프로토콜에 동의하지 않습니다.",
+        refresh: "페이지 새로 고침",
         stepDashboard:
           "UI와 Gateway가 같은 설치에서 오도록 openclaw dashboard로 제공된 dashboard를 다시 여세요.",
         stepDevUi:
@@ -3643,6 +3663,7 @@ export const ko: TranslationMap = {
   },
   chat: {
     disconnected: "Gateway와 연결이 끊어졌습니다.",
+    waitingForApproval: "승인 대기 중…",
     archivedSessionDisabled: "메시지를 보내려면 이 세션을 복원하세요.",
     loadOlder: "이전 항목 불러오기",
     sessionHeader: {
@@ -4185,8 +4206,8 @@ export const ko: TranslationMap = {
       show: "토론 표시",
       disconnected: "Gateway 연결이 끊어졌습니다.",
       loading: "토론 불러오는 중…",
-      open: "토론 열기",
       opening: "토론을 여는 중…",
+      requiresWriteAccess: "이 토론을 열려면 운영자 쓰기 권한이 필요합니다.",
       opened: "세션 토론",
       openExternal: "새 탭에서 토론 열기",
       frameTitle: "세션 토론",

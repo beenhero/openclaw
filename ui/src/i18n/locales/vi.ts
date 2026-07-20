@@ -283,6 +283,7 @@ export const vi: TranslationMap = {
     staleTitle: "Đã có phiên bản mới",
     staleSubtitle:
       "OpenClaw đã được cập nhật trong nền. Hãy tải lại để xem bảng điều khiển mới nhất.",
+    reloading: "Đang tải lại…",
     retry: "Thử lại",
   },
   nodes: {
@@ -1951,6 +1952,8 @@ export const vi: TranslationMap = {
     earlier: "Trước đó",
     requestFailed: "OpenClaw không thể phản hồi. Hãy thử lại.",
     connectionChanged: "Kết nối Gateway đã thay đổi. Hãy thử lại để tiếp tục thiết lập.",
+    sessionRestarted:
+      "{error} OpenClaw đã bắt đầu một phiên mới; các tin nhắn trước đó vẫn được giữ lại để làm ngữ cảnh.",
     unsupportedGateway: "Cập nhật Gateway để tiếp tục thiết lập với OpenClaw.",
     history: {
       button: "Lịch sử",
@@ -1988,6 +1991,10 @@ export const vi: TranslationMap = {
     add: "Thêm máy chủ",
     adding: "Đang thêm…",
     nameLabel: "Tên",
+    transportLabel: "Phương thức truyền tải",
+    transportStreamableHttp: "HTTP có thể truyền phát",
+    transportSse: "SSE",
+    transportStdio: "Stdio",
     targetLabel: "URL hoặc lệnh",
     nameInvalid:
       "Tên máy chủ chỉ được dùng chữ cái, chữ số, dấu chấm, dấu gạch ngang hoặc dấu gạch dưới.",
@@ -2180,6 +2187,7 @@ export const vi: TranslationMap = {
       title: "Bầy tác tử",
       description: "Cho phép Chế độ mã điều phối song song các nhóm tác tử phụ.",
       empty: "Không có bầy tác tử nào đang hoạt động.",
+      defaultPhase: "Chưa phân giai đoạn",
     },
   },
   aboutPage: {
@@ -2664,11 +2672,23 @@ export const vi: TranslationMap = {
       remove: "Xóa",
       needsApproval: "Cần phê duyệt",
       needsApprovalDetail: "Tiện ích này đã yêu cầu thêm quyền truy cập.",
+      networkAccess: "Nguồn mạng",
+      hostTools: "Công cụ và dữ liệu máy chủ",
+      activeCapabilities: "Các khả năng tiện ích đang hoạt động",
+      networkCapability: "Mạng: {capability}",
+      toolCapability: "Công cụ: {capability}",
+      granted: "Đã cấp",
       allow: "Cho phép",
       reject: "Từ chối",
       rejected: "Quyền truy cập bị từ chối",
       rejectedDetail: "Tiện ích này sẽ không hoạt động cho đến khi bị xóa hoặc thay thế.",
+      appLoading: "Đang khôi phục ứng dụng…",
+      appStaleTitle: "Ứng dụng đã ghim này không còn hợp lệ",
+      appStaleDetail:
+        "Máy chủ, tài nguyên hoặc bản ghi hội thoại nguồn của ứng dụng không còn khả dụng.",
+      retry: "Thử lại",
       frameResolverMissing: "Nội dung tiện ích không khả dụng.",
+      sandboxUnavailable: "Máy chủ hộp cát của tiện ích không khả dụng.",
       frameAuthorizationFailed: "Không thể xác thực tiện ích sau nhiều lần thử làm mới.",
       errorTitle: "Không thể tải tiện ích này",
       errorDetail: "Sự cố chỉ giới hạn trong thẻ này.",
@@ -3644,6 +3664,7 @@ export const vi: TranslationMap = {
         title: "Không khớp giao thức",
         summary:
           "Control UI được phục vụ và Gateway đang chạy không thống nhất về giao thức kết nối được hỗ trợ.",
+        refresh: "Làm mới trang",
         stepDashboard:
           "Mở lại dashboard được phục vụ bằng openclaw dashboard để UI và Gateway đến từ cùng một bản cài đặt.",
         stepDevUi:
@@ -3664,6 +3685,7 @@ export const vi: TranslationMap = {
   },
   chat: {
     disconnected: "Đã ngắt kết nối khỏi gateway.",
+    waitingForApproval: "Đang chờ phê duyệt…",
     archivedSessionDisabled: "Khôi phục phiên này để gửi tin nhắn.",
     loadOlder: "Tải mục cũ hơn",
     sessionHeader: {
@@ -4209,8 +4231,8 @@ export const vi: TranslationMap = {
       show: "Hiển thị thảo luận",
       disconnected: "Gateway đã ngắt kết nối.",
       loading: "Đang tải thảo luận…",
-      open: "Mở thảo luận",
       opening: "Đang mở cuộc thảo luận…",
+      requiresWriteAccess: "Cần quyền ghi của người vận hành để mở cuộc thảo luận này.",
       opened: "Cuộc thảo luận của phiên",
       openExternal: "Mở cuộc thảo luận trong tab mới",
       frameTitle: "Cuộc thảo luận của phiên",
