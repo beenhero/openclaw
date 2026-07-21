@@ -4842,6 +4842,12 @@ heartbeat_elapsed="\${BASH_REMATCH[1]}"
     expect(runner).toContain('docker_e2e_docker_cmd rm -f "$CONTAINER_NAME"');
     expect(runner).not.toMatch(/(^|\n)docker run --rm/u);
     expect(runner).toContain(
+      "lets authorized gateway-style plugin commands escape plugin-owned bindings",
+    );
+    expect(runner).not.toContain(
+      "lets authorized plugin-owned binding commands fall through to command processing",
+    );
+    expect(runner).toContain(
       "keeps unauthorized plugin-owned binding slash replies suppressed while routed to the bound plugin",
     );
     expect(runner).not.toContain(
