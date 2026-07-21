@@ -18,6 +18,7 @@ type TestModelSetupPage = HTMLElement & {
 };
 
 const recommendedIconUrl = "https://cdn.simpleicons.org/ollama";
+const customIconUrl = "https://cdn.example.com/acme.png";
 
 const detection: SystemAgentSetupDetectResult = {
   candidates: [],
@@ -105,9 +106,27 @@ describe("ModelSetupPage catalog icons", () => {
     vi.unstubAllGlobals();
   });
 
-  it("loads wire icons through the authenticated same-origin catalog proxy", async () => {
+  it("uses bundled brand icons without enqueueing their remote artwork", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+    const { context, client } = createContext();
+    const { page } = await mountPage(context, {
+      state: { phase: "ready", result: detection },
+      client,
+      firstRun: false,
+    });
+
+    expect(
+      page.querySelector('.model-setup__recommendation [data-provider-icon="ollama"]'),
+    ).not.toBeNull();
+    expect(page.querySelector(".model-setup__recommendation img")).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(page.innerHTML).not.toContain(recommendedIconUrl);
+  });
+
+  it("loads unknown wire icons through the authenticated same-origin catalog proxy", async () => {
     const NativeUrl = URL;
-    const createObjectURL = vi.fn(() => "blob:ollama-icon");
+    const createObjectURL = vi.fn(() => "blob:acme-icon");
     const revokeObjectURL = vi.fn();
     vi.stubGlobal(
       "URL",
@@ -125,7 +144,21 @@ describe("ModelSetupPage catalog icons", () => {
     vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
     const { context, client } = createContext();
     const { page } = await mountPage(context, {
-      state: { phase: "ready", result: detection },
+      state: {
+        phase: "ready",
+        result: {
+          ...detection,
+          recommendedInstalls: [
+            {
+              id: "acme",
+              label: "Acme",
+              hint: "Install the Acme runtime",
+              website: "https://example.com/acme",
+              icon: customIconUrl,
+            },
+          ],
+        },
+      },
       client,
       firstRun: false,
     });
@@ -135,15 +168,15 @@ describe("ModelSetupPage catalog icons", () => {
         page
           .querySelector<HTMLImageElement>(".model-setup__recommendation img")
           ?.getAttribute("src"),
-      ).toBe("blob:ollama-icon");
+      ).toBe("blob:acme-icon");
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      `/openclaw/__openclaw__/catalog-icon/${encodeURIComponent(recommendedIconUrl)}`,
+      `/openclaw/__openclaw__/catalog-icon/${encodeURIComponent(customIconUrl)}`,
       expect.objectContaining({ credentials: "same-origin" }),
     );
-    expect(page.innerHTML).not.toContain(recommendedIconUrl);
+    expect(page.innerHTML).not.toContain(customIconUrl);
 
     page.remove();
-    expect(revokeObjectURL).toHaveBeenCalledWith("blob:ollama-icon");
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:acme-icon");
   });
 });

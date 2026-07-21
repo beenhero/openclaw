@@ -64,12 +64,20 @@ const PROVIDER_ICON_NAMES = new Set([
 // under a different slug than their catalog id.
 const PROVIDER_ICON_ALIASES: Readonly<Record<string, string>> = {
   anthropic: "claude",
+  "anthropic-api-key": "claude",
   "amazon-bedrock": "bedrock",
   "aws-bedrock": "bedrock",
+  "claude-code": "claude",
+  "claude-cli": "claude",
+  "codex-cli": "codex",
+  "gemini-cli": "gemini",
   google: "gemini",
   "google-gemini-cli": "gemini",
   "github-copilot": "copilot",
+  "grok-build": "grok",
+  "kimi-code": "kimi",
   openai: "codex",
+  "openai-api-key": "codex",
   "opencode-go": "opencodego",
   "opencode-zen": "opencode",
   xai: "grok",
@@ -103,9 +111,14 @@ export function providerDisplayLabel(provider: string): string {
 
 /** Icon asset name for a (normalized, lowercase) provider id, or null when no brand mark ships. */
 function resolveProviderIconName(provider: string): string | null {
-  const normalized = provider.trim().toLowerCase();
+  const normalized = provider.trim().toLowerCase().replace(/\s+/gu, "-");
   const icon = PROVIDER_ICON_ALIASES[normalized] ?? normalized;
   return PROVIDER_ICON_NAMES.has(icon) ? icon : null;
+}
+
+/** Whether a provider identity has a bundled brand mark. */
+export function hasProviderBrandIcon(provider: string): boolean {
+  return resolveProviderIconName(provider) !== null;
 }
 
 function providerIconAssetPath(icon: string): string {

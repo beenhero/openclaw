@@ -158,7 +158,20 @@ describe("renderModelSetup", () => {
     );
     expect(container.querySelector('input[type="password"]')).not.toBeNull();
     expect(container.querySelector("details")?.open).toBe(false);
-    expect(container.querySelectorAll("img")).toHaveLength(3);
+    expect(
+      container.querySelector('[data-candidate-kind="codex-cli"] [data-provider-icon="codex"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-auth-choice="openai-oauth"] [data-provider-icon="codex"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('.model-setup__manual [data-provider-icon="codex"]'),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-auth-choice="other-device"] .provider-brand-icon--fallback')
+        ?.textContent,
+    ).toContain("O");
+    expect(container.querySelectorAll("img")).toHaveLength(0);
   });
 
   it("renders recommended install cards only when candidates and sign-ins are empty", () => {
@@ -174,11 +187,10 @@ describe("renderModelSetup", () => {
     expect(text(container)).toContain("Recommended installs");
     expect(text(container)).toContain("Ollama Run open models locally");
     const card = container.querySelector('[data-recommended-install="ollama"]');
-    const image = card?.querySelector<HTMLImageElement>("img");
+    const icon = card?.querySelector<HTMLElement>('[data-provider-icon="ollama"]');
     const link = card?.querySelector<HTMLAnchorElement>("a");
-    expect(image?.getAttribute("src")).toBe("blob:ollama");
-    expect(image?.alt).toBe("Ollama");
-    expect(image?.width).toBe(24);
+    expect(icon).not.toBeNull();
+    expect(card?.querySelector("img")).toBeNull();
     expect(link?.href).toBe("https://ollama.com/download");
     expect(link?.target).toBe("_blank");
     expect(link?.rel).toBe("noopener");
@@ -196,6 +208,41 @@ describe("renderModelSetup", () => {
 
     expect(container.querySelectorAll("img")).toHaveLength(0);
     expect(container.innerHTML).not.toContain("https://cdn.example.com");
+  });
+
+  it("uses proxied artwork for unknown providers and invalidates broken blobs", () => {
+    const iconUrl = "https://cdn.example.com/acme.png";
+    const onIconError = vi.fn();
+    const container = mount(
+      props({
+        page: {
+          phase: "ready",
+          result: {
+            ...detected,
+            candidates: [],
+            authOptions: [],
+            recommendedInstalls: [],
+            manualProviders: [
+              {
+                id: "acme",
+                label: "Acme",
+                icon: iconUrl,
+              },
+            ],
+          },
+        },
+        manualProviderId: "acme",
+        iconUrls: { [iconUrl]: "blob:acme" },
+        onIconError,
+      }),
+    );
+
+    const image = container.querySelector<HTMLImageElement>(".model-setup__manual img");
+    expect(image?.src).toBe("blob:acme");
+    expect(image?.alt).toBe("Acme");
+    image?.dispatchEvent(new Event("error"));
+    expect(onIconError).toHaveBeenCalledWith(iconUrl);
+    expect(container.innerHTML).not.toContain(iconUrl);
   });
 
   it("renders admin and older-gateway gates without actions", () => {
