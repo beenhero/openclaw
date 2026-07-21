@@ -141,9 +141,7 @@ describe("docker build cache layout", () => {
     );
     // Packaged postinstall must run before the self-link exists so its prune
     // walks cannot cycle through /app/node_modules/openclaw -> /app.
-    const postinstallIndex = dockerfile.indexOf(
-      "node /app/scripts/postinstall-bundled-plugins.mjs",
-    );
+    const postinstallIndex = dockerfile.indexOf("postinstall.runBundledPluginPostinstall()");
     const selfLinkIndex = dockerfile.indexOf("ln -sfn /app /app/node_modules/openclaw");
     expect(postinstallIndex).toBeGreaterThan(-1);
     expect(selfLinkIndex).toBeGreaterThan(postinstallIndex);
