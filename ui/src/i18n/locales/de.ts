@@ -2723,6 +2723,8 @@ export const de: TranslationMap = {
       sandboxUnavailable: "Der Widget-Sandbox-Host ist nicht verfügbar.",
       frameAuthorizationFailed:
         "Die Widget-Autorisierung ist nach wiederholten Aktualisierungsversuchen fehlgeschlagen.",
+      sandboxOriginRequired:
+        "Die Widget-Autorisierung ist nach wiederholten Aktualisierungsversuchen fehlgeschlagen. Wenn das Gateway hinter einem Reverse-Proxy oder Tunnel ausgeführt wird, der den Widget-Sandbox-Port nicht weiterleitet, legen Sie mcp.apps.sandboxOrigin auf einen dedizierten öffentlichen Ursprung fest, der zum Sandbox-Listener weitergeleitet wird.",
       errorTitle: "Dieses Widget konnte nicht geladen werden",
       errorDetail: "Das Problem ist auf diese Karte beschränkt.",
       actionErrorTitle: "Widget-Änderung fehlgeschlagen",
@@ -3263,6 +3265,7 @@ export const de: TranslationMap = {
     models: "{count} models",
     modelOne: "1 model",
     modelsAvailable: "{available} of {count} models available",
+    globalUsage: "Globale Nutzung und Kosten",
     noStats: "No live usage data reported by this provider.",
     localCost: "Session spend · {days}d",
     localCostDetail: "{tokens} tokens · {sessions} sessions",
@@ -3271,7 +3274,7 @@ export const de: TranslationMap = {
     configUnavailable:
       "Die Konfiguration ist nicht verfügbar. Aktualisieren Sie die Seite und versuchen Sie es erneut.",
     credentials: {
-      label: "Anmeldedaten",
+      label: "Anmeldedaten für {agent}",
       oauth: "OAuth-Profile: {count}",
       tokenProfiles: "Tokenprofile: {count}",
       configKey: "API-Schlüssel in der Konfiguration festgelegt",

@@ -2707,6 +2707,8 @@ export const pl: TranslationMap = {
       sandboxUnavailable: "Host piaskownicy widżetu jest niedostępny.",
       frameAuthorizationFailed:
         "Autoryzacja widżetu nie powiodła się po wielokrotnych próbach odświeżenia.",
+      sandboxOriginRequired:
+        "Autoryzacja widżetu nie powiodła się po wielokrotnych próbach odświeżenia. Jeśli Gateway działa za odwrotnym serwerem proxy lub tunelem, który nie przekierowuje portu piaskownicy widżetu, ustaw mcp.apps.sandboxOrigin na dedykowane publiczne źródło przekierowane do odbiornika piaskownicy.",
       errorTitle: "Nie udało się wczytać tego widżetu",
       errorDetail: "Problem dotyczy wyłącznie tej karty.",
       actionErrorTitle: "Nie udało się zmienić widżetu",
@@ -3246,6 +3248,7 @@ export const pl: TranslationMap = {
     models: "{count} models",
     modelOne: "1 model",
     modelsAvailable: "{available} of {count} models available",
+    globalUsage: "Globalne użycie i koszt",
     noStats: "No live usage data reported by this provider.",
     localCost: "Session spend · {days}d",
     localCostDetail: "{tokens} tokens · {sessions} sessions",
@@ -3253,7 +3256,7 @@ export const pl: TranslationMap = {
     requestFailed: "Żądanie nie powiodło się.",
     configUnavailable: "Konfiguracja jest niedostępna. Odśwież i spróbuj ponownie.",
     credentials: {
-      label: "Dane uwierzytelniające",
+      label: "Dane uwierzytelniające dla {agent}",
       oauth: "Profile OAuth: {count}",
       tokenProfiles: "Profile tokenów: {count}",
       configKey: "Klucz API ustawiony w konfiguracji",

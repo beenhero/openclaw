@@ -2669,6 +2669,8 @@ export const ko: TranslationMap = {
       frameResolverMissing: "위젯 콘텐츠를 사용할 수 없습니다.",
       sandboxUnavailable: "위젯 샌드박스 호스트를 사용할 수 없습니다.",
       frameAuthorizationFailed: "새로 고침을 여러 번 시도했지만 위젯 인증에 실패했습니다.",
+      sandboxOriginRequired:
+        "새로 고침을 여러 번 시도했지만 위젯 인증에 실패했습니다. 위젯 샌드박스 포트를 라우팅하지 않는 리버스 프록시 또는 터널 뒤에서 Gateway가 실행되는 경우, mcp.apps.sandboxOrigin을 샌드박스 리스너로 라우팅되는 전용 공개 오리진으로 설정하세요.",
       errorTitle: "이 위젯을 불러올 수 없습니다",
       errorDetail: "문제는 이 카드에만 국한됩니다.",
       actionErrorTitle: "위젯 변경 실패",
@@ -3203,6 +3205,7 @@ export const ko: TranslationMap = {
     models: "{count} models",
     modelOne: "1 model",
     modelsAvailable: "{available} of {count} models available",
+    globalUsage: "전체 사용량 및 비용",
     noStats: "No live usage data reported by this provider.",
     localCost: "Session spend · {days}d",
     localCostDetail: "{tokens} tokens · {sessions} sessions",
@@ -3210,7 +3213,7 @@ export const ko: TranslationMap = {
     requestFailed: "요청에 실패했습니다.",
     configUnavailable: "구성을 사용할 수 없습니다. 새로고침한 후 다시 시도하세요.",
     credentials: {
-      label: "자격 증명",
+      label: "{agent}의 자격 증명",
       oauth: "OAuth 프로필: {count}",
       tokenProfiles: "토큰 프로필: {count}",
       configKey: "config에 설정된 API 키",

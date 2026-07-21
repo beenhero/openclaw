@@ -2738,6 +2738,8 @@ export const fr: TranslationMap = {
       sandboxUnavailable: "L’hôte de l’environnement isolé du widget est indisponible.",
       frameAuthorizationFailed:
         "L’autorisation du widget a échoué après plusieurs tentatives d’actualisation.",
+      sandboxOriginRequired:
+        "L’autorisation du widget a échoué après plusieurs tentatives d’actualisation. Si le Gateway s’exécute derrière un proxy inverse ou un tunnel qui n’achemine pas le port du bac à sable du widget, définissez mcp.apps.sandboxOrigin sur une origine publique dédiée acheminée vers le service d’écoute du bac à sable.",
       errorTitle: "Impossible de charger ce widget",
       errorDetail: "Le problème est limité à cette carte.",
       actionErrorTitle: "Échec de la modification du widget",
@@ -3279,6 +3281,7 @@ export const fr: TranslationMap = {
     models: "{count} models",
     modelOne: "1 model",
     modelsAvailable: "{available} of {count} models available",
+    globalUsage: "Utilisation et coût globaux",
     noStats: "No live usage data reported by this provider.",
     localCost: "Session spend · {days}d",
     localCostDetail: "{tokens} tokens · {sessions} sessions",
@@ -3286,7 +3289,7 @@ export const fr: TranslationMap = {
     requestFailed: "Échec de la requête.",
     configUnavailable: "La configuration est indisponible. Actualisez la page et réessayez.",
     credentials: {
-      label: "Identifiants",
+      label: "Identifiants pour {agent}",
       oauth: "Profils OAuth : {count}",
       tokenProfiles: "Profils de jeton : {count}",
       configKey: "Clé API définie dans la configuration",

@@ -2705,6 +2705,8 @@ export const ru: TranslationMap = {
       sandboxUnavailable: "Хост песочницы виджета недоступен.",
       frameAuthorizationFailed:
         "Не удалось авторизовать виджет после нескольких попыток обновления.",
+      sandboxOriginRequired:
+        "Не удалось авторизовать виджет после нескольких попыток обновления. Если Gateway работает за обратным прокси или туннелем, который не перенаправляет порт песочницы виджета, задайте для mcp.apps.sandboxOrigin отдельный публичный источник, перенаправленный на прослушиватель песочницы.",
       errorTitle: "Не удалось загрузить этот виджет",
       errorDetail: "Проблема затрагивает только эту карточку.",
       actionErrorTitle: "Не удалось изменить виджет",
@@ -3244,6 +3246,7 @@ export const ru: TranslationMap = {
     models: "{count} models",
     modelOne: "1 model",
     modelsAvailable: "{available} of {count} models available",
+    globalUsage: "Общее использование и стоимость",
     noStats: "No live usage data reported by this provider.",
     localCost: "Session spend · {days}d",
     localCostDetail: "{tokens} tokens · {sessions} sessions",
@@ -3251,7 +3254,7 @@ export const ru: TranslationMap = {
     requestFailed: "Не удалось выполнить запрос.",
     configUnavailable: "Конфигурация недоступна. Обновите страницу и повторите попытку.",
     credentials: {
-      label: "Учётные данные",
+      label: "Учетные данные для {agent}",
       oauth: "Профили OAuth: {count}",
       tokenProfiles: "Профили токенов: {count}",
       configKey: "API-ключ задан в конфигурации",

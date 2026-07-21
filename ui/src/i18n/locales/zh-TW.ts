@@ -2624,6 +2624,8 @@ export const zh_TW: TranslationMap = {
       frameResolverMissing: "小工具內容無法使用。",
       sandboxUnavailable: "小工具沙箱主機無法使用。",
       frameAuthorizationFailed: "多次嘗試重新整理後，小工具授權仍失敗。",
+      sandboxOriginRequired:
+        "多次重新整理後，Widget 授權仍失敗。如果 Gateway 位於反向 Proxy 或 Tunnel 後方，而該 Proxy 或 Tunnel 未路由 Widget Sandbox 連接埠，請將 mcp.apps.sandboxOrigin 設為路由至 Sandbox Listener 的專用公開 Origin。",
       errorTitle: "無法載入此小工具",
       errorDetail: "問題僅限於此卡片。",
       actionErrorTitle: "小工具變更失敗",
@@ -3155,6 +3157,7 @@ export const zh_TW: TranslationMap = {
     models: "{count} models",
     modelOne: "1 model",
     modelsAvailable: "{available} of {count} models available",
+    globalUsage: "全域用量與費用",
     noStats: "No live usage data reported by this provider.",
     localCost: "Session spend · {days}d",
     localCostDetail: "{tokens} tokens · {sessions} sessions",
@@ -3162,7 +3165,7 @@ export const zh_TW: TranslationMap = {
     requestFailed: "要求失敗。",
     configUnavailable: "設定無法使用。請重新整理後再試一次。",
     credentials: {
-      label: "憑證",
+      label: "{agent} 的憑證",
       oauth: "OAuth 設定檔：{count}",
       tokenProfiles: "權杖設定檔：{count}",
       configKey: "已在設定中設置 API 金鑰",

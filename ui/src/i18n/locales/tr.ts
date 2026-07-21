@@ -2704,6 +2704,8 @@ export const tr: TranslationMap = {
       sandboxUnavailable: "Widget korumalı alan ana makinesi kullanılamıyor.",
       frameAuthorizationFailed:
         "Yinelenen yenileme denemelerinin ardından widget yetkilendirmesi başarısız oldu.",
+      sandboxOriginRequired:
+        "Tekrarlanan yenileme denemelerinin ardından widget yetkilendirmesi başarısız oldu. Gateway, widget sandbox portunu yönlendirmeyen bir ters proxy veya tünelin arkasında çalışıyorsa mcp.apps.sandboxOrigin değerini sandbox dinleyicisine yönlendirilen, bu amaç için ayrılmış genel bir origin olarak ayarlayın.",
       errorTitle: "Bu widget yüklenemedi",
       errorDetail: "Sorun yalnızca bu kartla sınırlıdır.",
       actionErrorTitle: "Widget değişikliği başarısız oldu",
@@ -3239,6 +3241,7 @@ export const tr: TranslationMap = {
     models: "{count} models",
     modelOne: "1 model",
     modelsAvailable: "{available} of {count} models available",
+    globalUsage: "Genel kullanım ve maliyet",
     noStats: "No live usage data reported by this provider.",
     localCost: "Session spend · {days}d",
     localCostDetail: "{tokens} tokens · {sessions} sessions",
@@ -3246,7 +3249,7 @@ export const tr: TranslationMap = {
     requestFailed: "İstek başarısız oldu.",
     configUnavailable: "Yapılandırma kullanılamıyor. Yenileyip tekrar deneyin.",
     credentials: {
-      label: "Kimlik Bilgileri",
+      label: "{agent} için kimlik bilgileri",
       oauth: "OAuth profilleri: {count}",
       tokenProfiles: "Token profilleri: {count}",
       configKey: "API anahtarı yapılandırmada ayarlanmış",

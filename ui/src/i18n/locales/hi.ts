@@ -2650,6 +2650,8 @@ export const hi: TranslationMap = {
       frameResolverMissing: "विजेट की सामग्री उपलब्ध नहीं है।",
       sandboxUnavailable: "विजेट सैंडबॉक्स होस्ट उपलब्ध नहीं है।",
       frameAuthorizationFailed: "बार-बार रीफ़्रेश करने के प्रयासों के बाद Widget प्राधिकरण विफल रहा।",
+      sandboxOriginRequired:
+        "बार-बार रीफ़्रेश करने के प्रयासों के बाद Widget प्राधिकरण विफल रहा। यदि Gateway किसी ऐसे रिवर्स प्रॉक्सी या टनल के पीछे चलता है जो Widget सैंडबॉक्स पोर्ट को रूट नहीं करता, तो mcp.apps.sandboxOrigin को सैंडबॉक्स लिसनर तक रूट किए गए एक समर्पित सार्वजनिक ओरिजिन पर सेट करें।",
       errorTitle: "यह विजेट लोड नहीं हो सका",
       errorDetail: "समस्या केवल इस कार्ड तक सीमित है।",
       actionErrorTitle: "विजेट में बदलाव विफल रहा",
@@ -3185,6 +3187,7 @@ export const hi: TranslationMap = {
     models: "{count} models",
     modelOne: "1 model",
     modelsAvailable: "{available} of {count} models available",
+    globalUsage: "वैश्विक उपयोग और लागत",
     noStats: "No live usage data reported by this provider.",
     localCost: "Session spend · {days}d",
     localCostDetail: "{tokens} tokens · {sessions} sessions",
@@ -3192,7 +3195,7 @@ export const hi: TranslationMap = {
     requestFailed: "अनुरोध विफल रहा।",
     configUnavailable: "कॉन्फ़िगरेशन उपलब्ध नहीं है। रीफ़्रेश करके फिर से प्रयास करें।",
     credentials: {
-      label: "क्रेडेंशियल",
+      label: "{agent} के लिए क्रेडेंशियल",
       oauth: "OAuth प्रोफ़ाइल: {count}",
       tokenProfiles: "टोकन प्रोफ़ाइल: {count}",
       configKey: "कॉन्फ़िगरेशन में API कुंजी सेट है",

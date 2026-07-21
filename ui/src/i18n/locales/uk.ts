@@ -2696,6 +2696,8 @@ export const uk: TranslationMap = {
       frameResolverMissing: "Вміст віджета недоступний.",
       sandboxUnavailable: "Хост пісочниці віджета недоступний.",
       frameAuthorizationFailed: "Не вдалося авторизувати віджет після кількох спроб оновлення.",
+      sandboxOriginRequired:
+        "Не вдалося авторизувати віджет після повторних спроб оновлення. Якщо Gateway працює за зворотним проксі-сервером або тунелем, який не маршрутизує порт пісочниці віджета, установіть для mcp.apps.sandboxOrigin окремий загальнодоступний origin, спрямований до слухача пісочниці.",
       errorTitle: "Не вдалося завантажити цей віджет",
       errorDetail: "Проблема стосується лише цієї картки.",
       actionErrorTitle: "Не вдалося змінити віджет",
@@ -3233,6 +3235,7 @@ export const uk: TranslationMap = {
     models: "{count} models",
     modelOne: "1 model",
     modelsAvailable: "{available} of {count} models available",
+    globalUsage: "Загальне використання та вартість",
     noStats: "No live usage data reported by this provider.",
     localCost: "Session spend · {days}d",
     localCostDetail: "{tokens} tokens · {sessions} sessions",
@@ -3240,7 +3243,7 @@ export const uk: TranslationMap = {
     requestFailed: "Не вдалося виконати запит.",
     configUnavailable: "Конфігурація недоступна. Оновіть сторінку та спробуйте ще раз.",
     credentials: {
-      label: "Облікові дані",
+      label: "Облікові дані для {agent}",
       oauth: "Профілі OAuth: {count}",
       tokenProfiles: "Профілі токенів: {count}",
       configKey: "Ключ API задано в конфігурації",

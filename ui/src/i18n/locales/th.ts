@@ -2639,6 +2639,8 @@ export const th: TranslationMap = {
       frameResolverMissing: "เนื้อหาวิดเจ็ตไม่พร้อมใช้งาน",
       sandboxUnavailable: "โฮสต์แซนด์บ็อกซ์ของวิดเจ็ตไม่พร้อมใช้งาน",
       frameAuthorizationFailed: "การให้สิทธิ์วิดเจ็ตล้มเหลวหลังจากพยายามรีเฟรชซ้ำหลายครั้ง",
+      sandboxOriginRequired:
+        "การอนุญาตวิดเจ็ตล้มเหลวหลังจากพยายามรีเฟรชซ้ำหลายครั้ง หาก Gateway ทำงานอยู่หลัง reverse proxy หรือ tunnel ที่ไม่ได้กำหนดเส้นทางไปยังพอร์ต sandbox ของวิดเจ็ต ให้ตั้งค่า mcp.apps.sandboxOrigin เป็น public origin เฉพาะที่กำหนดเส้นทางไปยัง sandbox listener",
       errorTitle: "ไม่สามารถโหลดวิดเจ็ตนี้ได้",
       errorDetail: "ปัญหานี้จำกัดอยู่เฉพาะในการ์ดนี้",
       actionErrorTitle: "เปลี่ยนแปลงวิดเจ็ตไม่สำเร็จ",
@@ -3171,6 +3173,7 @@ export const th: TranslationMap = {
     models: "{count} models",
     modelOne: "1 model",
     modelsAvailable: "{available} of {count} models available",
+    globalUsage: "การใช้งานและค่าใช้จ่ายทั่วโลก",
     noStats: "No live usage data reported by this provider.",
     localCost: "Session spend · {days}d",
     localCostDetail: "{tokens} tokens · {sessions} sessions",
@@ -3178,7 +3181,7 @@ export const th: TranslationMap = {
     requestFailed: "คำขอล้มเหลว",
     configUnavailable: "การกำหนดค่าไม่พร้อมใช้งาน โปรดรีเฟรชแล้วลองอีกครั้ง",
     credentials: {
-      label: "ข้อมูลประจำตัว",
+      label: "ข้อมูลประจำตัวสำหรับ {agent}",
       oauth: "โปรไฟล์ OAuth: {count}",
       tokenProfiles: "โปรไฟล์โทเค็น: {count}",
       configKey: "ตั้งค่าคีย์ API ใน config แล้ว",

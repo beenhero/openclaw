@@ -2684,6 +2684,8 @@ export const id: TranslationMap = {
       sandboxUnavailable: "Host sandbox widget tidak tersedia.",
       frameAuthorizationFailed:
         "Otorisasi widget gagal setelah upaya pemuatan ulang berulang kali.",
+      sandboxOriginRequired:
+        "Otorisasi widget gagal setelah upaya penyegaran berulang. Jika Gateway berjalan di balik reverse proxy atau tunnel yang tidak merutekan port sandbox widget, atur mcp.apps.sandboxOrigin ke origin publik khusus yang dirutekan ke listener sandbox.",
       errorTitle: "Widget ini tidak dapat dimuat",
       errorDetail: "Masalah ini hanya memengaruhi kartu ini.",
       actionErrorTitle: "Perubahan widget gagal",
@@ -3220,6 +3222,7 @@ export const id: TranslationMap = {
     models: "{count} models",
     modelOne: "1 model",
     modelsAvailable: "{available} of {count} models available",
+    globalUsage: "Penggunaan dan biaya global",
     noStats: "No live usage data reported by this provider.",
     localCost: "Session spend · {days}d",
     localCostDetail: "{tokens} tokens · {sessions} sessions",
@@ -3227,7 +3230,7 @@ export const id: TranslationMap = {
     requestFailed: "Permintaan gagal.",
     configUnavailable: "Konfigurasi tidak tersedia. Muat ulang dan coba lagi.",
     credentials: {
-      label: "Kredensial",
+      label: "Kredensial untuk {agent}",
       oauth: "Profil OAuth: {count}",
       tokenProfiles: "Profil token: {count}",
       configKey: "Kunci API ditetapkan dalam konfigurasi",

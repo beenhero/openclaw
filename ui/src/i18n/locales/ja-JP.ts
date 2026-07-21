@@ -2696,6 +2696,8 @@ export const ja_JP: TranslationMap = {
       frameResolverMissing: "ウィジェットのコンテンツを利用できません。",
       sandboxUnavailable: "ウィジェットのサンドボックスホストを利用できません。",
       frameAuthorizationFailed: "更新を繰り返しましたが、ウィジェットの認証に失敗しました。",
+      sandboxOriginRequired:
+        "更新を繰り返してもウィジェットの認証に失敗しました。Gateway が、ウィジェットのサンドボックスポートをルーティングしないリバースプロキシまたはトンネルの背後で実行されている場合は、mcp.apps.sandboxOrigin をサンドボックスリスナーにルーティングされる専用の公開オリジンに設定してください。",
       errorTitle: "このウィジェットを読み込めませんでした",
       errorDetail: "問題はこのカード内に限定されています。",
       actionErrorTitle: "ウィジェットの変更に失敗しました",
@@ -3231,6 +3233,7 @@ export const ja_JP: TranslationMap = {
     models: "{count} models",
     modelOne: "1 model",
     modelsAvailable: "{available} of {count} models available",
+    globalUsage: "全体の使用量とコスト",
     noStats: "No live usage data reported by this provider.",
     localCost: "Session spend · {days}d",
     localCostDetail: "{tokens} tokens · {sessions} sessions",
@@ -3238,7 +3241,7 @@ export const ja_JP: TranslationMap = {
     requestFailed: "リクエストに失敗しました。",
     configUnavailable: "設定を利用できません。更新してもう一度お試しください。",
     credentials: {
-      label: "認証情報",
+      label: "{agent} の認証情報",
       oauth: "OAuthプロファイル: {count}",
       tokenProfiles: "トークンプロファイル: {count}",
       configKey: "configにAPIキーが設定されています",

@@ -2620,6 +2620,8 @@ export const zh_CN: TranslationMap = {
       frameResolverMissing: "小组件内容不可用。",
       sandboxUnavailable: "小组件沙盒主机不可用。",
       frameAuthorizationFailed: "多次尝试刷新后，组件授权仍然失败。",
+      sandboxOriginRequired:
+        "多次刷新尝试后，Widget 授权仍然失败。如果 Gateway 运行在未路由 Widget 沙箱端口的反向代理或隧道后，请将 mcp.apps.sandboxOrigin 设置为一个路由到沙箱监听器的专用公共源。",
       errorTitle: "无法加载此小组件",
       errorDetail: "问题仅限于此卡片。",
       actionErrorTitle: "小组件更改失败",
@@ -3151,6 +3153,7 @@ export const zh_CN: TranslationMap = {
     models: "{count} models",
     modelOne: "1 model",
     modelsAvailable: "{available} of {count} models available",
+    globalUsage: "全局用量和费用",
     noStats: "No live usage data reported by this provider.",
     localCost: "Session spend · {days}d",
     localCostDetail: "{tokens} tokens · {sessions} sessions",
@@ -3158,7 +3161,7 @@ export const zh_CN: TranslationMap = {
     requestFailed: "请求失败。",
     configUnavailable: "配置不可用。请刷新后重试。",
     credentials: {
-      label: "凭据",
+      label: "{agent} 的凭据",
       oauth: "OAuth 配置文件：{count}",
       tokenProfiles: "令牌配置文件：{count}",
       configKey: "已在配置中设置 API 密钥",

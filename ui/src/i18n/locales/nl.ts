@@ -2700,6 +2700,8 @@ export const nl: TranslationMap = {
       frameResolverMissing: "Widgetinhoud is niet beschikbaar.",
       sandboxUnavailable: "De sandboxhost van de widget is niet beschikbaar.",
       frameAuthorizationFailed: "Widgetautorisatie is mislukt na herhaalde vernieuwingspogingen.",
+      sandboxOriginRequired:
+        "Widgetautorisatie is mislukt na herhaalde vernieuwingspogingen. Als de Gateway achter een reverse proxy of tunnel draait die de sandboxpoort van de widget niet routeert, stel dan mcp.apps.sandboxOrigin in op een speciale openbare origin die naar de sandboxlistener wordt gerouteerd.",
       errorTitle: "Deze widget kon niet worden geladen",
       errorDetail: "Het probleem is beperkt tot deze kaart.",
       actionErrorTitle: "Wijzigen van widget mislukt",
@@ -3239,6 +3241,7 @@ export const nl: TranslationMap = {
     models: "{count} models",
     modelOne: "1 model",
     modelsAvailable: "{available} of {count} models available",
+    globalUsage: "Wereldwijd gebruik en kosten",
     noStats: "No live usage data reported by this provider.",
     localCost: "Session spend · {days}d",
     localCostDetail: "{tokens} tokens · {sessions} sessions",
@@ -3246,7 +3249,7 @@ export const nl: TranslationMap = {
     requestFailed: "Verzoek mislukt.",
     configUnavailable: "De configuratie is niet beschikbaar. Vernieuw en probeer het opnieuw.",
     credentials: {
-      label: "Inloggegevens",
+      label: "Inloggegevens voor {agent}",
       oauth: "OAuth-profielen: {count}",
       tokenProfiles: "Tokenprofielen: {count}",
       configKey: "API-sleutel ingesteld in de configuratie",

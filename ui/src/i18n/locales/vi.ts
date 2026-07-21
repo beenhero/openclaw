@@ -2690,6 +2690,8 @@ export const vi: TranslationMap = {
       frameResolverMissing: "Nội dung tiện ích không khả dụng.",
       sandboxUnavailable: "Máy chủ hộp cát của tiện ích không khả dụng.",
       frameAuthorizationFailed: "Không thể xác thực tiện ích sau nhiều lần thử làm mới.",
+      sandboxOriginRequired:
+        "Ủy quyền tiện ích không thành công sau nhiều lần thử làm mới. Nếu Gateway chạy phía sau proxy ngược hoặc đường hầm không định tuyến cổng sandbox của tiện ích, hãy đặt mcp.apps.sandboxOrigin thành một origin công khai riêng được định tuyến đến trình lắng nghe sandbox.",
       errorTitle: "Không thể tải tiện ích này",
       errorDetail: "Sự cố chỉ giới hạn trong thẻ này.",
       actionErrorTitle: "Không thể thay đổi tiện ích",
@@ -3225,6 +3227,7 @@ export const vi: TranslationMap = {
     models: "{count} models",
     modelOne: "1 model",
     modelsAvailable: "{available} of {count} models available",
+    globalUsage: "Mức sử dụng và chi phí toàn cục",
     noStats: "No live usage data reported by this provider.",
     localCost: "Session spend · {days}d",
     localCostDetail: "{tokens} tokens · {sessions} sessions",
@@ -3232,7 +3235,7 @@ export const vi: TranslationMap = {
     requestFailed: "Yêu cầu không thành công.",
     configUnavailable: "Cấu hình không khả dụng. Hãy làm mới và thử lại.",
     credentials: {
-      label: "Thông tin xác thực",
+      label: "Thông tin xác thực cho {agent}",
       oauth: "Hồ sơ OAuth: {count}",
       tokenProfiles: "Hồ sơ token: {count}",
       configKey: "Khóa API được đặt trong config",

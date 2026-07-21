@@ -2677,6 +2677,8 @@ export const fa: TranslationMap = {
       frameResolverMissing: "محتوای ویجت در دسترس نیست.",
       sandboxUnavailable: "میزبان محیط ایزوله ویجت در دسترس نیست.",
       frameAuthorizationFailed: "مجوز ویجت پس از چندین تلاش برای تازه‌سازی ناموفق بود.",
+      sandboxOriginRequired:
+        "مجوزدهی ویجت پس از چندین تلاش برای تازه‌سازی ناموفق بود. اگر Gateway پشت یک پروکسی معکوس یا تونلی اجرا می‌شود که پورت sandbox ویجت را مسیریابی نمی‌کند، mcp.apps.sandboxOrigin را روی یک مبدأ عمومی اختصاصی تنظیم کنید که به شنونده sandbox مسیریابی می‌شود.",
       errorTitle: "این ویجت بارگیری نشد",
       errorDetail: "مشکل فقط به این کارت محدود شده است.",
       actionErrorTitle: "تغییر ویجت ناموفق بود",
@@ -3213,6 +3215,7 @@ export const fa: TranslationMap = {
     models: "{count} models",
     modelOne: "1 model",
     modelsAvailable: "{available} of {count} models available",
+    globalUsage: "مصرف و هزینه کلی",
     noStats: "No live usage data reported by this provider.",
     localCost: "Session spend · {days}d",
     localCostDetail: "{tokens} tokens · {sessions} sessions",
@@ -3220,7 +3223,7 @@ export const fa: TranslationMap = {
     requestFailed: "درخواست ناموفق بود.",
     configUnavailable: "پیکربندی در دسترس نیست. صفحه را تازه‌سازی کنید و دوباره تلاش کنید.",
     credentials: {
-      label: "اطلاعات ورود",
+      label: "اعتبارنامه‌های {agent}",
       oauth: "نمایه‌های OAuth: {count}",
       tokenProfiles: "نمایه‌های توکن: {count}",
       configKey: "کلید API در پیکربندی تنظیم شده است",

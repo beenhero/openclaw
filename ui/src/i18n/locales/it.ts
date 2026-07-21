@@ -2719,6 +2719,8 @@ export const it: TranslationMap = {
       sandboxUnavailable: "L'host sandbox del widget non è disponibile.",
       frameAuthorizationFailed:
         "Autorizzazione del widget non riuscita dopo ripetuti tentativi di aggiornamento.",
+      sandboxOriginRequired:
+        "L'autorizzazione del widget non è riuscita dopo ripetuti tentativi di aggiornamento. Se il Gateway viene eseguito dietro un reverse proxy o un tunnel che non instrada la porta sandbox del widget, imposta mcp.apps.sandboxOrigin su un'origine pubblica dedicata instradata al listener della sandbox.",
       errorTitle: "Impossibile caricare questo widget",
       errorDetail: "Il problema è limitato a questa scheda.",
       actionErrorTitle: "Modifica del widget non riuscita",
@@ -3258,6 +3260,7 @@ export const it: TranslationMap = {
     models: "{count} models",
     modelOne: "1 model",
     modelsAvailable: "{available} of {count} models available",
+    globalUsage: "Utilizzo e costo globali",
     noStats: "No live usage data reported by this provider.",
     localCost: "Session spend · {days}d",
     localCostDetail: "{tokens} tokens · {sessions} sessions",
@@ -3265,7 +3268,7 @@ export const it: TranslationMap = {
     requestFailed: "Richiesta non riuscita.",
     configUnavailable: "La configurazione non è disponibile. Aggiorna e riprova.",
     credentials: {
-      label: "Credenziali",
+      label: "Credenziali per {agent}",
       oauth: "Profili OAuth: {count}",
       tokenProfiles: "Profili token: {count}",
       configKey: "Chiave API impostata nella configurazione",

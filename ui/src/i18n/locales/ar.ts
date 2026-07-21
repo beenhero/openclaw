@@ -2656,6 +2656,8 @@ export const ar: TranslationMap = {
       frameResolverMissing: "محتوى الأداة غير متاح.",
       sandboxUnavailable: "مضيف البيئة المعزولة للأداة غير متاح.",
       frameAuthorizationFailed: "فشل تفويض الأداة بعد محاولات تحديث متكررة.",
+      sandboxOriginRequired:
+        "فشل تفويض الأداة بعد محاولات تحديث متكررة. إذا كان Gateway يعمل خلف وكيل عكسي أو نفق لا يوجّه منفذ بيئة الأداة المعزولة، فاضبط mcp.apps.sandboxOrigin على أصل عام مخصص وموجّه إلى مستمع البيئة المعزولة.",
       errorTitle: "تعذر تحميل هذه الأداة",
       errorDetail: "تقتصر المشكلة على هذه البطاقة.",
       actionErrorTitle: "فشل تغيير الأداة",
@@ -3190,6 +3192,7 @@ export const ar: TranslationMap = {
     models: "{count} models",
     modelOne: "1 model",
     modelsAvailable: "{available} of {count} models available",
+    globalUsage: "الاستخدام والتكلفة على مستوى النظام",
     noStats: "No live usage data reported by this provider.",
     localCost: "Session spend · {days}d",
     localCostDetail: "{tokens} tokens · {sessions} sessions",
@@ -3197,7 +3200,7 @@ export const ar: TranslationMap = {
     requestFailed: "فشل الطلب.",
     configUnavailable: "الإعدادات غير متاحة. حدّث الصفحة وحاول مرة أخرى.",
     credentials: {
-      label: "بيانات الاعتماد",
+      label: "بيانات اعتماد {agent}",
       oauth: "ملفات تعريف OAuth: {count}",
       tokenProfiles: "ملفات تعريف الرموز: {count}",
       configKey: "مفتاح API معيّن في الإعدادات",
