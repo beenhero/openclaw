@@ -270,29 +270,20 @@ function assertConfigSurvived() {
   }
 
   if (acceptsIntent(coverage, "agents")) {
-    const agents = config.agents?.list ?? [];
-    assert(Array.isArray(agents), "agents.list missing after update/doctor");
+    const agents = config.agents?.entries ?? {};
     assert(
-      agents.some((agent) => agent?.id === "main"),
-      "main agent missing",
+      agents && typeof agents === "object" && !Array.isArray(agents),
+      "agents.entries missing after update/doctor",
     );
-    assert(
-      agents.some((agent) => agent?.id === "ops"),
-      "ops agent missing",
-    );
+    assert(agents.main, "main agent missing");
+    assert(agents.ops, "ops agent missing");
     if (hasCoverage(coverage)) {
       assert(config.agents?.defaults?.contextTokens === 64000, "default contextTokens changed");
     } else {
-      assert(
-        agents.find((agent) => agent?.id === "main")?.contextTokens === 64000,
-        "main agent contextTokens changed",
-      );
+      assert(agents.main?.contextTokens === 64000, "main agent contextTokens changed");
     }
     if (!hasCoverage(coverage) || !coverage.skippedIntents?.includes("agent-modern-preferences")) {
-      assert(
-        agents.find((agent) => agent?.id === "ops")?.fastModeDefault === true,
-        "ops fastModeDefault changed",
-      );
+      assert(agents.ops?.fastModeDefault === true, "ops fastModeDefault changed");
     }
   }
 
