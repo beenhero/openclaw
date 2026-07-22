@@ -551,16 +551,7 @@ describe("signal createSignalEventHandler inbound context", () => {
             ackReaction: "👀",
             ackReactionScope: "direct",
             inbound: { debounceMs: 0 },
-            statusReactions: {
-              enabled: true,
-              timing: {
-                debounceMs: 0,
-                doneHoldMs: 0,
-                errorHoldMs: 0,
-                stallSoftMs: 60_000,
-                stallHardMs: 120_000,
-              },
-            },
+            statusReactions: { enabled: true },
           },
           channels: { signal: { dmPolicy: "open", allowFrom: ["*"] } },
         } as OpenClawConfig,
@@ -627,16 +618,7 @@ describe("signal createSignalEventHandler inbound context", () => {
               ackReaction: "👀",
               ackReactionScope: "direct",
               inbound: { debounceMs: 0 },
-              statusReactions: {
-                enabled: true,
-                timing: {
-                  debounceMs: 0,
-                  doneHoldMs: 0,
-                  errorHoldMs: 0,
-                  stallSoftMs: 5_000,
-                  stallHardMs: 15_000,
-                },
-              },
+              statusReactions: { enabled: true },
             },
             channels: { signal: { dmPolicy: "open", allowFrom: ["*"] } },
           } as OpenClawConfig,
@@ -685,217 +667,6 @@ describe("signal createSignalEventHandler inbound context", () => {
     }
   });
 
-  it("honors configured Signal hard-stall status reaction emoji overrides", async () => {
-    vi.useFakeTimers();
-    let releaseDispatch!: () => void;
-    try {
-      dispatchInboundMessageMock.mockImplementationOnce(
-        async (params: DispatchInboundMessageMockParams) => {
-          capture.ctx = params.ctx;
-          await new Promise<void>((resolve) => {
-            releaseDispatch = resolve;
-          });
-          return { queuedFinal: false, counts: { tool: 0, block: 0, final: 1 } };
-        },
-      );
-      const handler = createSignalEventHandler(
-        createBaseSignalEventHandlerDeps({
-          cfg: {
-            messages: {
-              ackReaction: "👀",
-              ackReactionScope: "direct",
-              inbound: { debounceMs: 0 },
-              statusReactions: {
-                enabled: true,
-                emojis: {
-                  stallSoft: "⌛",
-                  stallHard: "⚠️",
-                },
-                timing: {
-                  debounceMs: 0,
-                  doneHoldMs: 0,
-                  errorHoldMs: 0,
-                  stallSoftMs: 5_000,
-                  stallHardMs: 15_000,
-                },
-              },
-            },
-            channels: { signal: { dmPolicy: "open", allowFrom: ["*"] } },
-          } as OpenClawConfig,
-          statusReactionTiming: {
-            debounceMs: 0,
-            doneHoldMs: 0,
-            errorHoldMs: 0,
-            stallSoftMs: 5_000,
-            stallHardMs: 15_000,
-          },
-          historyLimit: 0,
-        }),
-      );
-
-      const handled = handler(
-        createSignalReceiveEvent({
-          sourceNumber: "+15550002222",
-          sourceName: "Bob",
-          timestamp: 1700000000001,
-          dataMessage: {
-            message: "ship it",
-            attachments: [],
-          },
-        }),
-      );
-      await vi.advanceTimersByTimeAsync(0);
-      await vi.advanceTimersByTimeAsync(15_000);
-
-      let sentEmojis = (
-        sendReactionSignalMock.mock.calls as unknown as SendReactionSignalMockCall[]
-      ).map((call) => call[2]);
-      expect(sentEmojis).toContain("⌛");
-      expect(sentEmojis).toContain("⚠️");
-
-      releaseDispatch();
-      await handled;
-      await vi.advanceTimersByTimeAsync(0);
-
-      sentEmojis = (
-        sendReactionSignalMock.mock.calls as unknown as SendReactionSignalMockCall[]
-      ).map((call) => call[2]);
-      expect(sentEmojis).toContain("✅");
-      expect(sentEmojis.at(-1)).toBe("👀");
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("clears the latest Signal status reaction after reply when removeAckAfterReply is enabled", async () => {
-    dispatchInboundMessageMock.mockImplementationOnce(
-      async (params: DispatchInboundMessageMockParams) => {
-        capture.ctx = params.ctx;
-        return { queuedFinal: false, counts: { tool: 0, block: 0, final: 1 } };
-      },
-    );
-    const handler = createSignalEventHandler(
-      createBaseSignalEventHandlerDeps({
-        cfg: {
-          messages: {
-            ackReaction: "👀",
-            ackReactionScope: "direct",
-            removeAckAfterReply: true,
-            inbound: { debounceMs: 0 },
-            statusReactions: {
-              enabled: true,
-              timing: {
-                debounceMs: 0,
-                doneHoldMs: 0,
-                errorHoldMs: 0,
-                stallSoftMs: 60_000,
-                stallHardMs: 120_000,
-              },
-            },
-          },
-          channels: { signal: { dmPolicy: "open", allowFrom: ["*"] } },
-        } as OpenClawConfig,
-        historyLimit: 0,
-      }),
-    );
-
-    await handler(
-      createSignalReceiveEvent({
-        sourceNumber: "+15550002222",
-        sourceName: "Bob",
-        timestamp: 1700000000001,
-        dataMessage: {
-          message: "ship it",
-          attachments: [],
-        },
-      }),
-    );
-    for (let i = 0; i < 5; i += 1) {
-      await nextTimerTick();
-    }
-
-    const sentEmojis = (
-      sendReactionSignalMock.mock.calls as unknown as SendReactionSignalMockCall[]
-    ).map((call) => call[2]);
-    expect(sentEmojis).toContain("✅");
-    expect(removeReactionSignalMock).toHaveBeenCalledWith(
-      "+15550002222",
-      1700000000001,
-      "✅",
-      expect.objectContaining({
-        accountId: "default",
-        baseUrl: "http://localhost",
-      }),
-    );
-  });
-
-  it("clears failed Signal status reactions after partial reply delivery", async () => {
-    dispatchInboundMessageMock.mockImplementationOnce(
-      async (params: DispatchInboundMessageMockParams) => {
-        capture.ctx = params.ctx;
-        return {
-          queuedFinal: false,
-          counts: { tool: 0, block: 0, final: 1 },
-          failedCounts: { tool: 1, block: 0, final: 0 },
-        };
-      },
-    );
-    const handler = createSignalEventHandler(
-      createBaseSignalEventHandlerDeps({
-        cfg: {
-          messages: {
-            ackReaction: "👀",
-            ackReactionScope: "direct",
-            removeAckAfterReply: true,
-            inbound: { debounceMs: 0 },
-            statusReactions: {
-              enabled: true,
-              timing: {
-                debounceMs: 0,
-                doneHoldMs: 0,
-                errorHoldMs: 0,
-                stallSoftMs: 60_000,
-                stallHardMs: 120_000,
-              },
-            },
-          },
-          channels: { signal: { dmPolicy: "open", allowFrom: ["*"] } },
-        } as OpenClawConfig,
-        historyLimit: 0,
-      }),
-    );
-
-    await handler(
-      createSignalReceiveEvent({
-        sourceNumber: "+15550002222",
-        sourceName: "Bob",
-        timestamp: 1700000000001,
-        dataMessage: {
-          message: "ship it",
-          attachments: [],
-        },
-      }),
-    );
-    for (let i = 0; i < 5; i += 1) {
-      await nextTimerTick();
-    }
-
-    const sentEmojis = (
-      sendReactionSignalMock.mock.calls as unknown as SendReactionSignalMockCall[]
-    ).map((call) => call[2]);
-    expect(sentEmojis).toContain("❌");
-    expect(sentEmojis).not.toContain("✅");
-    expect(removeReactionSignalMock).toHaveBeenCalledWith(
-      "+15550002222",
-      1700000000001,
-      "❌",
-      expect.objectContaining({
-        accountId: "default",
-        baseUrl: "http://localhost",
-      }),
-    );
-  });
-
   it("uses dataMessage timestamp fallback for Signal status reactions", async () => {
     const handler = createSignalEventHandler(
       createBaseSignalEventHandlerDeps({
@@ -904,16 +675,7 @@ describe("signal createSignalEventHandler inbound context", () => {
             ackReaction: "👀",
             ackReactionScope: "direct",
             inbound: { debounceMs: 0 },
-            statusReactions: {
-              enabled: true,
-              timing: {
-                debounceMs: 0,
-                doneHoldMs: 0,
-                errorHoldMs: 0,
-                stallSoftMs: 60_000,
-                stallHardMs: 120_000,
-              },
-            },
+            statusReactions: { enabled: true },
           },
           channels: { signal: { dmPolicy: "open", allowFrom: ["*"] } },
         } as OpenClawConfig,
@@ -1110,16 +872,7 @@ describe("signal createSignalEventHandler inbound context", () => {
             ackReaction: "👀",
             ackReactionScope: "direct",
             inbound: { debounceMs: 0 },
-            statusReactions: {
-              enabled: true,
-              timing: {
-                debounceMs: 0,
-                doneHoldMs: 0,
-                errorHoldMs: 0,
-                stallSoftMs: 60_000,
-                stallHardMs: 120_000,
-              },
-            },
+            statusReactions: { enabled: true },
           },
           channels: {
             signal: {
@@ -1252,16 +1005,7 @@ describe("signal createSignalEventHandler inbound context", () => {
             ackReaction: "👀",
             ackReactionScope: "direct",
             inbound: { debounceMs: 0 },
-            statusReactions: {
-              enabled: true,
-              timing: {
-                debounceMs: 0,
-                doneHoldMs: 0,
-                errorHoldMs: 0,
-                stallSoftMs: 60_000,
-                stallHardMs: 120_000,
-              },
-            },
+            statusReactions: { enabled: true },
           },
           channels: { signal: { dmPolicy: "open", allowFrom: ["*"] } },
         } as OpenClawConfig,
@@ -1309,16 +1053,7 @@ describe("signal createSignalEventHandler inbound context", () => {
             ackReaction: "👀",
             ackReactionScope: "direct",
             inbound: { debounceMs: 0 },
-            statusReactions: {
-              enabled: true,
-              timing: {
-                debounceMs: 0,
-                doneHoldMs: 0,
-                errorHoldMs: 0,
-                stallSoftMs: 60_000,
-                stallHardMs: 120_000,
-              },
-            },
+            statusReactions: { enabled: true },
           },
           channels: { signal: { dmPolicy: "open", allowFrom: ["*"] } },
         } as OpenClawConfig,
@@ -1346,6 +1081,8 @@ describe("signal createSignalEventHandler inbound context", () => {
     ).map((call) => call[2]);
     expect(sentEmojis).toContain("❌");
     expect(sentEmojis).not.toContain("✅");
+    expect(sentEmojis.at(-1)).toBe("👀");
+    expect(removeReactionSignalMock).not.toHaveBeenCalled();
   });
 
   it("targets Signal group status reactions with groupId and message author", async () => {
@@ -1356,16 +1093,7 @@ describe("signal createSignalEventHandler inbound context", () => {
             ackReaction: "👀",
             ackReactionScope: "group-all",
             inbound: { debounceMs: 0 },
-            statusReactions: {
-              enabled: true,
-              timing: {
-                debounceMs: 0,
-                doneHoldMs: 0,
-                errorHoldMs: 0,
-                stallSoftMs: 60_000,
-                stallHardMs: 120_000,
-              },
-            },
+            statusReactions: { enabled: true },
           },
           channels: {
             signal: {
@@ -1412,16 +1140,7 @@ describe("signal createSignalEventHandler inbound context", () => {
             ackReaction: "👀",
             groupChat: { mentionPatterns: ["@bot"] },
             inbound: { debounceMs: 0 },
-            statusReactions: {
-              enabled: true,
-              timing: {
-                debounceMs: 0,
-                doneHoldMs: 0,
-                errorHoldMs: 0,
-                stallSoftMs: 60_000,
-                stallHardMs: 120_000,
-              },
-            },
+            statusReactions: { enabled: true },
           },
           channels: {
             signal: {
@@ -1470,16 +1189,7 @@ describe("signal createSignalEventHandler inbound context", () => {
             ackReaction: "👀",
             ackReactionScope: "direct",
             inbound: { debounceMs: 0 },
-            statusReactions: {
-              enabled: true,
-              timing: {
-                debounceMs: 0,
-                doneHoldMs: 0,
-                errorHoldMs: 0,
-                stallSoftMs: 60_000,
-                stallHardMs: 120_000,
-              },
-            },
+            statusReactions: { enabled: true },
           },
           channels: { signal: { dmPolicy: "open", allowFrom: ["*"] } },
         } as OpenClawConfig,
@@ -1504,62 +1214,6 @@ describe("signal createSignalEventHandler inbound context", () => {
     expect(capture.ctx?.To).toBe("+15550002222");
   });
 
-  it("keeps dispatch running when Signal status reaction removal fails", async () => {
-    removeReactionSignalMock.mockRejectedValueOnce(new Error("reaction removal rejected"));
-    dispatchInboundMessageMock.mockImplementationOnce(
-      async (params: DispatchInboundMessageMockParams) => {
-        capture.ctx = params.ctx;
-        return {
-          queuedFinal: false,
-          counts: { tool: 0, block: 0, final: 1 },
-        };
-      },
-    );
-    const handler = createSignalEventHandler(
-      createBaseSignalEventHandlerDeps({
-        cfg: {
-          messages: {
-            ackReaction: "👀",
-            ackReactionScope: "direct",
-            removeAckAfterReply: true,
-            inbound: { debounceMs: 0 },
-            statusReactions: {
-              enabled: true,
-              timing: {
-                debounceMs: 0,
-                doneHoldMs: 0,
-                errorHoldMs: 0,
-                stallSoftMs: 60_000,
-                stallHardMs: 120_000,
-              },
-            },
-          },
-          channels: { signal: { dmPolicy: "open", allowFrom: ["*"] } },
-        } as OpenClawConfig,
-        historyLimit: 0,
-      }),
-    );
-
-    await handler(
-      createSignalReceiveEvent({
-        sourceNumber: "+15550002222",
-        sourceName: "Bob",
-        timestamp: 1700000000001,
-        dataMessage: {
-          message: "ship it",
-          attachments: [],
-        },
-      }),
-    );
-    for (let i = 0; i < 5; i += 1) {
-      await nextTimerTick();
-    }
-
-    expect(dispatchInboundMessageMock).toHaveBeenCalledTimes(1);
-    expect(capture.ctx?.To).toBe("+15550002222");
-    expect(removeReactionSignalMock).toHaveBeenCalled();
-  });
-
   it("finalizes Signal status reactions as error when session recording fails", async () => {
     recordInboundSessionMock.mockRejectedValueOnce(new Error("record boom"));
     const handler = createSignalEventHandler(
@@ -1569,16 +1223,7 @@ describe("signal createSignalEventHandler inbound context", () => {
             ackReaction: "👀",
             ackReactionScope: "direct",
             inbound: { debounceMs: 0 },
-            statusReactions: {
-              enabled: true,
-              timing: {
-                debounceMs: 0,
-                doneHoldMs: 0,
-                errorHoldMs: 0,
-                stallSoftMs: 60_000,
-                stallHardMs: 120_000,
-              },
-            },
+            statusReactions: { enabled: true },
           },
           channels: { signal: { dmPolicy: "open", allowFrom: ["*"] } },
         } as OpenClawConfig,
