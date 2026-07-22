@@ -5,6 +5,7 @@ import type { GlobalHookRunnerRegistry } from "./hook-registry.types.js";
 import type { HookRunner } from "./hooks.js";
 import { isPluginRegistryRetired } from "./registry-lifecycle.js";
 import type {
+  PluginApprovalResolverRegistryRegistration,
   PluginRegistry,
   PluginTrustedToolPolicyRegistryRegistration,
 } from "./registry-types.js";
@@ -13,6 +14,7 @@ import { collectLivePluginRegistries } from "./runtime.js";
 
 type TrustedPolicyHookRunnerRegistry = GlobalHookRunnerRegistry & {
   trustedToolPolicies?: PluginTrustedToolPolicyRegistryRegistration[];
+  approvalResolvers?: PluginApprovalResolverRegistryRegistration[];
 };
 
 type HookRunnerGlobalState = {
@@ -170,6 +172,9 @@ function composeLiveHookRegistry(
     for (const registration of registry.trustedToolPolicies ?? []) {
       ids.add(registration.pluginId);
     }
+    for (const registration of registry.approvalResolvers ?? []) {
+      ids.add(registration.pluginId);
+    }
     return ids;
   });
   sources.forEach((registry, index) => {
@@ -202,6 +207,11 @@ function composeLiveHookRegistry(
       claimPolicyOwner(registration.pluginId, index);
     }
   });
+  sources.forEach((registry, index) => {
+    for (const registration of registry.approvalResolvers ?? []) {
+      claimPolicyOwner(registration.pluginId, index);
+    }
+  });
   const trustedToolPolicies = sources
     .flatMap((registry, index) =>
       (registry.trustedToolPolicies ?? []).filter(
@@ -211,6 +221,19 @@ function composeLiveHookRegistry(
     // Preserve the trusted-policy tier contract across composed registries:
     // bundled policies run before installed policies, and same-tier entries
     // keep the source/plugin-load order selected above.
+    .toSorted((left, right) => {
+      const leftRank = left.origin === "bundled" ? 0 : 1;
+      const rightRank = right.origin === "bundled" ? 0 : 1;
+      return leftRank - rightRank;
+    });
+  const approvalResolvers = sources
+    .flatMap((registry, index) =>
+      (registry.approvalResolvers ?? []).filter(
+        (registration) => policyOwnerSourceIndexByPluginId.get(registration.pluginId) === index,
+      ),
+    )
+    // Same bundled-first tier contract as trustedToolPolicies: bundled resolvers
+    // compose ahead of installed ones; same-tier entries keep source order.
     .toSorted((left, right) => {
       const leftRank = left.origin === "bundled" ? 0 : 1;
       const rightRank = right.origin === "bundled" ? 0 : 1;
@@ -227,6 +250,7 @@ function composeLiveHookRegistry(
       registry.plugins.filter((plugin) => ownerSourceIndexByPluginId.get(plugin.id) === index),
     ),
     trustedToolPolicies,
+    approvalResolvers,
   };
 }
 
@@ -249,6 +273,9 @@ export function createComposedHookRegistryFacade(
     },
     get trustedToolPolicies() {
       return composeLiveHookRegistry(state.registry).trustedToolPolicies;
+    },
+    get approvalResolvers() {
+      return composeLiveHookRegistry(state.registry).approvalResolvers;
     },
   };
 }

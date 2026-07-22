@@ -241,6 +241,61 @@ describe("global hook runner composition (#91918, #107933)", () => {
     ]);
   });
 
+  it("exposes approvalResolvers composed from live registries (parity with trustedToolPolicies)", () => {
+    const pinnedBundled = createMockPluginRegistry([
+      { hookName: "before_tool_call", handler: vi.fn(), pluginId: "bundled-resolver" },
+    ]);
+    pinnedBundled.plugins = [createPluginRecord({ id: "bundled-resolver", origin: "bundled" })];
+    pinnedBundled.approvalResolvers = [
+      {
+        pluginId: "bundled-resolver",
+        pluginName: "Bundled Resolver",
+        origin: "bundled",
+        source: "test",
+        registration: {
+          id: "bundled-first",
+          description: "bundled resolver",
+          scope: { capabilities: ["process.exec"] },
+          exclusive: true,
+          resolve: async () => ({ requestId: "r", decision: "deny" }),
+        },
+      },
+    ];
+    const activeInstalled = createMockPluginRegistry([]);
+    activeInstalled.plugins = [
+      createPluginRecord({ id: "installed-resolver", origin: "workspace" }),
+    ];
+    activeInstalled.approvalResolvers = [
+      {
+        pluginId: "installed-resolver",
+        pluginName: "Installed Resolver",
+        origin: "workspace",
+        source: "test",
+        registration: {
+          id: "installed-second",
+          description: "installed resolver",
+          scope: { capabilities: ["process.exec"] },
+          exclusive: true,
+          resolve: async () => ({ requestId: "r", decision: "deny" }),
+        },
+      },
+    ];
+
+    pinActivePluginChannelRegistry(pinnedBundled);
+    setActivePluginRegistry(activeInstalled);
+    initializeGlobalHookRunner(activeInstalled);
+
+    expect(
+      getGlobalHookRunnerRegistry()?.approvalResolvers?.map((registration) => [
+        registration.origin,
+        registration.registration.id,
+      ]),
+    ).toEqual([
+      ["bundled", "bundled-first"],
+      ["workspace", "installed-second"],
+    ]);
+  });
+
   it("lets an explicitly initialized registry win ownership over the active registry", () => {
     const activeRegistry = createMockPluginRegistry([
       { hookName: "message_received", handler: vi.fn(), pluginId: "foo" },
