@@ -3,7 +3,7 @@ title: "Runtime tool fixture — web_fetch"
 scenario:
   id: runtime-tool-web-fetch
   surface: runtime-tools
-  runtimeParityTier: standard
+  runtimePairLane: required
   coverage:
     primary:
       - web-search.web-fetch-exposure

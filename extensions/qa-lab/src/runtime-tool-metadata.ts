@@ -4,7 +4,7 @@ import {
   isRecord,
   normalizeOptionalString as readString,
 } from "openclaw/plugin-sdk/string-coerce-runtime";
-import type { QaRuntimeParityTier, QaSeedScenarioWithSource } from "./scenario-catalog.js";
+import type { QaRuntimePairLane, QaSeedScenarioWithSource } from "./scenario-catalog.js";
 
 export type QaRuntimeToolBucket =
   | "codex-native-workspace"
@@ -89,7 +89,7 @@ export function readRuntimeToolCoverageConfig(
 
 function inferRuntimeToolBucket(params: {
   config?: Record<string, unknown>;
-  runtimeParityTier?: QaRuntimeParityTier;
+  runtimePairLane?: QaRuntimePairLane;
 }): QaRuntimeToolBucket {
   const toolCoverage = readRuntimeToolCoverageConfig(params.config);
   const explicit = readString(toolCoverage?.bucket);
@@ -103,7 +103,7 @@ function inferRuntimeToolBucket(params: {
     }
     return explicit;
   }
-  if (params.runtimeParityTier === "optional" || params.config?.expectedAvailable === false) {
+  if (params.runtimePairLane === "optional" || params.config?.expectedAvailable === false) {
     return "optional-profile-or-plugin";
   }
   return "openclaw-dynamic-integration";
@@ -111,7 +111,7 @@ function inferRuntimeToolBucket(params: {
 
 export function readRuntimeToolCoverageMetadata(params: {
   config?: Record<string, unknown>;
-  runtimeParityTier?: QaRuntimeParityTier;
+  runtimePairLane?: QaRuntimePairLane;
 }): QaRuntimeToolCoverageMetadata {
   const toolCoverage = readRuntimeToolCoverageConfig(params.config);
   const bucket = inferRuntimeToolBucket(params);
@@ -163,6 +163,6 @@ export function readScenarioRuntimeToolCoverageMetadata(
 ): QaRuntimeToolCoverageMetadata {
   return readRuntimeToolCoverageMetadata({
     config: scenario.execution.config,
-    runtimeParityTier: scenario.runtimeParityTier,
+    runtimePairLane: scenario.runtimePairLane,
   });
 }

@@ -3,7 +3,7 @@ title: "Runtime tool fixture — sessions_spawn"
 scenario:
   id: runtime-tool-sessions-spawn
   surface: runtime-tools
-  runtimeParityTier: standard
+  runtimePairLane: required
   coverage:
     primary:
       - agent-runtime.subagent-turns-sessions-spawn

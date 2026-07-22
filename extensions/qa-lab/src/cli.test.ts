@@ -901,20 +901,20 @@ describe("qa cli registration", () => {
     expect(options.pack).toBe("personal-agent");
   });
 
-  it("forwards --runtime-parity-tier for suite runs", async () => {
+  it("forwards --runtime-pair-lane for suite runs", async () => {
     await program.parseAsync([
       "node",
       "openclaw",
       "qa",
       "suite",
-      "--runtime-parity-tier",
-      "standard",
-      "--runtime-parity-tier",
+      "--runtime-pair-lane",
+      "required",
+      "--runtime-pair-lane",
       "optional,soak",
     ]);
 
     const options = requireQaSuiteOptions();
-    expect(options.runtimeParityTier).toEqual(["standard", "optional,soak"]);
+    expect(options.runtimePairLane).toEqual(["required", "optional,soak"]);
   });
 
   it("routes credential add flags into the qa runtime command", async () => {

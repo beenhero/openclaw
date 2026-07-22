@@ -3,7 +3,7 @@ title: "Runtime tool fixture — image_generate"
 scenario:
   id: runtime-tool-image-generate
   surface: runtime-tools
-  runtimeParityTier: optional
+  runtimePairLane: optional
   coverage:
     primary:
       - media.image-tool-image-generate
