@@ -93,6 +93,7 @@ export function createPluginApiFactory(
     registerAgentToolResultMiddleware,
     registerSessionExtension,
     registerTrustedToolPolicy,
+    registerApprovalResolver,
     registerToolMetadata,
     registerControlUiDescriptor,
     registerRuntimeLifecycle,
@@ -261,6 +262,10 @@ export function createPluginApiFactory(
                 });
               },
               registerTrustedToolPolicy: (policy) => registerTrustedToolPolicy(record, policy),
+              registerApprovalResolver: (registration) => {
+                registerApprovalResolver(record, registration);
+                return { dispose() {} };
+              },
               registerToolMetadata: (metadata) => registerToolMetadata(record, metadata),
               registerControlUiDescriptor: (descriptor) =>
                 registerControlUiDescriptor(record, descriptor),

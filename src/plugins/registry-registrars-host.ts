@@ -7,6 +7,7 @@ import {
   isPluginJsonValue,
   normalizePluginHostHookId,
   type PluginAgentEventSubscriptionRegistration,
+  type PluginApprovalResolverRegistration,
   type PluginControlUiDescriptor,
   type PluginRuntimeLifecycleRegistration,
   type PluginSessionActionRegistration,
@@ -17,6 +18,7 @@ import {
 } from "./host-hooks.js";
 import type { PluginRegistryState } from "./registry-state.js";
 import type {
+  PluginApprovalResolverRegistryRegistration,
   PluginRecord,
   PluginSessionActionRegistryRegistration,
   PluginTrustedToolPolicyRegistryRegistration,
@@ -277,6 +279,90 @@ export function createHostRegistrars(state: PluginRegistryState) {
       return;
     }
     policies.push(registration);
+  };
+
+  const registerApprovalResolver = (
+    record: PluginRecord,
+    registration: PluginApprovalResolverRegistration,
+  ) => {
+    if (!registration || typeof registration !== "object") {
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: "approval resolver registration requires id, description, and resolve()",
+      });
+      return;
+    }
+    const id = normalizeHostHookString(registration.id);
+    const description = normalizeHostHookString(registration.description);
+    if (!id || !description || typeof registration.resolve !== "function") {
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: "approval resolver registration requires id, description, and resolve()",
+      });
+      return;
+    }
+    // Fail-closed: the gateway seam wires ONLY process.exec today. Any other capability is a
+    // hard rejection so a plugin cannot silently believe it gates a surface OpenClaw does not
+    // enforce (design §4.1/§7). This is the single deliberate throw in this file's register path.
+    const capabilities = registration.scope?.capabilities ?? [];
+    if (!Array.isArray(capabilities) || capabilities.some((cap) => cap !== "process.exec")) {
+      throw new Error(
+        `approval resolver "${id}" only supports the process.exec capability (${record.id})`,
+      );
+    }
+    if (record.origin !== "bundled" && !(record.contracts?.approvalResolvers ?? []).includes(id)) {
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: `plugin must declare contracts.approvalResolvers for: ${id}`,
+      });
+      return;
+    }
+    if (record.origin !== "bundled" && !(record.enabled && record.explicitlyEnabled === true)) {
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: `plugin must be explicitly enabled to register approval resolver: ${id}`,
+      });
+      return;
+    }
+    const resolvers = registry.approvalResolvers;
+    const existing = resolvers.find(
+      (entry) => entry.pluginId === record.id && entry.registration.id === id,
+    );
+    if (existing) {
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: `approval resolver already registered: ${id} (${existing.pluginId})`,
+      });
+      return;
+    }
+    const entry: PluginApprovalResolverRegistryRegistration = {
+      pluginId: record.id,
+      pluginName: record.name,
+      registration: { ...registration, id, description },
+      origin: record.origin,
+      source: record.source,
+      rootDir: record.rootDir,
+    };
+    if (record.origin === "bundled") {
+      const firstInstalledIndex = resolvers.findIndex((item) => item.origin !== "bundled");
+      if (firstInstalledIndex === -1) {
+        resolvers.push(entry);
+      } else {
+        resolvers.splice(firstInstalledIndex, 0, entry);
+      }
+      return;
+    }
+    resolvers.push(entry);
   };
 
   const registerToolMetadata = (record: PluginRecord, metadata: PluginToolMetadataRegistration) => {
@@ -700,6 +786,7 @@ export function createHostRegistrars(state: PluginRegistryState) {
   return {
     registerSessionExtension,
     registerTrustedToolPolicy,
+    registerApprovalResolver,
     registerToolMetadata,
     registerControlUiDescriptor,
     registerRuntimeLifecycle,
