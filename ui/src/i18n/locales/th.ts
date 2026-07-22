@@ -939,6 +939,8 @@ export const th: TranslationMap = {
     noEvents: "No events yet.",
   },
   configForm: {
+    showAdvanced: "แสดงขั้นสูง",
+    advancedCount: "ขั้นสูง ({count})",
     hideValue: "ซ่อนค่า",
     revealValue: "แสดงค่า",
     disableStreamToReveal: "ปิดโหมดสตรีมเพื่อแสดงค่า",
@@ -3674,6 +3676,7 @@ export const th: TranslationMap = {
       preparingContext: "กำลังเตรียมบริบท…",
       startingModel: "กำลังเริ่มโมเดล…",
     },
+    outputTokens: "โทเค็นเอาต์พุต {count} รายการ",
     archivedSessionDisabled: "กู้คืนเซสชันนี้เพื่อส่งข้อความ",
     loadOlder: "โหลดรายการก่อนหน้า",
     sessionHeader: {

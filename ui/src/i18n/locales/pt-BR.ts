@@ -954,6 +954,8 @@ export const pt_BR: TranslationMap = {
     noEvents: "No events yet.",
   },
   configForm: {
+    showAdvanced: "Mostrar opções avançadas",
+    advancedCount: "Avançado ({count})",
     hideValue: "Ocultar valor",
     revealValue: "Revelar valor",
     disableStreamToReveal: "Desative o modo de streaming para revelar o valor",
@@ -3762,6 +3764,7 @@ export const pt_BR: TranslationMap = {
       preparingContext: "Preparando contexto…",
       startingModel: "Iniciando modelo…",
     },
+    outputTokens: "{count} tokens de saída",
     archivedSessionDisabled: "Restaure esta sessão para enviar mensagens.",
     loadOlder: "Carregar anteriores",
     sessionHeader: {

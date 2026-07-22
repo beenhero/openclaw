@@ -961,6 +961,8 @@ export const ja_JP: TranslationMap = {
     noEvents: "No events yet.",
   },
   configForm: {
+    showAdvanced: "詳細設定を表示",
+    advancedCount: "詳細設定（{count}）",
     hideValue: "値を非表示",
     revealValue: "値を表示",
     disableStreamToReveal: "値を表示するにはストリームモードを無効にしてください",
@@ -3762,6 +3764,7 @@ export const ja_JP: TranslationMap = {
       preparingContext: "コンテキストを準備中…",
       startingModel: "モデルを起動中…",
     },
+    outputTokens: "出力トークン数: {count}",
     archivedSessionDisabled: "メッセージを送信するには、このセッションを復元してください。",
     loadOlder: "以前の項目を読み込む",
     sessionHeader: {

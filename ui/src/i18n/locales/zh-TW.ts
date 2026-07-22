@@ -934,6 +934,8 @@ export const zh_TW: TranslationMap = {
     noEvents: "No events yet.",
   },
   configForm: {
+    showAdvanced: "顯示進階選項",
+    advancedCount: "進階選項（{count}）",
     hideValue: "隱藏值",
     revealValue: "顯示值",
     disableStreamToReveal: "停用串流模式以顯示值",
@@ -3656,6 +3658,7 @@ export const zh_TW: TranslationMap = {
       preparingContext: "正在準備內容脈絡…",
       startingModel: "正在啟動模型…",
     },
+    outputTokens: "{count} 個輸出權杖",
     archivedSessionDisabled: "還原此工作階段以傳送訊息。",
     loadOlder: "載入較早內容",
     sessionHeader: {

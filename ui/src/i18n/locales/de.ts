@@ -962,6 +962,8 @@ export const de: TranslationMap = {
     noEvents: "No events yet.",
   },
   configForm: {
+    showAdvanced: "Erweiterte Optionen anzeigen",
+    advancedCount: "Erweitert ({count})",
     hideValue: "Wert ausblenden",
     revealValue: "Wert anzeigen",
     disableStreamToReveal: "Stream-Modus deaktivieren, um den Wert anzuzeigen",
@@ -3797,6 +3799,7 @@ export const de: TranslationMap = {
       preparingContext: "Kontext wird vorbereitet…",
       startingModel: "Modell wird gestartet…",
     },
+    outputTokens: "{count} Ausgabe-Token",
     archivedSessionDisabled: "Stellen Sie diese Sitzung wieder her, um Nachrichten zu senden.",
     loadOlder: "Ältere laden",
     sessionHeader: {

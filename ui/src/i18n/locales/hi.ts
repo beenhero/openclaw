@@ -946,6 +946,8 @@ export const hi: TranslationMap = {
     noEvents: "अभी कोई इवेंट नहीं।",
   },
   configForm: {
+    showAdvanced: "उन्नत विकल्प दिखाएँ",
+    advancedCount: "उन्नत ({count})",
     hideValue: "मान छिपाएँ",
     revealValue: "मान प्रकट करें",
     disableStreamToReveal: "मान प्रकट करने के लिए स्ट्रीम मोड अक्षम करें",
@@ -3699,6 +3701,7 @@ export const hi: TranslationMap = {
       preparingContext: "संदर्भ तैयार किया जा रहा है…",
       startingModel: "मॉडल शुरू किया जा रहा है…",
     },
+    outputTokens: "{count} आउटपुट टोकन",
     archivedSessionDisabled: "संदेश भेजने के लिए इस सत्र को बहाल करें।",
     loadOlder: "पुराने लोड करें",
     sessionHeader: {

@@ -953,6 +953,8 @@ export const vi: TranslationMap = {
     noEvents: "Chưa có sự kiện nào.",
   },
   configForm: {
+    showAdvanced: "Hiển thị nâng cao",
+    advancedCount: "Nâng cao ({count})",
     hideValue: "Ẩn giá trị",
     revealValue: "Hiện giá trị",
     disableStreamToReveal: "Tắt chế độ stream để hiện giá trị",
@@ -3745,6 +3747,7 @@ export const vi: TranslationMap = {
       preparingContext: "Đang chuẩn bị ngữ cảnh…",
       startingModel: "Đang khởi động mô hình…",
     },
+    outputTokens: "{count} token đầu ra",
     archivedSessionDisabled: "Khôi phục phiên này để gửi tin nhắn.",
     loadOlder: "Tải mục cũ hơn",
     sessionHeader: {

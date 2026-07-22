@@ -960,6 +960,8 @@ export const nl: TranslationMap = {
     noEvents: "Nog geen gebeurtenissen.",
   },
   configForm: {
+    showAdvanced: "Geavanceerd weergeven",
+    advancedCount: "Geavanceerd ({count})",
     hideValue: "Waarde verbergen",
     revealValue: "Waarde tonen",
     disableStreamToReveal: "Schakel streammodus uit om de waarde te tonen",
@@ -3767,6 +3769,7 @@ export const nl: TranslationMap = {
       preparingContext: "Context voorbereiden…",
       startingModel: "Model starten…",
     },
+    outputTokens: "{count} uitvoertokens",
     archivedSessionDisabled: "Herstel deze sessie om berichten te verzenden.",
     loadOlder: "Oudere laden",
     sessionHeader: {

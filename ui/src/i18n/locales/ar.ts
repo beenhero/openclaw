@@ -945,6 +945,8 @@ export const ar: TranslationMap = {
     noEvents: "لا توجد أحداث بعد.",
   },
   configForm: {
+    showAdvanced: "إظهار الخيارات المتقدمة",
+    advancedCount: "خيارات متقدمة ({count})",
     hideValue: "إخفاء القيمة",
     revealValue: "إظهار القيمة",
     disableStreamToReveal: "عطّل وضع البث لإظهار القيمة",
@@ -3705,6 +3707,7 @@ export const ar: TranslationMap = {
       preparingContext: "جارٍ إعداد السياق…",
       startingModel: "جارٍ تشغيل النموذج…",
     },
+    outputTokens: "{count} من رموز الإخراج",
     archivedSessionDisabled: "استعِد هذه الجلسة لإرسال الرسائل.",
     loadOlder: "تحميل الأقدم",
     sessionHeader: {

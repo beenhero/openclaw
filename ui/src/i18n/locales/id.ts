@@ -951,6 +951,8 @@ export const id: TranslationMap = {
     noEvents: "No events yet.",
   },
   configForm: {
+    showAdvanced: "Tampilkan lanjutan",
+    advancedCount: "Lanjutan ({count})",
     hideValue: "Sembunyikan nilai",
     revealValue: "Tampilkan nilai",
     disableStreamToReveal: "Nonaktifkan mode stream untuk menampilkan nilai",
@@ -3746,6 +3748,7 @@ export const id: TranslationMap = {
       preparingContext: "Menyiapkan konteks…",
       startingModel: "Memulai model…",
     },
+    outputTokens: "{count} token keluaran",
     archivedSessionDisabled: "Pulihkan sesi ini untuk mengirim pesan.",
     loadOlder: "Muat yang lebih lama",
     sessionHeader: {

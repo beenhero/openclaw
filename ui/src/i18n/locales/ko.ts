@@ -948,6 +948,8 @@ export const ko: TranslationMap = {
     noEvents: "No events yet.",
   },
   configForm: {
+    showAdvanced: "고급 항목 표시",
+    advancedCount: "고급 항목 ({count})",
     hideValue: "값 숨기기",
     revealValue: "값 표시",
     disableStreamToReveal: "값을 표시하려면 스트림 모드를 비활성화하세요",
@@ -3723,6 +3725,7 @@ export const ko: TranslationMap = {
       preparingContext: "컨텍스트 준비 중…",
       startingModel: "모델 시작 중…",
     },
+    outputTokens: "출력 토큰 {count}개",
     archivedSessionDisabled: "메시지를 보내려면 이 세션을 복원하세요.",
     loadOlder: "이전 항목 불러오기",
     sessionHeader: {

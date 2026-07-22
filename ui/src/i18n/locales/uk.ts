@@ -957,6 +957,8 @@ export const uk: TranslationMap = {
     noEvents: "No events yet.",
   },
   configForm: {
+    showAdvanced: "Показати розширені налаштування",
+    advancedCount: "Розширені налаштування ({count})",
     hideValue: "Приховати значення",
     revealValue: "Показати значення",
     disableStreamToReveal: "Вимкніть режим потоку, щоб показати значення",
@@ -3760,6 +3762,7 @@ export const uk: TranslationMap = {
       preparingContext: "Підготовка контексту…",
       startingModel: "Запуск моделі…",
     },
+    outputTokens: "Токени виводу: {count}",
     archivedSessionDisabled: "Відновіть цей сеанс, щоб надсилати повідомлення.",
     loadOlder: "Завантажити старіші",
     sessionHeader: {

@@ -933,6 +933,8 @@ export const zh_CN: TranslationMap = {
     noEvents: "暂无事件。",
   },
   configForm: {
+    showAdvanced: "显示高级选项",
+    advancedCount: "高级选项（{count}）",
     hideValue: "隐藏值",
     revealValue: "显示值",
     disableStreamToReveal: "禁用流模式以显示值",
@@ -3650,6 +3652,7 @@ export const zh_CN: TranslationMap = {
       preparingContext: "正在准备上下文…",
       startingModel: "正在启动模型…",
     },
+    outputTokens: "{count} 个输出令牌",
     archivedSessionDisabled: "恢复此会话以发送消息。",
     loadOlder: "加载更早内容",
     sessionHeader: {

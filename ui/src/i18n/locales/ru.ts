@@ -961,6 +961,8 @@ export const ru: TranslationMap = {
     noEvents: "Событий пока нет.",
   },
   configForm: {
+    showAdvanced: "Показать расширенные настройки",
+    advancedCount: "Расширенные настройки ({count})",
     hideValue: "Скрыть значение",
     revealValue: "Показать значение",
     disableStreamToReveal: "Отключите режим потока, чтобы показать значение",
@@ -3779,6 +3781,7 @@ export const ru: TranslationMap = {
       preparingContext: "Подготовка контекста…",
       startingModel: "Запуск модели…",
     },
+    outputTokens: "Токены вывода: {count}",
     archivedSessionDisabled: "Восстановите этот сеанс, чтобы отправлять сообщения.",
     loadOlder: "Загрузить более ранние",
     sessionHeader: {

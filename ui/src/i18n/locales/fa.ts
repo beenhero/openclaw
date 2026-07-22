@@ -951,6 +951,8 @@ export const fa: TranslationMap = {
     noEvents: "هنوز رویدادی وجود ندارد.",
   },
   configForm: {
+    showAdvanced: "نمایش تنظیمات پیشرفته",
+    advancedCount: "پیشرفته ({count})",
     hideValue: "پنهان کردن مقدار",
     revealValue: "نمایش مقدار",
     disableStreamToReveal: "برای نمایش مقدار، حالت جریان را غیرفعال کنید",
@@ -3740,6 +3742,7 @@ export const fa: TranslationMap = {
       preparingContext: "در حال آماده‌سازی زمینه…",
       startingModel: "در حال راه‌اندازی مدل…",
     },
+    outputTokens: "{count} توکن خروجی",
     archivedSessionDisabled: "برای ارسال پیام، این نشست را بازیابی کنید.",
     loadOlder: "بارگیری قدیمی‌ترها",
     sessionHeader: {

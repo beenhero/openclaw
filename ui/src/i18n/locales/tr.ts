@@ -958,6 +958,8 @@ export const tr: TranslationMap = {
     noEvents: "No events yet.",
   },
   configForm: {
+    showAdvanced: "Gelişmiş seçenekleri göster",
+    advancedCount: "Gelişmiş ({count})",
     hideValue: "Değeri gizle",
     revealValue: "Değeri göster",
     disableStreamToReveal: "Değeri göstermek için akış modunu devre dışı bırakın",
@@ -3769,6 +3771,7 @@ export const tr: TranslationMap = {
       preparingContext: "Bağlam hazırlanıyor…",
       startingModel: "Model başlatılıyor…",
     },
+    outputTokens: "{count} çıkış tokeni",
     archivedSessionDisabled: "Mesaj göndermek için bu oturumu geri yükleyin.",
     loadOlder: "Daha eskileri yükle",
     sessionHeader: {
