@@ -3,8 +3,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   __resetProofRegistryForTest,
   assertProofFresh,
+  computeParamsDigest,
+  fingerprintJson,
   recordAndConsumeProof,
 } from "./capability-approval.js";
+import type { PluginJsonValue } from "./host-hook-json.js";
 
 describe("Codex approval-proof registry", () => {
   beforeEach(() => {
@@ -129,5 +132,47 @@ describe("Codex approval-proof registry", () => {
       }),
     ).toEqual({ ok: true });
     expect(assertProofFresh("proof-abc")).toEqual({ ok: true });
+  });
+});
+
+describe("params-digest", () => {
+  it("computeParamsDigest is key-order independent and sha256-prefixed", () => {
+    const a: PluginJsonValue = { command: "/bin/ls", cwd: "/tmp", approval: { id: 1 } };
+    const b: PluginJsonValue = { approval: { id: 1 }, cwd: "/tmp", command: "/bin/ls" };
+    const digestA = computeParamsDigest(a);
+    const digestB = computeParamsDigest(b);
+    expect(digestA).toBe(digestB);
+    expect(digestA).toMatch(/^sha256:[a-f0-9]{64}$/);
+  });
+
+  it("different command → different digest", () => {
+    const base: PluginJsonValue = { command: "/bin/ls", cwd: "/tmp" };
+    const other: PluginJsonValue = { command: "/bin/rm -rf /tmp/x", cwd: "/tmp" };
+    expect(computeParamsDigest(base)).not.toBe(computeParamsDigest(other));
+  });
+
+  it("fingerprintJson returns bare 64-char hex (no prefix)", () => {
+    const hex = fingerprintJson({ a: 1, b: [2, 3], c: null } satisfies PluginJsonValue);
+    expect(hex).toMatch(/^[a-f0-9]{64}$/);
+    // computeParamsDigest is exactly the prefixed form of fingerprintJson.
+    expect(computeParamsDigest({ a: 1, b: [2, 3], c: null })).toBe(`sha256:${hex}`);
+  });
+
+  it("stableStringify semantics preserved: nested arrays keep order, object keys sort", () => {
+    // Arrays are order-sensitive; only object keys are sorted.
+    const ordered: PluginJsonValue = { list: [1, 2, 3] };
+    const reordered: PluginJsonValue = { list: [3, 2, 1] };
+    expect(fingerprintJson(ordered)).not.toBe(fingerprintJson(reordered));
+  });
+
+  it("computeParamsDigest pins a literal golden digest (algorithm-drift guard)", () => {
+    // Computed once: stableStringify({command:"/bin/ls",cwd:"/tmp"}) →
+    //   '{"command":"/bin/ls","cwd":"/tmp"}' (keys sort: command < cwd)
+    // sha256 of that UTF-8 string = the hex below.
+    // If this test ever breaks, the hashing algorithm or key-sort changed —
+    // treat that as a breaking change to the wire format (paramsDigest).
+    expect(computeParamsDigest({ command: "/bin/ls", cwd: "/tmp" })).toBe(
+      "sha256:5c83d9f79f812871296758a1e01f42dcd28738c6bf45080f5fc577caa3aca01e",
+    );
   });
 });
