@@ -68,8 +68,10 @@ export function hasApprovalResolverForScope(
   for (const entry of copyApprovalResolverRegistrations(registry)) {
     const result = registrationCoversCapability(entry, cap);
     if (result === UNREADABLE) {
-      // Any unreadable entry fails the entire check closed.
-      return false;
+      // Fail-closed: an unreadable registration might cover the capability;
+      // assume it does so the gate engages rather than bypassing a registered resolver.
+      // Matches the hasTrustedToolPolicies precedent (poisoned array → length > 0 → gate fires).
+      return true;
     }
     if (result) {
       return true;
@@ -89,8 +91,10 @@ export function getApprovalResolverForScope(
   for (const entry of copyApprovalResolverRegistrations(registry)) {
     const result = registrationCoversCapability(entry, cap);
     if (result === UNREADABLE) {
-      // Any unreadable entry fails the entire lookup closed.
-      return undefined;
+      // Fail-closed: return the poisoned entry so the decision site (Task 11) hits the
+      // throwing getter and its fail-closed catch denies the command.
+      // Returning undefined would let Task 11 treat it as "no resolver" and proceed ungated.
+      return entry;
     }
     if (result) {
       return entry;

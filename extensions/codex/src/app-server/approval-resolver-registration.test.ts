@@ -93,6 +93,9 @@ describe("hasApprovalResolverForScope / getApprovalResolverForScope", () => {
   });
 
   it("fails closed when the registry field is unreadable (throwing getter)", () => {
+    // Fail-closed: unreadable registry → gate ENGAGES (has=true, get returns poisoned entry).
+    // The decision site (Task 11) hits the throwing getter on the returned entry and its
+    // fail-closed catch denies the command — a registered resolver is NEVER silently bypassed.
     const hostile = {
       ...createEmptyPluginRegistry(),
       get approvalResolvers(): PluginApprovalResolverRegistryRegistration[] {
@@ -100,11 +103,17 @@ describe("hasApprovalResolverForScope / getApprovalResolverForScope", () => {
       },
     } as unknown as PluginRegistry;
     expect(() => hasApprovalResolverForScope("process.exec", hostile)).not.toThrow();
-    expect(hasApprovalResolverForScope("process.exec", hostile)).toBe(false);
-    expect(getApprovalResolverForScope("process.exec", hostile)).toBeUndefined();
+    expect(hasApprovalResolverForScope("process.exec", hostile)).toBe(true);
+    const got = getApprovalResolverForScope("process.exec", hostile);
+    expect(got).toBeDefined();
+    expect(() => got!.registration).toThrow();
   });
 
   it("fails closed when a single registration is unreadable (throwing scope)", () => {
+    // Fail-closed: a poisoned entry terminates the lookup and the gate ENGAGES (has=true,
+    // get returns the poisoned entry). The good entry after it is never reached — the
+    // authority invariant requires the gate to fire, not skip past the unreadable resolver.
+    // The decision site (Task 11) hits the throwing getter and its fail-closed catch denies.
     const good = makeRegistryRegistration(makeResolverRegistration());
     const poison = {
       pluginId: "evil",
@@ -114,10 +123,11 @@ describe("hasApprovalResolverForScope / getApprovalResolverForScope", () => {
       },
     } as unknown as PluginApprovalResolverRegistryRegistration;
     const registry = registryWithResolvers([poison, good]);
-    // A poisoned entry must not throw and must not leak a match past it.
     expect(() => hasApprovalResolverForScope("process.exec", registry)).not.toThrow();
-    expect(hasApprovalResolverForScope("process.exec", registry)).toBe(false);
-    expect(getApprovalResolverForScope("process.exec", registry)).toBeUndefined();
+    expect(hasApprovalResolverForScope("process.exec", registry)).toBe(true);
+    const got = getApprovalResolverForScope("process.exec", registry);
+    expect(got).toBeDefined();
+    expect(() => got!.registration).toThrow();
   });
 
   it("fails closed on a null registry", () => {
