@@ -1,13 +1,253 @@
 // Core capability-approval proof registry — structural replay + single-use enforcement.
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetProofRegistryForTest,
   assertProofFresh,
   computeParamsDigest,
+  decideCapabilityApproval,
   fingerprintJson,
   recordAndConsumeProof,
 } from "./capability-approval.js";
 import type { PluginJsonValue } from "./host-hook-json.js";
+import type { ApprovalDecision, ApprovalRequest } from "./host-hooks.js";
+import { createEmptyPluginRegistry } from "./registry-empty.js";
+import { setActivePluginRegistry } from "./runtime.js";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const PARAMS_DIGEST = computeParamsDigest({ command: "/bin/echo hello", cwd: "/tmp" });
+
+function makeRequest(overrides: Partial<ApprovalRequest> = {}): ApprovalRequest {
+  return {
+    requestId: "req-test-1",
+    capability: "process.exec",
+    toolName: "bash",
+    command: "/bin/echo hello",
+    cwd: "/tmp",
+    paramsDigest: PARAMS_DIGEST,
+    ...overrides,
+  };
+}
+
+function makeRegistryWithResolver(
+  resolve: (
+    req: ApprovalRequest,
+    opts: { signal: AbortSignal; deadlineMs: number },
+  ) => Promise<ApprovalDecision>,
+) {
+  const registry = {
+    ...createEmptyPluginRegistry(),
+    approvalResolvers: [
+      {
+        pluginId: "test-plugin",
+        pluginName: "Test Plugin",
+        source: "test",
+        registration: {
+          id: "test-exec-resolver",
+          description: "Test approval resolver",
+          scope: { capabilities: ["process.exec" as const] },
+          exclusive: true as const,
+          resolve,
+        },
+      },
+    ],
+  };
+  return registry;
+}
+
+// ---------------------------------------------------------------------------
+// decideCapabilityApproval test suite
+// ---------------------------------------------------------------------------
+
+describe("decideCapabilityApproval", () => {
+  beforeEach(() => {
+    __resetProofRegistryForTest();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    // Reset to empty registry so approval-resolver reads no entries.
+    setActivePluginRegistry(createEmptyPluginRegistry());
+  });
+
+  it("fallthrough — no resolver registered → {kind:'fallthrough'}", async () => {
+    setActivePluginRegistry(createEmptyPluginRegistry());
+    const verdict = await decideCapabilityApproval(makeRequest(), { deadlineMs: 5000 });
+    expect(verdict).toEqual({ kind: "fallthrough" });
+  });
+
+  it("allow — resolver returns allow with matching requestId → {kind:'allow'}", async () => {
+    const req = makeRequest();
+    setActivePluginRegistry(
+      makeRegistryWithResolver(async (r) => ({
+        requestId: r.requestId,
+        decision: "allow",
+      })),
+    );
+    const verdict = await decideCapabilityApproval(req, { deadlineMs: 5000 });
+    expect(verdict).toEqual({ kind: "allow", requestId: req.requestId });
+  });
+
+  it("deny — resolver returns deny → {kind:'deny',failureDisposition:'failed'}", async () => {
+    setActivePluginRegistry(
+      makeRegistryWithResolver(async (r) => ({
+        requestId: r.requestId,
+        decision: "deny",
+        reason: "not allowed",
+      })),
+    );
+    const verdict = await decideCapabilityApproval(makeRequest(), { deadlineMs: 5000 });
+    expect(verdict).toEqual({
+      kind: "deny",
+      requestId: makeRequest().requestId,
+      reason: "not allowed",
+      failureDisposition: "failed",
+    });
+  });
+
+  it("deny — resolver throws → {kind:'deny',failureDisposition:'failed'}", async () => {
+    setActivePluginRegistry(
+      makeRegistryWithResolver(async () => {
+        throw new Error("resolver exploded");
+      }),
+    );
+    const verdict = await decideCapabilityApproval(makeRequest(), { deadlineMs: 5000 });
+    expect(verdict.kind).toBe("deny");
+    expect((verdict as { kind: "deny"; failureDisposition?: string }).failureDisposition).toBe(
+      "failed",
+    );
+  });
+
+  it("deny — requestId mismatch → {kind:'deny',failureDisposition:'failed'}", async () => {
+    setActivePluginRegistry(
+      makeRegistryWithResolver(async () => ({
+        requestId: "WRONG-requestId",
+        decision: "allow",
+      })),
+    );
+    const verdict = await decideCapabilityApproval(makeRequest(), { deadlineMs: 5000 });
+    expect(verdict.kind).toBe("deny");
+    expect((verdict as { kind: "deny"; failureDisposition?: string }).failureDisposition).toBe(
+      "failed",
+    );
+  });
+
+  it("deny — malformed decision value → {kind:'deny',failureDisposition:'failed'}", async () => {
+    setActivePluginRegistry(
+      makeRegistryWithResolver(async (r) => ({
+        requestId: r.requestId,
+        decision: "approve-always" as unknown as "allow" | "deny",
+      })),
+    );
+    const verdict = await decideCapabilityApproval(makeRequest(), { deadlineMs: 5000 });
+    expect(verdict.kind).toBe("deny");
+    expect((verdict as { kind: "deny"; failureDisposition?: string }).failureDisposition).toBe(
+      "failed",
+    );
+  });
+
+  it("deny — resolver never resolves → timed_out after deadline (fake timers)", async () => {
+    vi.useFakeTimers();
+    setActivePluginRegistry(
+      makeRegistryWithResolver(
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        (_req, opts) =>
+          new Promise<ApprovalDecision>((resolve) => {
+            // Cooperatively stop when aborted; otherwise hang forever.
+            opts.signal.addEventListener("abort", () => {
+              resolve({ requestId: _req.requestId, decision: "deny", reason: "aborted" });
+            });
+          }),
+      ),
+    );
+
+    const verdictPromise = decideCapabilityApproval(makeRequest(), { deadlineMs: 3000 });
+    await vi.advanceTimersByTimeAsync(3001);
+    const verdict = await verdictPromise;
+    expect(verdict.kind).toBe("deny");
+    const d = verdict as { kind: "deny"; failureDisposition?: string };
+    expect(d.failureDisposition).toBe("timed_out");
+  });
+
+  it("deny — caller aborts signal mid-hold → {kind:'deny'}", async () => {
+    const ac = new AbortController();
+    let resolverResolve!: (d: ApprovalDecision) => void;
+    setActivePluginRegistry(
+      makeRegistryWithResolver(
+        (r) =>
+          new Promise<ApprovalDecision>((res) => {
+            resolverResolve = () => res({ requestId: r.requestId, decision: "deny" });
+          }),
+      ),
+    );
+    const verdictPromise = decideCapabilityApproval(makeRequest(), {
+      deadlineMs: 30000,
+      signal: ac.signal,
+    });
+    // Abort before the resolver finishes.
+    ac.abort();
+    resolverResolve();
+    const verdict = await verdictPromise;
+    expect(verdict.kind).toBe("deny");
+  });
+
+  it("deny — replayed/consumed proof → {kind:'deny',failureDisposition:'failed'}", async () => {
+    const proof = "proof-unique-abc";
+    // Pre-consume the proof so it appears replayed.
+    assertProofFresh(proof); // first sight → ok, now seenProofs has it
+
+    setActivePluginRegistry(
+      makeRegistryWithResolver(async (r) => ({
+        requestId: r.requestId,
+        decision: "allow",
+        proof,
+      })),
+    );
+    const verdict = await decideCapabilityApproval(makeRequest(), { deadlineMs: 5000 });
+    expect(verdict.kind).toBe("deny");
+    expect((verdict as { kind: "deny"; failureDisposition?: string }).failureDisposition).toBe(
+      "failed",
+    );
+  });
+
+  it("deny — single-use: same requestId+paramsDigest consumed twice → second call denied", async () => {
+    const req = makeRequest();
+    setActivePluginRegistry(
+      makeRegistryWithResolver(async (r) => ({
+        requestId: r.requestId,
+        decision: "allow",
+      })),
+    );
+    // First call consumes the {requestId, paramsDigest} pair.
+    const first = await decideCapabilityApproval(req, { deadlineMs: 5000 });
+    expect(first.kind).toBe("allow");
+
+    // Second call with the SAME requestId must be denied (pair already consumed).
+    // We need to rebuild the registry since the active one still has the resolver,
+    // but the proof registry is the blocker.
+    const second = await decideCapabilityApproval(req, { deadlineMs: 5000 });
+    expect(second.kind).toBe("deny");
+  });
+
+  it("deny — poisoned resolver entry (registration getter throws) → fail-closed deny", async () => {
+    const poisonedEntry = {
+      pluginId: "poison-plugin",
+      source: "test",
+      get registration(): never {
+        throw new Error("TOCTOU: registration unreadable");
+      },
+    };
+    const registry = {
+      ...createEmptyPluginRegistry(),
+      approvalResolvers: [poisonedEntry as never],
+    };
+    setActivePluginRegistry(registry);
+    const verdict = await decideCapabilityApproval(makeRequest(), { deadlineMs: 5000 });
+    expect(verdict.kind).toBe("deny");
+  });
+});
 
 describe("Codex approval-proof registry", () => {
   beforeEach(() => {

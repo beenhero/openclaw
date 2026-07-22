@@ -7,7 +7,9 @@
  * can reuse the exact same process-stable hashing.
  */
 import crypto from "node:crypto";
+import { getApprovalResolverForScope, hasApprovalResolverForScope } from "./approval-resolver.js";
 import type { PluginJsonValue } from "./host-hook-json.js";
+import type { ApprovalRequest } from "./host-hooks.js";
 
 export function fingerprintJson(value: PluginJsonValue): string {
   return crypto.createHash("sha256").update(stableStringify(value)).digest("hex");
@@ -123,4 +125,184 @@ export function assertProofFresh(
 export function __resetProofRegistryForTest(): void {
   consumedRecords.clear();
   seenProofs.clear();
+}
+
+// ---------------------------------------------------------------------------
+// decideCapabilityApproval — harness-neutral core primitive
+// ---------------------------------------------------------------------------
+
+/**
+ * Verdict returned by the core capability-approval decision loop.
+ * - `allow`: the resolver approved this request; `requestId` echoes the minted id.
+ * - `deny`:  fail-closed decline; `failureDisposition` disambiguates timeout vs
+ *            other failure so callers can surface the right UX message.
+ * - `fallthrough`: no exclusive resolver owns `req.capability` so the caller
+ *                  should proceed to the next decision stage (e.g. human tap).
+ */
+export type CapabilityApprovalVerdict =
+  | { kind: "allow"; requestId: string }
+  | {
+      kind: "deny";
+      requestId: string;
+      reason?: string;
+      failureDisposition?: "failed" | "timed_out";
+    }
+  | { kind: "fallthrough" };
+
+/**
+ * Runs the capability-scoped approval resolver decision loop for the supplied
+ * pre-built `ApprovalRequest`.  The function is harness-neutral: it touches
+ * only the active plugin registry and the in-process proof state; it never
+ * references any Codex / app-server types.
+ *
+ * Fail-closed matrix (ported verbatim from approval-bridge.ts:555-678):
+ *  - no resolver              → fallthrough
+ *  - poisoned entry           → deny (failed)  [TOCTOU guard]
+ *  - resolver throws / catch  → deny (failed)
+ *  - deadline expires         → deny (timed_out)
+ *  - external signal aborted  → deny (timed_out)
+ *  - verdict undefined        → deny (failed)
+ *  - requestId mismatch       → deny (failed)
+ *  - decision !== "allow"     → deny (failed)
+ *  - proof replayed           → deny (failed)
+ *  - pair already consumed    → deny (failed)
+ *  - all guards pass          → allow
+ */
+export async function decideCapabilityApproval(
+  req: ApprovalRequest,
+  opts: { deadlineMs: number; signal?: AbortSignal },
+): Promise<CapabilityApprovalVerdict> {
+  // Step 1: check whether the scope is owned by any resolver.
+  // hasApprovalResolverForScope is fail-closed: a poisoned entry returns true
+  // so the gate engages rather than falling through.
+  if (!hasApprovalResolverForScope(req.capability)) {
+    return { kind: "fallthrough" };
+  }
+
+  // Step 2: fetch the entry.  A TOCTOU window exists between the has* and get*
+  // calls; getApprovalResolverForScope returns the poisoned entry (rather than
+  // undefined) so the throwing getter is hit below → fail-closed deny.
+  const resolverEntry = getApprovalResolverForScope(req.capability);
+  if (!resolverEntry) {
+    // has* returned true but get* returned undefined — rare TOCTOU race;
+    // treat as unavailable → deny (fail-closed, same as bridge line 565-571).
+    return {
+      kind: "deny",
+      requestId: req.requestId,
+      reason: "approval resolver unavailable",
+      failureDisposition: "failed",
+    };
+  }
+
+  // Step 3: obtain the resolve fn.  If the entry is poisoned the getter throws;
+  // catch → fail-closed deny.
+  let resolveFn: (typeof resolverEntry.registration)["resolve"];
+  try {
+    resolveFn = resolverEntry.registration.resolve;
+  } catch {
+    return {
+      kind: "deny",
+      requestId: req.requestId,
+      reason: "approval resolver unavailable",
+      failureDisposition: "failed",
+    };
+  }
+
+  // Step 4: build a combined abort controller so the deadline timer can abort
+  // the resolver the same way an externally-cancelled signal can.
+  const resolverAbort = new AbortController();
+  const onRunAbort = () => resolverAbort.abort();
+  if (opts.signal) {
+    if (opts.signal.aborted) {
+      resolverAbort.abort();
+    } else {
+      opts.signal.addEventListener("abort", onRunAbort, { once: true });
+    }
+  }
+
+  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  let verdict: import("./host-hooks.js").ApprovalDecision | undefined;
+  let timedOut = false;
+
+  try {
+    const resolvePromise = resolveFn(req, {
+      signal: resolverAbort.signal,
+      deadlineMs: opts.deadlineMs,
+    });
+
+    // Bridge-enforced deadline: a resolver that never resolves cannot park the
+    // approval forever.  The timeout rejects; the catch below maps it to
+    // denied/timed_out.  Aborting the resolver signal lets a cooperative
+    // resolver stop waiting early.
+    const deadlinePromise = new Promise<never>((_, reject) => {
+      deadlineTimer = setTimeout(() => {
+        timedOut = true;
+        resolverAbort.abort();
+        reject(new Error("approval resolver timed out"));
+      }, opts.deadlineMs);
+    });
+
+    verdict = await Promise.race([resolvePromise, deadlinePromise]);
+  } catch {
+    verdict = undefined;
+  } finally {
+    if (deadlineTimer !== undefined) {
+      clearTimeout(deadlineTimer);
+    }
+    if (opts.signal) {
+      opts.signal.removeEventListener("abort", onRunAbort);
+    }
+  }
+
+  // Step 5: map the outcome → verdict type.
+
+  // Deadline expiry.
+  if (timedOut) {
+    return {
+      kind: "deny",
+      requestId: req.requestId,
+      reason: "approval resolver timed out",
+      failureDisposition: "timed_out",
+    };
+  }
+
+  // External abort or no verdict from resolver (threw or returned undefined).
+  if (opts.signal?.aborted === true || !verdict) {
+    return {
+      kind: "deny",
+      requestId: req.requestId,
+      reason: verdict?.reason ?? "approval resolver denied",
+      failureDisposition: opts.signal?.aborted === true ? "timed_out" : "failed",
+    };
+  }
+
+  // Allow-LIST: approve ONLY on an explicit `allow` that echoes the request's
+  // requestId.  Any other decision value or requestId mismatch → deny (failed).
+  if (verdict.requestId !== req.requestId || verdict.decision !== "allow") {
+    return {
+      kind: "deny",
+      requestId: req.requestId,
+      reason: verdict.reason ?? "approval resolver denied",
+      failureDisposition: "failed",
+    };
+  }
+
+  // Structural single-use + cross-request replay rejection.
+  const fresh = assertProofFresh(verdict.proof);
+  const consumed = recordAndConsumeProof({
+    requestId: req.requestId,
+    paramsDigest: req.paramsDigest,
+    outcome: "allow",
+    ...(verdict.proof !== undefined ? { proof: verdict.proof } : {}),
+  });
+  if (!fresh.ok || !consumed.ok) {
+    return {
+      kind: "deny",
+      requestId: req.requestId,
+      reason: "approval proof rejected",
+      failureDisposition: "failed",
+    };
+  }
+
+  return { kind: "allow", requestId: req.requestId };
 }
