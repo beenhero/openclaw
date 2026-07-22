@@ -2436,6 +2436,51 @@ describe("loadPluginManifestRegistry", () => {
     });
   });
 
+  it("preserves approvalResolvers contract ids from plugin manifests", () => {
+    const dir = makeTempDir();
+    writeManifest(dir, {
+      id: "sigil-harness",
+      contracts: {
+        approvalResolvers: ["sigil-exec"],
+      },
+      configSchema: { type: "object" },
+    });
+
+    const registry = loadSingleCandidateRegistry({
+      idHint: "sigil-harness",
+      rootDir: dir,
+      origin: "workspace",
+    });
+
+    expect(registry.plugins[0]?.contracts).toEqual({
+      approvalResolvers: ["sigil-exec"],
+    });
+  });
+
+  it("omits an absent or empty approvalResolvers contract", () => {
+    const dir = makeTempDir();
+    writeManifest(dir, {
+      id: "sigil-harness-empty",
+      contracts: {
+        approvalResolvers: [],
+        trustedToolPolicies: ["workflow-budget"],
+      },
+      configSchema: { type: "object" },
+    });
+
+    const registry = loadSingleCandidateRegistry({
+      idHint: "sigil-harness-empty",
+      rootDir: dir,
+      origin: "workspace",
+    });
+
+    // empty list dropped; sibling contract still present, no approvalResolvers key
+    expect(registry.plugins[0]?.contracts).toEqual({
+      trustedToolPolicies: ["workflow-budget"],
+    });
+    expect(registry.plugins[0]?.contracts).not.toHaveProperty("approvalResolvers");
+  });
+
   it("preserves qa runner descriptors from plugin manifests", () => {
     const dir = makeTempDir();
     writeManifest(dir, {
