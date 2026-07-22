@@ -225,6 +225,7 @@ export const uk: TranslationMap = {
     whatsapp: {
       title: "WhatsApp",
       subtitle: "Підключіть WhatsApp Web і стежте за станом з’єднання.",
+      phoneNumber: "Номер телефону",
       loggedOut: "Вихід виконано.",
       logoutNotCleared:
         "Жодного збереженого сеансу WhatsApp не видалено. Можливо, він уже відсутній або його каталог автентифікації потребує очищення вручну.",
@@ -533,6 +534,9 @@ export const uk: TranslationMap = {
     browserLoadFailed: "Не вдалося отримати список цієї папки.",
     hiddenFolder: "Прихована папка",
     worktree: "Worktree",
+    checkingGit: "Перевірка доступності Git…",
+    gitCheckUnavailable:
+      "Не вдалося перевірити Git для цієї папки. Виберіть її знову, щоб повторити спробу.",
     worktreeUnavailable: "Робоча область агента не є git checkout",
     baseBranch: "Базова гілка",
     worktreeName: "Назва worktree",
@@ -1350,6 +1354,26 @@ export const uk: TranslationMap = {
       liveActivityHint:
         "Показувати останню активність асистента або інструмента під активними сеансами.",
     },
+    sessionObserver: {
+      title: "Спостерігач за сеансами",
+      hint: "Узагальнюйте тривалі сеанси за допомогою невеликої допоміжної моделі.",
+      toggle: "Спостерігач за сеансами",
+      toggleHint:
+        "Створюйте актуальні зведення стану для сеансів Control UI, на які оформлено підписку.",
+      resolvedModel: "Визначена мала модель",
+      modelAuto: "автоматично ({model})",
+      modelConfigured: "налаштовано ({model})",
+      modelDisabled: "вимкнено",
+      modelUnavailable: "недоступно (немає малої моделі)",
+      modelPicker: "Мала модель",
+      modelPickerHint:
+        "Використовується для зведень спостерігача та інших коротких допоміжних завдань.",
+      modelCatalogUnavailable: "Явний каталог моделей недоступний",
+      auto: "Автоматично (типове значення постачальника)",
+      disabled: "Вимкнено",
+      toggleNote: "Оновити спостерігач за сеансами Control UI",
+      modelNote: "Оновити типову допоміжну модель",
+    },
     connection: {
       title: "Підключення",
       gateway: "Gateway",
@@ -1637,6 +1661,7 @@ export const uk: TranslationMap = {
     pages: "Сторінки",
     customize: "Налаштувати бічну панель",
     customizeReset: "Скинути до типових налаштувань",
+    workboardGroup: "WorkBoard",
   },
   terminal: {
     title: "Terminal",
@@ -2718,9 +2743,23 @@ export const uk: TranslationMap = {
       errorShow: "Показати подробиці",
       kindMcp: "MCP",
       kindHtml: "HTML",
+      kindPlugin: "Плагін",
+      pluginLoading: "Завантаження віджета плагіна…",
+      disabledPlugin: "Віджет із вимкненого плагіна {pluginId}",
     },
   },
   workboard: {
+    widget: {
+      cardLabel: "Картка робочої дошки",
+      summaryLabel: "Огляд робочої дошки",
+      loading: "Завантаження робочої дошки…",
+      cardIdRequired: "Для цього віджета потрібна властивість cardId.",
+      cardMissing: "Ця картка робочої дошки більше недоступна.",
+      unassigned: "Не призначено",
+      openBoard: "Відкрити дошку",
+      statusCounts: "Картки за статусом",
+      noActiveCards: "Немає готових або активних карток.",
+    },
     disabledHelpStart: "Workboard вимкнено. Увімкніть",
     enableConfigKey: "plugins.entries.workboard.enabled = true",
     disabledHelpEnd: ", потім перезавантажте цю вкладку.",
@@ -3715,6 +3754,12 @@ export const uk: TranslationMap = {
   chat: {
     disconnected: "Відключено від шлюзу.",
     waitingForApproval: "Очікування схвалення…",
+    startupStatus: {
+      preparingWorkspace: "Підготовка робочого простору…",
+      provisioningEnvironment: "Налаштування середовища…",
+      preparingContext: "Підготовка контексту…",
+      startingModel: "Запуск моделі…",
+    },
     archivedSessionDisabled: "Відновіть цей сеанс, щоб надсилати повідомлення.",
     loadOlder: "Завантажити старіші",
     sessionHeader: {
@@ -4004,6 +4049,7 @@ export const uk: TranslationMap = {
     },
     messages: {
       activity: "Активність",
+      copySelection: "Копіювати",
       forkFromHere: "Створити відгалуження звідси",
       hide: "Приховати",
       hideConfirm: "Приховати це повідомлення в цьому браузері? Агент усе одно його бачитиме.",
@@ -4039,6 +4085,33 @@ export const uk: TranslationMap = {
       followUp: "Уточнити…",
       followUpLabel: "Уточнити в бічному чаті",
       sendFollowUp: "Надіслати уточнення",
+    },
+    observer: {
+      title: "Спостерігач за сеансом",
+      expand: "Розгорнути спостерігач за сеансом",
+      collapse: "Згорнути спостерігач за сеансом",
+      plan: "План",
+      progress: "{completed} із {total}",
+      pullRequests: "Запити на злиття",
+      running: "Виконується",
+      checksPassing: "{count} пройдено",
+      checksFailing: "{count} не пройдено",
+      checksPending: "{count} виконується",
+      askLabel: "Запитати про цей сеанс",
+      askPlaceholder: "Чому це відбувається?",
+      askSubmit: "Запитувати",
+      askPending: "Перевірка спостережень…",
+      askBusy: "Спостерігач уже відповідає на запитання.",
+      askUnavailable: "Спостерігач зараз не може відповісти.",
+      health: {
+        "on-track": "Усе за планом",
+        grinding: "У роботі",
+        stuck: "Застрягло",
+        "waiting-on-user": "Очікування на вас",
+        "wrapping-up": "Завершення",
+        done: "Готово",
+        failed: "Не пройдено",
+      },
     },
     detailPanel: {
       close: "Закрити бічну панель",
@@ -4518,6 +4591,7 @@ export const uk: TranslationMap = {
       repeatInterval: "Інтервал",
       repeatOnce: "Один раз",
       repeatOnExit: "При виході",
+      repeatStream: "Джерело потоку",
       onExitHelp:
         "Виконується, коли відстежувана команда завершується. Розклад тут не можна редагувати.",
       every: "Кожні",
@@ -4556,6 +4630,9 @@ export const uk: TranslationMap = {
       wakeModeHelp: "Зараз спрацьовує негайно. Наступний heartbeat чекає наступного циклу.",
       action: "Дія",
       command: "Command",
+      script: "Скрипт",
+      readOnlyPayloadHelp:
+        "Ці корисні дані створено поза Control UI. Їхній вміст доступний лише для читання та зберігається під час збереження інших змін.",
       systemEvent: "Опублікувати повідомлення в основній часовій шкалі",
       agentTurn: "Запустити завдання асистента (ізольовано)",
       systemEventHelp:
