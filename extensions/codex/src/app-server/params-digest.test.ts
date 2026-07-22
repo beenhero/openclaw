@@ -36,6 +36,17 @@ describe("params-digest", () => {
     expect(fingerprintJson(ordered)).not.toBe(fingerprintJson(reordered));
   });
 
+  it("computeParamsDigest pins a literal golden digest (algorithm-drift guard)", () => {
+    // Computed once: stableStringify({command:"/bin/ls",cwd:"/tmp"}) →
+    //   '{"command":"/bin/ls","cwd":"/tmp"}' (keys sort: command < cwd)
+    // sha256 of that UTF-8 string = the hex below.
+    // If this test ever breaks, the hashing algorithm or key-sort changed —
+    // treat that as a breaking change to the wire format (paramsDigest).
+    expect(computeParamsDigest({ command: "/bin/ls", cwd: "/tmp" })).toBe(
+      "sha256:5c83d9f79f812871296758a1e01f42dcd28738c6bf45080f5fc577caa3aca01e",
+    );
+  });
+
   it("plugin-thread-config input fingerprint is unchanged by the extraction (no behavior change)", () => {
     // Golden vector: the extracted helper must produce byte-identical fingerprints
     // to the pre-extraction private copy for the same config-build inputs.
