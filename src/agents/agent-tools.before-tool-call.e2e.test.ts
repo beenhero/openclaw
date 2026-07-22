@@ -1853,6 +1853,7 @@ describe("before_tool_call requireApproval handling", () => {
 
     expect(state).toEqual({
       hasBeforeToolCallHook: false,
+      hasApprovalResolverForScope: false,
       trustedToolPolicies: [
         {
           id: "fuzzplugin",
@@ -1866,6 +1867,56 @@ describe("before_tool_call requireApproval handling", () => {
         },
       ],
     });
+  });
+
+  it("reports hasApprovalResolverForScope true when a process.exec resolver is registered", () => {
+    hookRunner.hasHooks.mockReturnValue(false);
+    const registry = createEmptyPluginRegistry();
+    registry.approvalResolvers = [
+      {
+        pluginId: "sigilplugin",
+        pluginName: "Sigil Plugin",
+        source: "test",
+        registration: {
+          id: "sigil-exec-resolver",
+          description: "wallet-signed process.exec resolver",
+          scope: { capabilities: ["process.exec"] },
+          exclusive: true,
+          resolve: async () => ({
+            requestId: "unused",
+            decision: "deny",
+          }),
+        },
+      },
+    ];
+    setActivePluginRegistry(registry);
+
+    let state: ReturnType<typeof getBeforeToolCallPolicyDiagnosticState> | undefined;
+    try {
+      state = getBeforeToolCallPolicyDiagnosticState();
+    } finally {
+      setActivePluginRegistry(createEmptyPluginRegistry());
+    }
+
+    expect(state?.hasApprovalResolverForScope).toBe(true);
+    expect(state?.hasBeforeToolCallHook).toBe(false);
+  });
+
+  it("reports hasApprovalResolverForScope false when only a non-matching capability is registered", () => {
+    hookRunner.hasHooks.mockReturnValue(false);
+    const registry = createEmptyPluginRegistry();
+    // Empty resolver list — no process.exec resolver present.
+    registry.approvalResolvers = [];
+    setActivePluginRegistry(registry);
+
+    let state: ReturnType<typeof getBeforeToolCallPolicyDiagnosticState> | undefined;
+    try {
+      state = getBeforeToolCallPolicyDiagnosticState();
+    } finally {
+      setActivePluginRegistry(createEmptyPluginRegistry());
+    }
+
+    expect(state?.hasApprovalResolverForScope).toBe(false);
   });
 
   it("recomputes host-derived paths after trusted policy param rewrites", async () => {

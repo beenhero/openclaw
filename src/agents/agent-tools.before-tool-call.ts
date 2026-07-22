@@ -48,6 +48,7 @@ import {
 import type { SessionState } from "../logging/diagnostic-session-state.js";
 import { redactToolDetail } from "../logging/redact.js";
 import { createSubsystemLogger } from "../logging/subsystem.js";
+import { hasApprovalResolverForScope } from "../plugins/approval-resolver.js";
 import { getGlobalHookRunnerRegistry } from "../plugins/hook-runner-global-state.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import { deriveToolParams } from "../plugins/host-tool-param-parsers.js";
@@ -241,6 +242,7 @@ type BeforeToolCallPreparingTool = AnyAgentTool & {
 
 export type BeforeToolCallPolicyDiagnosticState = {
   hasBeforeToolCallHook: boolean;
+  hasApprovalResolverForScope: boolean;
   trustedToolPolicies: Array<{
     id: string;
     pluginId: string;
@@ -248,11 +250,12 @@ export type BeforeToolCallPolicyDiagnosticState = {
   }>;
 };
 
-/** Return whether before_tool_call hooks or trusted policies are active. */
+/** Return whether before_tool_call hooks, trusted policies, or an approval resolver are active. */
 export function getBeforeToolCallPolicyDiagnosticState(): BeforeToolCallPolicyDiagnosticState {
   const policyRegistry = getGlobalHookRunnerRegistry() ?? undefined;
   return {
     hasBeforeToolCallHook: getGlobalHookRunner()?.hasHooks("before_tool_call") === true,
+    hasApprovalResolverForScope: hasApprovalResolverForScope("process.exec"),
     trustedToolPolicies: getTrustedToolPolicyDiagnosticEntries(policyRegistry),
   };
 }
