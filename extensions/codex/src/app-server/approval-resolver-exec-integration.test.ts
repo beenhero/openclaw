@@ -5,12 +5,23 @@
 // promotion) drive a real `item/commandExecution/requestApproval` SERVER request through
 // the WHOLE mock-app-server routing chain — turn-router → run-attempt-server-requests →
 // handleApprovalRequest → handleCodexAppServerApprovalRequest — so the exclusive resolver
-// branch (approval-bridge.ts) runs end-to-end against the REAL registry read (no vi.mock
-// of the decision path or the resolver-retrieval seam). Verified empirically: with the
-// native hook relay registered it terminally handles the command approval BEFORE the
-// resolver branch, so the seam is exercised in the run posture where it owns the decision
-// — the native relay disabled (`nativeHookRelay: { enabled: false }`), the alternative
-// exec-gating mechanism turned off. The native relay is a SEPARATE mechanism, not this one.
+// decision (approval-bridge.ts runProcessExecResolverDecision) runs end-to-end against the
+// REAL registry read (no vi.mock of the decision path or the resolver-retrieval seam).
+//
+// Resolver-first ordering: a registered process.exec resolver owns the command-execution
+// decision BEFORE the native hook relay stage, so the resolver is reachable regardless of
+// whether the relay is enabled. Two postures are exercised:
+//   • Relay ENABLED (`nativeHookRelay: { enabled: true }`) is the DEFAULT PRODUCTION config
+//     — loop-detection keeps `pre_tool_use` relayed. The dedicated "relay ENABLED
+//     (production)" cases prove the resolver STILL decides here (deny→decline, allow→accept)
+//     and that NO native-relay `pre_tool_use` invocation is recorded on this path (no leak).
+//     This is the config the prior version of this test could not reach: the native relay
+//     terminally `handled` every commandExecution before the resolver ran, leaving the gate
+//     dead. Empirically confirmed: reverting the resolver-first ordering fails exactly these
+//     two cases while the rest pass.
+//   • Relay DISABLED (`nativeHookRelay: { enabled: false }`) isolates the resolver from the
+//     native relay's own machinery for the remaining cases. The native relay is a SEPARATE
+//     exec-gating mechanism, not this one.
 //
 // Three cases (deadline/timeout, abort mid-hold, and the no-resolver byte-unchanged sanity
 // guard) instead invoke handleCodexAppServerApprovalRequest DIRECTLY — the exact bridge
@@ -31,6 +42,7 @@ import type {
   PluginApprovalResolverRegistration,
   PluginApprovalResolverRegistryRegistration,
 } from "openclaw/plugin-sdk/agent-harness-runtime";
+import { hasNativeHookRelayInvocation } from "openclaw/plugin-sdk/agent-harness-runtime";
 import {
   createEmptyPluginRegistry,
   setActivePluginRegistry,
@@ -96,10 +108,24 @@ function paramsForConformanceRun(): EmbeddedRunAttemptParams {
   } as unknown as EmbeddedRunAttemptParams;
 }
 
-// The native hook relay short-circuits command approvals BEFORE the resolver branch;
-// disabling it is the run posture under which the resolver owns the exec decision.
+// A registered process.exec resolver owns the exec decision BEFORE the native hook
+// relay stage regardless of whether that relay is enabled (the resolver-first fix).
+// The relay-DISABLED posture below isolates the resolver from the native relay so a
+// case can observe the resolver decision without the relay's own machinery; the
+// relay-ENABLED posture (RUN_OPTIONS_RELAY_ENABLED) is the DEFAULT PRODUCTION config
+// — loop-detection keeps `pre_tool_use` relayed — and proves the resolver stays
+// reachable and authoritative under it.
 const RUN_OPTIONS = {
   nativeHookRelay: { enabled: false, events: ["pre_tool_use"] },
+} as const;
+
+// The production posture: the native hook relay is ENABLED with `pre_tool_use`
+// relayed (loop-detection default). Before the resolver-first fix the native-relay
+// stage terminally reported `handled` for EVERY commandExecution and the resolver
+// branch was unreachable in this config; the reachable-under-relay cases below drive
+// this exact posture and assert the resolver STILL decides.
+const RUN_OPTIONS_RELAY_ENABLED = {
+  nativeHookRelay: { enabled: true, events: ["pre_tool_use"] },
 } as const;
 
 const COMMAND = "/bin/bash -lc 'rm -rf /tmp/x'";
@@ -141,6 +167,41 @@ async function finish(result: Pick<DriveResult, "harness" | "run">): Promise<voi
   await result.run;
 }
 
+// Same as driveApproval but with the native hook relay ENABLED (the default
+// production posture: `pre_tool_use` is relayed for loop-detection). Proves the
+// resolver-first fix: the resolver decides even while the native relay is active
+// and would otherwise terminally `handle` the command approval.
+async function driveApprovalRelayEnabled(
+  command = COMMAND,
+  requestId = "req-exec-relay-1",
+): Promise<DriveResult> {
+  const tapSpy = vi.spyOn(roundtrip, "requestPluginApproval");
+  const sessionFile = path.join(tempDir, "session.jsonl");
+  const workspaceDir = path.join(tempDir, "workspace");
+  const harness = createStartedThreadHarness();
+  const run = runCodexAppServerAttempt(
+    createParams(sessionFile, workspaceDir),
+    RUN_OPTIONS_RELAY_ENABLED,
+  );
+  await harness.waitForMethod("turn/start");
+  // Sanity: a native hook relay is actually registered for this run (the relay the
+  // resolver-first fix must win against), so the assertion below is not vacuous.
+  const startRequest = harness.requests.find((entry) => entry.method === "thread/start");
+  expect(() => extractRelayIdFromThreadRequest(startRequest?.params)).not.toThrow();
+  const response = await harness.handleServerRequest({
+    id: requestId,
+    method: "item/commandExecution/requestApproval",
+    params: {
+      threadId: "thread-1",
+      turnId: "turn-1",
+      itemId: "cmd-1",
+      command,
+      cwd: workspaceDir,
+    },
+  });
+  return { response, run, harness, tapSpy, workspaceDir };
+}
+
 describe("registerApprovalResolver process.exec (mock app-server, structural)", () => {
   it("deny → decline and the human approval tap is never dispatched", async () => {
     let seen: ApprovalRequest | undefined;
@@ -168,6 +229,57 @@ describe("registerApprovalResolver process.exec (mock app-server, structural)", 
   it("allow → accept (approved-once), reaching buildApprovalResponse not the human tap", async () => {
     installResolver(async (req) => ({ requestId: req.requestId, decision: "allow" }));
     const result = await driveApproval();
+    expect(result.response).toEqual({ decision: "accept" });
+    expect(result.tapSpy).not.toHaveBeenCalled();
+    await finish(result);
+  });
+
+  // ── Reachable-under-relay (production posture) ──────────────────────────────
+  // These drive the DEFAULT production config: the native hook relay ENABLED with
+  // `pre_tool_use` relayed (loop-detection). Before the resolver-first fix the
+  // native-relay stage terminally reported `handled` for every commandExecution,
+  // so `runOpenClawToolPolicyForApprovalRequest` returned `no-decision` and the
+  // resolver branch was UNREACHABLE — the whole gate was dead in production. These
+  // assert the resolver STILL decides with the relay enabled (the point of the fix).
+
+  it("relay ENABLED (production): resolver deny → decline; human tap never dispatched", async () => {
+    let seen: ApprovalRequest | undefined;
+    installResolver(async (req) => {
+      seen = req;
+      return { requestId: req.requestId, decision: "deny", reason: "policy" };
+    });
+    const result = await driveApprovalRelayEnabled();
+    expect(result.response).toEqual({ decision: "decline" });
+    // Exclusivity holds under the relay: the human tap is never reached.
+    expect(result.tapSpy).not.toHaveBeenCalled();
+    // The resolver received the fully-bound request (proving it, not the relay, decided).
+    expect(seen).toMatchObject({
+      capability: "process.exec",
+      toolName: "exec",
+      command: COMMAND,
+      toolCallId: "cmd-1",
+    });
+    expect(seen?.paramsDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+    // No leaked native-relay state: the resolver-first path returns before the
+    // native relay is ever invoked, so NO `pre_tool_use` invocation is recorded for
+    // this command (nothing to defer, leak, or deadlock).
+    expect(
+      hasNativeHookRelayInvocation({
+        relayId: extractRelayIdFromThreadRequest(
+          result.harness.requests.find((entry) => entry.method === "thread/start")?.params,
+        ),
+        event: "pre_tool_use",
+        toolUseId: "cmd-1",
+      }),
+    ).toBe(false);
+    await finish(result);
+  });
+
+  it("relay ENABLED (production): resolver allow → accept; human tap never dispatched", async () => {
+    installResolver(async (req) => ({ requestId: req.requestId, decision: "allow" }));
+    const result = await driveApprovalRelayEnabled();
+    // "accept" is the resolver-approved verb; a no-resolver auto-approve would be
+    // "acceptForSession". Proves the resolver — not the relay — produced the approval.
     expect(result.response).toEqual({ decision: "accept" });
     expect(result.tapSpy).not.toHaveBeenCalled();
     await finish(result);
