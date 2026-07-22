@@ -233,7 +233,6 @@ describe("evidence gallery", () => {
     );
     evidence.entries[0] = {
       ...absoluteEntry,
-      coverage: [{ id: `${repoRoot}/coverage`, role: `${repoRoot}/role` }],
       execution: {
         ...absoluteExecution,
         artifacts: [
@@ -283,7 +282,7 @@ describe("evidence gallery", () => {
     expect(relativeArtifact?.href).toContain("entryIndex=0&artifactIndex=1");
     expect(model.entries[0]?.sourcePath).toBe("extensions/qa-lab/src/absolute.test.ts");
     expect(model.entries[0]).toMatchObject({
-      coverage: [{ id: "<repo-root>/coverage", role: "<repo-root>/role" }],
+      coverage: [{ id: "qa.artifact", role: "primary" }],
       id: "<repo-root>/qa-lab.absolute-artifact-path",
       kind: "<repo-root>/vitest-test",
       title: "Absolute artifact path at <repo-root>",
