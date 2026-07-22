@@ -207,9 +207,9 @@ prepare-run <PR>`.
 - Do not create beta-specific `CHANGELOG.md` headings. Beta releases use the
   stable base version section, for example `v2026.4.20-beta.1` uses
   `## 2026.4.20` release notes.
-- When any beta or stable release is live, make a best-effort Discord
-  announcement using the configured secret workflow; do not block or roll back
-  the release if the announcement fails.
+- When any beta, stable, or extended-stable release is live, make a best-effort
+  Discord announcement using the release-track-specific wording; do not block
+  or roll back the release if the announcement fails.
 - When asked to announce on X, use `~/Projects/bird/bird` and follow the
   release tweet style below.
 
@@ -224,7 +224,7 @@ this release skill, not as a separate release workflow.
 
 The backport ability owns the complete mainline inventory, private-security
 reconciliation, candidate decisions, maintainer approval, coordinated staging
-PR, and proof handoff. After that PR lands, use the dedicated npm-only sequence
+PR, and proof handoff. After that PR lands, use the dedicated extended-stable sequence
 below. Never route `.33+` through the regular beta/stable release sequence.
 
 ## Publish extended-stable releases
@@ -234,28 +234,26 @@ Use this path only for the trailing completed month's `.33+` line. Treat
 `scripts/openclaw-npm-extended-stable-release.mjs`, and the release workflows
 on pinned current `main` as the exact command and validation contract.
 
-1. Check out the canonical `extended-stable/YYYY.M.33` branch after the
-   approved backport PR lands. Freeze its full 40-character SHA after verifying
-   the root and every publishable official plugin have the intended version. Do
-   not create the final tag yet.
-2. Dispatch `openclaw-npm-release.yml` from that canonical branch with the
-   frozen SHA as `tag`, `preflight_only=true`, and
-   `npm_dist_tag=extended-stable`. A full SHA is a validation-only candidate
-   input; save the successful preflight run ID and SHA.
-3. Run Full Release Validation against the same frozen SHA with the canonical
-   branch as `target_context_ref`. Use
-   `node scripts/full-release-validation-at-sha.mjs --sha <sha> --target-ref extended-stable/YYYY.M.33`
-   so trusted workflow code is pinned independently from the exact product
-   target. Save the successful run ID and its exact `run_attempt` from
-   `gh api repos/openclaw/openclaw/actions/runs/<run-id> --jq .run_attempt`.
-4. If either candidate gate fails or another backport is needed, commit it to
-   the canonical branch, freeze its new SHA, and rerun the affected gates. Do
-   not create, delete, or move a final `vYYYY.M.P` tag for candidate validation.
-5. Only after the candidate gates are green, re-resolve the canonical branch
-   tip and require it still equals the validated SHA. Create and push the
-   immutable final `vYYYY.M.P` tag at that SHA. Never move or delete a final
-   extended-stable tag: a post-tag code change needs a new patch version and a
-   new candidate.
+1. After the approved backport PR lands, check out
+   `extended-stable/YYYY.M.33`. Verify the root and every publishable official
+   plugin have the intended version, and copy current `main`'s
+   `.github/workflows/docker-release.yml` and
+   `scripts/lib/docker-release-policy.mjs` with focused checks green. Freeze the
+   full branch-tip SHA; do not tag it yet.
+2. From that branch, dispatch `openclaw-npm-release.yml` with the SHA as `tag`,
+   `preflight_only=true`, and `npm_dist_tag=extended-stable`. Save the successful
+   run ID.
+3. Run `node scripts/full-release-validation-at-sha.mjs --sha <sha>
+   --target-ref extended-stable/YYYY.M.33`. Save the successful complete run ID
+   and its `run_attempt`. Classify failures per
+   `references/extended-stable-backports.md`; any branch change requires new
+   preflight and validation evidence for its new tip.
+4. Re-resolve the branch tip, require it still equals the frozen SHA, then create
+   immutable `vYYYY.M.P`. A later source change requires a new patch; never move
+   or delete a final extended-stable tag.
+5. Reconfirm the saved validation run is `completed/success`,
+   `rerun_group=all`, and bound to the canonical branch, tag SHA, and saved
+   attempt. Do not use a regular `release-ci/*` or narrow rerun.
 6. Dispatch `plugin-npm-release.yml` from the same branch with
    `publish_scope=all-publishable`, the full release SHA as `ref`, and
    `npm_dist_tag=extended-stable`. Require complete exact-version and selector
@@ -265,15 +263,22 @@ on pinned current `main` as the exact command and validation contract.
    IDs, and `full_release_validation_run_attempt=<saved-attempt>`. The workflow
    must publish the exact prepared core tarball and prove the referenced runs
    match the canonical branch and release SHA.
-8. Independently verify the exact core package, every official plugin package,
-   and all `extended-stable` selectors. If only the core selector readback
-   fails, use the `openclaw` repair command generated by the core workflow. If
-   an official-plugin selector is missing or stale for an already-published
-   version, use the approved credential-isolated release tooling for manual
-   plugin tag repair; the OIDC source workflow cannot mutate that tag. Never
-   republish an immutable version.
-9. Do not create a GitHub Release or publish macOS, Windows, Docker, mobile,
-   website, ClawHub, or private dist-tag artifacts from this path.
+8. From a separate clean checkout of current trusted `main`, run
+   `node --import tsx scripts/openclaw-npm-postpublish-verify.ts YYYY.M.P`.
+   Verify registry signatures, provenance, prepared core and official-plugin
+   inventories, and every exact version and `extended-stable` selector. Repair
+   only the root selector with the generated command; repair existing plugin or
+   other prepared-core selectors through approved credential-isolated tooling.
+   Never republish an immutable version.
+9. Require the tag-triggered `Docker Release` run to publish and verify the
+   exact default, slim, browser, and architecture images in GHCR and Docker Hub.
+   It must advance only `extended-stable`, `extended-stable-slim`, and
+   `extended-stable-browser`. If immutable images already exist but channel
+   aliases need repair, dispatch `docker-channel-promote.yml` from current
+   `main` with the exact tag; never rebuild or move the immutable release tag
+   just to repair aliases. The normal release graph remains build-only.
+10. Do not create a GitHub Release or publish macOS, Windows, mobile, website,
+    ClawHub, or private dist-tag artifacts from this path.
 
 ## Keep release channel naming aligned
 
