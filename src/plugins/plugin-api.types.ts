@@ -351,7 +351,12 @@ export type OpenClawPluginApi = {
    * `"process.exec"` capability is wired today; any other capability is
    * rejected at registration time (fail-closed). Installed (non-bundled)
    * plugins must declare the resolver id in `contracts.approvalResolvers`.
-   * Returns a handle whose `dispose()` unregisters the resolver.
+   *
+   * Returns a handle with a `dispose()`. `dispose()` removes the registration
+   * where the underlying registry supports in-place removal (the captured
+   * registration path); on the composed runtime registry it is a no-op, and
+   * the resolver is cleared when the plugin registry is rebuilt on
+   * disable/reload — the same lifecycle as `registerTrustedToolPolicy`.
    */
   registerApprovalResolver: (registration: PluginApprovalResolverRegistration) => {
     dispose(): void;
