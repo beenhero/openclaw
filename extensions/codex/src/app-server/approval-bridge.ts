@@ -1,12 +1,16 @@
+import { randomUUID } from "node:crypto";
 /**
  * Bridges Codex app-server approval requests into OpenClaw policy hooks and
  * plugin approval UX.
  */
 import {
   type AgentApprovalEventData,
+  type ApprovalDecision,
   buildAgentHookContextChannelFields,
   type BeforeToolCallFailureDisposition,
   formatApprovalDisplayPath,
+  getApprovalResolverForScope,
+  hasApprovalResolverForScope,
   hasNativeHookRelayInvocation,
   invokeNativeHookRelay,
   resolveNativeHookRelayDeferredToolApproval,
@@ -18,9 +22,12 @@ import {
 import { normalizeTrimmedStringList } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { sliceUtf16Safe, truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
 import { formatCodexDisplayText } from "../command-formatters.js";
+import { assertProofFresh, recordAndConsumeProof } from "./approval-proof-registry.js";
 import { resolveCodexToolAbortTerminalReason } from "./dynamic-tool-execution.js";
+import { computeParamsDigest } from "./params-digest.js";
 import {
   approvalRequestExplicitlyUnavailable,
+  DEFAULT_CODEX_APPROVAL_TIMEOUT_MS,
   mapExecDecisionToOutcome,
   requestPluginApproval,
   type AppServerApprovalOutcome,
@@ -442,6 +449,79 @@ async function runOpenClawToolPolicyForApprovalRequest(params: {
   }
   if (nativeRelayOutcome?.handled) {
     return { outcome: "no-decision" };
+  }
+  // Exclusive-over-scope: a registered process.exec resolver is the sole
+  // decision owner for command-execution escalations. Resolving here — before
+  // both the trusted-tool-policy hook (below) and the human requestPluginApproval
+  // tap (handleCodexAppServerApprovalRequest:151) — means those surfaces are
+  // never reached, giving structural exclusivity with no suppressDelivery flag.
+  if (
+    params.method === "item/commandExecution/requestApproval" &&
+    hasApprovalResolverForScope("process.exec")
+  ) {
+    const resolverEntry = getApprovalResolverForScope("process.exec");
+    if (resolverEntry) {
+      const paramsDigest = computeParamsDigest(policyRequest.params);
+      const requestId = randomUUID();
+      const resolverCommand = readPolicyCommand(params.requestParams);
+      let verdict: ApprovalDecision | undefined;
+      try {
+        verdict = await resolverEntry.registration.resolve(
+          {
+            requestId,
+            capability: "process.exec",
+            toolName: policyRequest.toolName,
+            ...(resolverCommand ? { command: resolverCommand } : {}),
+            ...(cwd ? { cwd } : {}),
+            ...(params.paramsForRun.agentId ? { agentId: params.paramsForRun.agentId } : {}),
+            ...(params.paramsForRun.sessionKey
+              ? { sessionKey: params.paramsForRun.sessionKey }
+              : {}),
+            ...(params.paramsForRun.runId ? { runId: params.paramsForRun.runId } : {}),
+            ...(params.context.approvalId ? { toolCallId: params.context.approvalId } : {}),
+            paramsDigest,
+          },
+          {
+            signal: params.signal ?? new AbortController().signal,
+            deadlineMs: DEFAULT_CODEX_APPROVAL_TIMEOUT_MS,
+          },
+        );
+      } catch {
+        verdict = undefined;
+      }
+      // Fail-closed: aborted hold, no verdict, a mismatched requestId echo (the
+      // request-binding guard), or an explicit deny all resolve to a decline.
+      if (
+        params.signal?.aborted === true ||
+        !verdict ||
+        verdict.requestId !== requestId ||
+        verdict.decision === "deny"
+      ) {
+        return {
+          outcome: "denied",
+          reason: verdict?.reason ?? "approval resolver denied",
+          failureDisposition: params.signal?.aborted === true ? "timed_out" : "failed",
+        };
+      }
+      // Structural single-use + cross-request replay rejection (no crypto here).
+      const fresh = assertProofFresh(verdict.proof);
+      const consumed = recordAndConsumeProof({
+        requestId,
+        paramsDigest,
+        outcome: "allow",
+        ...(verdict.proof !== undefined ? { proof: verdict.proof } : {}),
+      });
+      if (!fresh.ok || !consumed.ok) {
+        return {
+          outcome: "denied",
+          reason: "approval proof rejected",
+          failureDisposition: "failed",
+        };
+      }
+      // allow-always durability is plugin-owned, not Codex session trust; keep
+      // this scoped to the current item (mirrors the :486-491 rationale).
+      return { outcome: "approved-once" };
+    }
   }
   const hookChannelId = buildAgentHookContextChannelFields({
     sessionKey: params.paramsForRun.sessionKey,
