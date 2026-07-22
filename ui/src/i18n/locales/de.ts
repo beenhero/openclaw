@@ -227,6 +227,7 @@ export const de: TranslationMap = {
     whatsapp: {
       title: "WhatsApp",
       subtitle: "WhatsApp Web verknüpfen und den Verbindungszustand überwachen.",
+      phoneNumber: "Telefonnummer",
       loggedOut: "Abgemeldet.",
       logoutNotCleared:
         "Es wurde keine gespeicherte WhatsApp-Sitzung gelöscht. Möglicherweise ist sie bereits nicht mehr vorhanden oder ihr Authentifizierungsverzeichnis muss manuell bereinigt werden.",
@@ -539,6 +540,9 @@ export const de: TranslationMap = {
     browserLoadFailed: "Dieser Ordner konnte nicht aufgelistet werden.",
     hiddenFolder: "Ausgeblendeter Ordner",
     worktree: "Worktree",
+    checkingGit: "Git-Verfügbarkeit wird geprüft…",
+    gitCheckUnavailable:
+      "Git konnte für diesen Ordner nicht überprüft werden. Wählen Sie ihn erneut aus, um es noch einmal zu versuchen.",
     worktreeUnavailable: "Agent-Arbeitsbereich ist kein git Checkout",
     baseBranch: "Basis-Branch",
     worktreeName: "Worktree-Name",
@@ -1353,6 +1357,25 @@ export const de: TranslationMap = {
       liveActivityHint:
         "Die neueste Assistenten- oder Tool-Aktivität unter laufenden Sitzungen anzeigen.",
     },
+    sessionObserver: {
+      title: "Sitzungsbeobachter",
+      hint: "Lang laufende Sitzungen mit einem kleinen Hilfsmodell zusammenfassen.",
+      toggle: "Sitzungsbeobachter",
+      toggleHint: "Live-Statuszusammenfassungen für abonnierte Control UI-Sitzungen erstellen.",
+      resolvedModel: "Aufgelöstes kleines Modell",
+      modelAuto: "automatisch ({model})",
+      modelConfigured: "konfiguriert ({model})",
+      modelDisabled: "deaktiviert",
+      modelUnavailable: "nicht verfügbar (kein kleines Modell)",
+      modelPicker: "Kleines Modell",
+      modelPickerHint:
+        "Wird für Beobachterzusammenfassungen und andere kurze Hilfsaufgaben verwendet.",
+      modelCatalogUnavailable: "Expliziter Modellkatalog nicht verfügbar",
+      auto: "Automatisch (Anbieterstandard)",
+      disabled: "Deaktiviert",
+      toggleNote: "Sitzungsbeobachter der Control UI aktualisieren",
+      modelNote: "Standard-Hilfsmodell aktualisieren",
+    },
     connection: {
       title: "Verbindung",
       gateway: "Gateway",
@@ -1640,6 +1663,7 @@ export const de: TranslationMap = {
     pages: "Seiten",
     customize: "Seitenleiste anpassen",
     customizeReset: "Auf Standardwerte zurücksetzen",
+    workboardGroup: "WorkBoard",
   },
   terminal: {
     title: "Terminal",
@@ -2743,9 +2767,23 @@ export const de: TranslationMap = {
       errorShow: "Details anzeigen",
       kindMcp: "MCP",
       kindHtml: "HTML",
+      kindPlugin: "Plugin",
+      pluginLoading: "Plugin-Widget wird geladen…",
+      disabledPlugin: "Widget aus deaktiviertem Plugin {pluginId}",
     },
   },
   workboard: {
+    widget: {
+      cardLabel: "Workboard-Karte",
+      summaryLabel: "Workboard-Zusammenfassung",
+      loading: "Workboard wird geladen…",
+      cardIdRequired: "Dieses Widget benötigt eine cardId-Prop.",
+      cardMissing: "Diese Workboard-Karte ist nicht mehr verfügbar.",
+      unassigned: "Nicht zugewiesen",
+      openBoard: "Board öffnen",
+      statusCounts: "Karten nach Status",
+      noActiveCards: "Keine bereiten oder laufenden Karten.",
+    },
     disabledHelpStart: "Workboard ist deaktiviert. Aktivieren Sie",
     enableConfigKey: "plugins.entries.workboard.enabled = true",
     disabledHelpEnd: ", und laden Sie dann diesen Tab neu.",
@@ -3753,6 +3791,12 @@ export const de: TranslationMap = {
   chat: {
     disconnected: "Verbindung zum Gateway getrennt.",
     waitingForApproval: "Warten auf Genehmigung…",
+    startupStatus: {
+      preparingWorkspace: "Arbeitsbereich wird vorbereitet…",
+      provisioningEnvironment: "Umgebung wird bereitgestellt…",
+      preparingContext: "Kontext wird vorbereitet…",
+      startingModel: "Modell wird gestartet…",
+    },
     archivedSessionDisabled: "Stellen Sie diese Sitzung wieder her, um Nachrichten zu senden.",
     loadOlder: "Ältere laden",
     sessionHeader: {
@@ -4046,6 +4090,7 @@ export const de: TranslationMap = {
     },
     messages: {
       activity: "Aktivität",
+      copySelection: "Kopieren",
       forkFromHere: "Ab hier verzweigen",
       hide: "Ausblenden",
       hideConfirm: "Diese Nachricht in diesem Browser ausblenden? Der Agent sieht sie weiterhin.",
@@ -4081,6 +4126,33 @@ export const de: TranslationMap = {
       followUp: "Nachfassen…",
       followUpLabel: "Im Seitenchat nachfassen",
       sendFollowUp: "Nachfrage senden",
+    },
+    observer: {
+      title: "Sitzungsbeobachter",
+      expand: "Sitzungsbeobachter erweitern",
+      collapse: "Sitzungsbeobachter reduzieren",
+      plan: "Plan",
+      progress: "{completed} von {total}",
+      pullRequests: "Pull Requests",
+      running: "Läuft",
+      checksPassing: "{count} bestanden",
+      checksFailing: "{count} fehlgeschlagen",
+      checksPending: "{count} werden ausgeführt",
+      askLabel: "Frage zu dieser Sitzung stellen",
+      askPlaceholder: "Warum macht es das?",
+      askSubmit: "Fragen",
+      askPending: "Beobachtungen werden geprüft…",
+      askBusy: "Der Beobachter beantwortet bereits eine Frage.",
+      askUnavailable: "Der Beobachter kann derzeit nicht antworten.",
+      health: {
+        "on-track": "Auf Kurs",
+        grinding: "In Bearbeitung",
+        stuck: "Festgefahren",
+        "waiting-on-user": "Wartet auf Sie",
+        "wrapping-up": "Wird abgeschlossen",
+        done: "Fertig",
+        failed: "Fehlgeschlagen",
+      },
     },
     detailPanel: {
       close: "Seitenleiste schließen",
@@ -4568,6 +4640,7 @@ export const de: TranslationMap = {
       repeatInterval: "Intervall",
       repeatOnce: "Einmalig",
       repeatOnExit: "Beim Beenden",
+      repeatStream: "Stream-Quelle",
       onExitHelp:
         "Wird ausgeführt, wenn ein überwachter Befehl beendet wird. Der Zeitplan kann hier nicht bearbeitet werden.",
       every: "Alle",
@@ -4608,6 +4681,9 @@ export const de: TranslationMap = {
         "Jetzt wird sofort ausgelöst. Nächster Heartbeat wartet auf den nächsten Zyklus.",
       action: "Aktion",
       command: "Command",
+      script: "Skript",
+      readOnlyPayloadHelp:
+        "Diese Nutzlast wurde außerhalb der Control UI erstellt. Ihre Inhalte bleiben schreibgeschützt und werden beibehalten, wenn Sie andere Änderungen speichern.",
       systemEvent: "Nachricht in der Main-Zeitachse posten",
       agentTurn: "Assistentenaufgabe ausführen (isoliert)",
       systemEventHelp:

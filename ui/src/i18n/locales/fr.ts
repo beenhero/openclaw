@@ -228,6 +228,7 @@ export const fr: TranslationMap = {
     whatsapp: {
       title: "WhatsApp",
       subtitle: "Associez WhatsApp Web et surveillez l'état de la connexion.",
+      phoneNumber: "Numéro de téléphone",
       loggedOut: "Déconnexion effectuée.",
       logoutNotCleared:
         "Aucune session WhatsApp enregistrée n’a été effacée. Elle est peut-être déjà absente, ou son répertoire d’authentification peut nécessiter un nettoyage manuel.",
@@ -541,6 +542,9 @@ export const fr: TranslationMap = {
     browserLoadFailed: "Impossible de répertorier ce dossier.",
     hiddenFolder: "Dossier masqué",
     worktree: "Worktree",
+    checkingGit: "Vérification de la disponibilité de Git…",
+    gitCheckUnavailable:
+      "Impossible de vérifier Git pour ce dossier. Sélectionnez-le à nouveau pour réessayer.",
     worktreeUnavailable: "L’espace de travail de l’agent n’est pas un checkout git",
     baseBranch: "Branche de base",
     worktreeName: "Nom du worktree",
@@ -1358,6 +1362,25 @@ export const fr: TranslationMap = {
       liveActivityHint:
         "Afficher la dernière activité de l’assistant ou de l’outil sous les sessions en cours.",
     },
+    sessionObserver: {
+      title: "Observateur de session",
+      hint: "Résumez les sessions de longue durée à l’aide d’un petit modèle utilitaire.",
+      toggle: "Observateur de session",
+      toggleHint: "Générez des résumés d’état en direct pour les sessions Control UI suivies.",
+      resolvedModel: "Petit modèle résolu",
+      modelAuto: "automatique ({model})",
+      modelConfigured: "configuré ({model})",
+      modelDisabled: "désactivé",
+      modelUnavailable: "indisponible (aucun petit modèle)",
+      modelPicker: "Petit modèle",
+      modelPickerHint:
+        "Utilisé pour les résumés de l’observateur et d’autres tâches utilitaires courtes.",
+      modelCatalogUnavailable: "Catalogue de modèles explicite indisponible",
+      auto: "Automatique (valeur par défaut du fournisseur)",
+      disabled: "Désactivé",
+      toggleNote: "Mettre à jour l’observateur de session Control UI",
+      modelNote: "Mettre à jour le modèle utilitaire par défaut",
+    },
     connection: {
       title: "Connexion",
       gateway: "Gateway",
@@ -1647,6 +1670,7 @@ export const fr: TranslationMap = {
     pages: "Pages",
     customize: "Personnaliser la barre latérale",
     customizeReset: "Réinitialiser les paramètres par défaut",
+    workboardGroup: "WorkBoard",
   },
   terminal: {
     title: "Terminal",
@@ -2758,9 +2782,23 @@ export const fr: TranslationMap = {
       errorShow: "Afficher les détails",
       kindMcp: "MCP",
       kindHtml: "HTML",
+      kindPlugin: "Plugin",
+      pluginLoading: "Chargement du widget du plugin…",
+      disabledPlugin: "Widget du plugin désactivé {pluginId}",
     },
   },
   workboard: {
+    widget: {
+      cardLabel: "Carte Workboard",
+      summaryLabel: "Résumé Workboard",
+      loading: "Chargement de Workboard…",
+      cardIdRequired: "Ce widget nécessite une propriété cardId.",
+      cardMissing: "Cette carte Workboard n’est plus disponible.",
+      unassigned: "Non attribuée",
+      openBoard: "Ouvrir le tableau",
+      statusCounts: "Cartes par statut",
+      noActiveCards: "Aucune carte prête ou en cours d’exécution.",
+    },
     disabledHelpStart: "Le tableau de travail est désactivé. Activez",
     enableConfigKey: "plugins.entries.workboard.enabled = true",
     disabledHelpEnd: ", puis rechargez cet onglet.",
@@ -3776,6 +3814,12 @@ export const fr: TranslationMap = {
   chat: {
     disconnected: "Déconnecté du Gateway.",
     waitingForApproval: "En attente d’approbation…",
+    startupStatus: {
+      preparingWorkspace: "Préparation de l’espace de travail…",
+      provisioningEnvironment: "Provisionnement de l’environnement…",
+      preparingContext: "Préparation du contexte…",
+      startingModel: "Démarrage du modèle…",
+    },
     archivedSessionDisabled: "Restaurez cette session pour envoyer des messages.",
     loadOlder: "Charger les plus anciens",
     sessionHeader: {
@@ -4068,6 +4112,7 @@ export const fr: TranslationMap = {
     },
     messages: {
       activity: "Activité",
+      copySelection: "Copier",
       forkFromHere: "Créer une branche à partir d’ici",
       hide: "Masquer",
       hideConfirm: "Masquer ce message dans ce navigateur ? L’agent le verra toujours.",
@@ -4103,6 +4148,33 @@ export const fr: TranslationMap = {
       followUp: "Relancer…",
       followUpLabel: "Poursuivre dans le chat latéral",
       sendFollowUp: "Envoyer le suivi",
+    },
+    observer: {
+      title: "Observateur de session",
+      expand: "Développer l’observateur de session",
+      collapse: "Réduire l’observateur de session",
+      plan: "Plan",
+      progress: "{completed} sur {total}",
+      pullRequests: "Demandes de fusion",
+      running: "En cours",
+      checksPassing: "{count} réussis",
+      checksFailing: "{count} en échec",
+      checksPending: "{count} en cours",
+      askLabel: "Poser une question sur cette session",
+      askPlaceholder: "Pourquoi fait-il cela ?",
+      askSubmit: "Demander",
+      askPending: "Vérification des observations…",
+      askBusy: "L’observateur répond déjà à une question.",
+      askUnavailable: "L’observateur ne peut pas répondre pour le moment.",
+      health: {
+        "on-track": "En bonne voie",
+        grinding: "En cours",
+        stuck: "Bloqué",
+        "waiting-on-user": "En attente de votre réponse",
+        "wrapping-up": "Finalisation",
+        done: "Terminé",
+        failed: "Échoué",
+      },
     },
     detailPanel: {
       close: "Fermer la barre latérale",
@@ -4588,6 +4660,7 @@ export const fr: TranslationMap = {
       repeatInterval: "Intervalle",
       repeatOnce: "Une fois",
       repeatOnExit: "À la sortie",
+      repeatStream: "Source du flux",
       onExitHelp:
         "S'exécute lorsqu'une commande surveillée se termine. La planification ne peut pas être modifiée ici.",
       every: "Toutes les",
@@ -4627,6 +4700,9 @@ export const fr: TranslationMap = {
         "Maintenant déclenche immédiatement. Prochain heartbeat attend le cycle suivant.",
       action: "Action",
       command: "Command",
+      script: "Script",
+      readOnlyPayloadHelp:
+        "Cette charge utile a été créée en dehors de Control UI. Son contenu reste en lecture seule et est conservé lorsque vous enregistrez d’autres modifications.",
       systemEvent: "Publier un message dans la chronologie principale",
       agentTurn: "Exécuter une tâche d’assistant (isolée)",
       systemEventHelp:

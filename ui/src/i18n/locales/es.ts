@@ -227,6 +227,7 @@ export const es: TranslationMap = {
     whatsapp: {
       title: "WhatsApp",
       subtitle: "Vincula WhatsApp Web y supervisa el estado de la conexión.",
+      phoneNumber: "Número de teléfono",
       loggedOut: "Sesión cerrada.",
       logoutNotCleared:
         "No se eliminó ninguna sesión de WhatsApp almacenada. Puede que ya no exista o que su directorio de autenticación requiera una limpieza manual.",
@@ -535,6 +536,9 @@ export const es: TranslationMap = {
     browserLoadFailed: "No se pudo listar esa carpeta.",
     hiddenFolder: "Carpeta oculta",
     worktree: "Worktree",
+    checkingGit: "Comprobando la disponibilidad de Git…",
+    gitCheckUnavailable:
+      "No se pudo verificar Git para esta carpeta. Vuelve a elegirla para reintentarlo.",
     worktreeUnavailable: "El espacio de trabajo del agente no es un checkout de git",
     baseBranch: "Rama base",
     worktreeName: "Nombre del worktree",
@@ -1354,6 +1358,25 @@ export const es: TranslationMap = {
       liveActivityHint:
         "Muestra la actividad más reciente del asistente o de las herramientas debajo de las sesiones en ejecución.",
     },
+    sessionObserver: {
+      title: "Observador de sesiones",
+      hint: "Resume las sesiones de larga duración con un modelo auxiliar pequeño.",
+      toggle: "Observador de sesiones",
+      toggleHint:
+        "Genera resúmenes de estado en tiempo real para las sesiones suscritas de Control UI.",
+      resolvedModel: "Modelo pequeño seleccionado",
+      modelAuto: "automático ({model})",
+      modelConfigured: "configurado ({model})",
+      modelDisabled: "deshabilitado",
+      modelUnavailable: "no disponible (no hay ningún modelo pequeño)",
+      modelPicker: "Modelo pequeño",
+      modelPickerHint: "Se usa para los resúmenes del observador y otras tareas auxiliares breves.",
+      modelCatalogUnavailable: "El catálogo de modelos explícito no está disponible",
+      auto: "Automático (valor predeterminado del proveedor)",
+      disabled: "Desactivado",
+      toggleNote: "Actualiza el observador de sesiones de Control UI",
+      modelNote: "Actualiza el modelo auxiliar predeterminado",
+    },
     connection: {
       title: "Conexión",
       gateway: "Gateway",
@@ -1641,6 +1664,7 @@ export const es: TranslationMap = {
     pages: "Páginas",
     customize: "Personalizar barra lateral",
     customizeReset: "Restablecer valores predeterminados",
+    workboardGroup: "WorkBoard",
   },
   terminal: {
     title: "Terminal",
@@ -2733,9 +2757,23 @@ export const es: TranslationMap = {
       errorShow: "Mostrar detalles",
       kindMcp: "MCP",
       kindHtml: "HTML",
+      kindPlugin: "Plugin",
+      pluginLoading: "Cargando el widget del plugin…",
+      disabledPlugin: "Widget del plugin deshabilitado {pluginId}",
     },
   },
   workboard: {
+    widget: {
+      cardLabel: "Tarjeta del tablero de trabajo",
+      summaryLabel: "Resumen del tablero de trabajo",
+      loading: "Cargando el tablero de trabajo…",
+      cardIdRequired: "Este widget necesita una propiedad cardId.",
+      cardMissing: "Esta tarjeta del tablero de trabajo ya no está disponible.",
+      unassigned: "Sin asignar",
+      openBoard: "Abrir tablero",
+      statusCounts: "Tarjetas por estado",
+      noActiveCards: "No hay tarjetas listas ni en ejecución.",
+    },
     disabledHelpStart: "Workboard está desactivado. Activa",
     enableConfigKey: "plugins.entries.workboard.enabled = true",
     disabledHelpEnd: ", luego vuelve a cargar esta pestaña.",
@@ -3743,6 +3781,12 @@ export const es: TranslationMap = {
   chat: {
     disconnected: "Desconectado de la puerta de enlace.",
     waitingForApproval: "Esperando aprobación…",
+    startupStatus: {
+      preparingWorkspace: "Preparando el espacio de trabajo…",
+      provisioningEnvironment: "Aprovisionando el entorno…",
+      preparingContext: "Preparando el contexto…",
+      startingModel: "Iniciando el modelo…",
+    },
     archivedSessionDisabled: "Restaura esta sesión para enviar mensajes.",
     loadOlder: "Cargar anteriores",
     sessionHeader: {
@@ -4034,6 +4078,7 @@ export const es: TranslationMap = {
     },
     messages: {
       activity: "Actividad",
+      copySelection: "Copiar",
       forkFromHere: "Bifurcar desde aquí",
       hide: "Ocultar",
       hideConfirm: "¿Ocultar este mensaje en este navegador? El agente seguirá viéndolo.",
@@ -4069,6 +4114,33 @@ export const es: TranslationMap = {
       followUp: "Seguimiento…",
       followUpLabel: "Seguimiento en el chat lateral",
       sendFollowUp: "Enviar seguimiento",
+    },
+    observer: {
+      title: "Observador de la sesión",
+      expand: "Expandir el observador de la sesión",
+      collapse: "Contraer el observador de la sesión",
+      plan: "Plan",
+      progress: "{completed} de {total}",
+      pullRequests: "Solicitudes de incorporación de cambios",
+      running: "En ejecución",
+      checksPassing: "{count} superadas",
+      checksFailing: "{count} con errores",
+      checksPending: "{count} en curso",
+      askLabel: "Preguntar sobre esta sesión",
+      askPlaceholder: "¿Por qué está haciendo eso?",
+      askSubmit: "Preguntar",
+      askPending: "Comprobando las observaciones…",
+      askBusy: "El observador ya está respondiendo una pregunta.",
+      askUnavailable: "El observador no puede responder en este momento.",
+      health: {
+        "on-track": "Por buen camino",
+        grinding: "Trabajando",
+        stuck: "Atascado",
+        "waiting-on-user": "Esperándote",
+        "wrapping-up": "Finalizando",
+        done: "Listo",
+        failed: "Fallidas",
+      },
     },
     detailPanel: {
       close: "Cerrar barra lateral",
@@ -4554,6 +4626,7 @@ export const es: TranslationMap = {
       repeatInterval: "Intervalo",
       repeatOnce: "Una vez",
       repeatOnExit: "Al salir",
+      repeatStream: "Fuente del flujo",
       onExitHelp:
         "Se ejecuta cuando un comando supervisado finaliza. La programación no se puede editar aquí.",
       every: "Cada",
@@ -4592,6 +4665,9 @@ export const es: TranslationMap = {
       wakeModeHelp: "Ahora se activa inmediatamente. Próximo latido espera el siguiente ciclo.",
       action: "Acción",
       command: "Command",
+      script: "Script",
+      readOnlyPayloadHelp:
+        "Este payload se creó fuera de Control UI. Su contenido permanece en modo de solo lectura y se conserva cuando guardas otros cambios.",
       systemEvent: "Publicar mensaje en la línea de tiempo principal",
       agentTurn: "Ejecutar tarea del asistente (aislada)",
       systemEventHelp:
