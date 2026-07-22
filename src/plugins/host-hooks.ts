@@ -81,6 +81,72 @@ export type PluginTrustedToolPolicyRegistration = {
   ) => PluginToolPolicyDecision | void | Promise<PluginToolPolicyDecision | void>;
 };
 
+/**
+ * Capability namespace a plugin approval resolver can claim. Only
+ * `"process.exec"` is wired today; any other capability is rejected at
+ * registration time (fail-closed, design §4.1/§7).
+ */
+export type ApprovalCapability = "process.exec";
+
+/** Static scope declaration for an approval resolver. */
+export type ApprovalScope = {
+  capabilities: ApprovalCapability[];
+};
+
+/**
+ * A single approval request handed to a registered resolver. `paramsDigest`
+ * is computed gateway-side over the exact params the tool will run and binds
+ * the returned decision to this request (replay/substitution guard).
+ */
+export type ApprovalRequest = {
+  requestId: string;
+  capability: ApprovalCapability;
+  toolName: string;
+  command?: string;
+  cwd?: string;
+  agentId?: string;
+  sessionKey?: string;
+  runId?: string;
+  toolCallId?: string;
+  paramsDigest: string;
+};
+
+/**
+ * A resolver's decision. `proof` is an optional recorded-proof token; the
+ * gateway enforces structural single-use/replay on it (crypto validation is
+ * provider-internal, design §4).
+ */
+export type ApprovalDecision = {
+  requestId: string;
+  decision: "allow" | "deny";
+  reason?: string;
+  proof?: string;
+};
+
+/**
+ * A capability-scoped approval resolver. Called with an abort signal and a
+ * deadline; the returned Promise is the async hold (e.g. wallet-sign). It
+ * must resolve to an `ApprovalDecision` echoing the request's `requestId`.
+ */
+export type ApprovalResolver = (
+  req: ApprovalRequest,
+  opts: { signal: AbortSignal; deadlineMs: number },
+) => Promise<ApprovalDecision>;
+
+/**
+ * Registration payload for a capability-scoped approval resolver. `exclusive`
+ * is `true`: a registered resolver takes exclusive ownership of decisions in
+ * its scope (design §4.3). Installed (non-bundled) plugins must declare the
+ * resolver id in `contracts.approvalResolvers`.
+ */
+export type PluginApprovalResolverRegistration = {
+  id: string;
+  description: string;
+  scope: ApprovalScope;
+  exclusive: true;
+  resolve: ApprovalResolver;
+};
+
 export type PluginToolMetadataRegistration = {
   toolName: string;
   displayName?: string;

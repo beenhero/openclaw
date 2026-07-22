@@ -65,6 +65,7 @@ type BuildPluginApiParams = {
       | "registerSessionExtension"
       | "enqueueNextTurnInjection"
       | "registerTrustedToolPolicy"
+      | "registerApprovalResolver"
       | "registerToolMetadata"
       | "registerControlUiDescriptor"
       | "registerRuntimeLifecycle"
@@ -150,6 +151,9 @@ const noopEnqueueNextTurnInjection: OpenClawPluginApi["enqueueNextTurnInjection"
   injection,
 ) => ({ enqueued: false, id: "", sessionKey: injection.sessionKey });
 const noopRegisterTrustedToolPolicy: OpenClawPluginApi["registerTrustedToolPolicy"] = () => {};
+const noopRegisterApprovalResolver: OpenClawPluginApi["registerApprovalResolver"] = () => ({
+  dispose() {},
+});
 const noopRegisterToolMetadata: OpenClawPluginApi["registerToolMetadata"] = () => {};
 const noopRegisterControlUiDescriptor: OpenClawPluginApi["registerControlUiDescriptor"] = () => {};
 const noopRegisterRuntimeLifecycle: OpenClawPluginApi["registerRuntimeLifecycle"] = () => {};
@@ -266,6 +270,7 @@ export function buildPluginApi(params: BuildPluginApiParams): OpenClawPluginApi 
     registerSessionExtension: handlers.registerSessionExtension ?? noopRegisterSessionExtension,
     enqueueNextTurnInjection: handlers.enqueueNextTurnInjection ?? noopEnqueueNextTurnInjection,
     registerTrustedToolPolicy: handlers.registerTrustedToolPolicy ?? noopRegisterTrustedToolPolicy,
+    registerApprovalResolver: handlers.registerApprovalResolver ?? noopRegisterApprovalResolver,
     registerToolMetadata: handlers.registerToolMetadata ?? noopRegisterToolMetadata,
     registerControlUiDescriptor:
       handlers.registerControlUiDescriptor ?? noopRegisterControlUiDescriptor,

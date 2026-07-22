@@ -47,6 +47,7 @@ import type {
   PluginSessionTurnUnscheduleByTagResult,
   PluginToolMetadataRegistration,
   PluginTrustedToolPolicyRegistration,
+  PluginApprovalResolverRegistration,
 } from "./host-hooks.js";
 import type { PluginLogger } from "./logger-types.js";
 import type { MemoryCorpusSupplement } from "./memory-state.js";
@@ -344,6 +345,17 @@ export type OpenClawPluginApi = {
    * policy id in `contracts.trustedToolPolicies`.
    */
   registerTrustedToolPolicy: (policy: PluginTrustedToolPolicyRegistration) => void;
+  /**
+   * Register a capability-scoped approval resolver (design §4). The resolver
+   * takes EXCLUSIVE ownership of approval decisions within its scope. Only the
+   * `"process.exec"` capability is wired today; any other capability is
+   * rejected at registration time (fail-closed). Installed (non-bundled)
+   * plugins must declare the resolver id in `contracts.approvalResolvers`.
+   * Returns a handle whose `dispose()` unregisters the resolver.
+   */
+  registerApprovalResolver: (registration: PluginApprovalResolverRegistration) => {
+    dispose(): void;
+  };
   /**
    * Register display/policy metadata for a plugin-owned tool. Metadata is
    * scoped to the (pluginId, toolName) pair at projection time, so plugins
