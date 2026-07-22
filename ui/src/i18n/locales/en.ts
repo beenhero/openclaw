@@ -641,6 +641,8 @@ export const en: TranslationMap = {
     openWorkboardCard: "Open Workboard card",
     dashboardAvailable: "Dashboard available",
     approvalNeeded: "Approval needed",
+    queuedMessage: "{count} message queued to send",
+    queuedMessages: "{count} messages queued to send",
     noSessions: "No threads found.",
     noActiveSessions: "No active threads.",
     noArchivedSessions: "No archived sessions.",
@@ -2967,6 +2969,7 @@ export const en: TranslationMap = {
     eventStale: "Stale thread",
   },
   connection: {
+    queuedCount: "{count} queued",
     reconnecting: "Reconnecting…",
     retryNow: "Retry now",
     access: {
@@ -4130,6 +4133,7 @@ export const en: TranslationMap = {
       placeholderWithAttachments: "Add a message or paste more images...",
       placeholderDisconnected: "Connect to the gateway to start chatting...",
       offlineHint: "Offline — messages will be queued and sent when the connection returns.",
+      offlineQueuedHint: "Offline — {count} queued; messages send when the connection returns.",
       preparingModel: "Preparing model...",
       responding: "{name} is responding...",
       sendingMessage: "Sending message...",

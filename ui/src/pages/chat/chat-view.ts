@@ -123,6 +123,7 @@ export type ChatProps = {
   assistantAvatarUrl?: string | null;
   draft: string;
   queue: ChatQueueItem[];
+  queuedOutboxCount?: number;
   realtimeTalkActive?: boolean;
   realtimeTalkStatus?: RealtimeTalkStatus;
   realtimeTalkDetail?: string | null;
@@ -398,6 +399,7 @@ export function renderChat(props: ChatProps) {
     currentAgentId: props.currentAgentId,
     connected: props.connected,
     offline: props.offline,
+    queuedOutboxCount: props.queuedOutboxCount,
     canSend: props.canSend,
     disabledReason: props.disabledReason,
     disabledBanner: props.disabledBanner,
