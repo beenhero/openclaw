@@ -57,6 +57,26 @@ describe("registerApprovalResolver host registrar", () => {
     expect(registry.registry.diagnostics).toEqual([]);
   });
 
+  it("THROWS (hard fail-closed) when scope.capabilities is empty (zero capabilities claimed)", () => {
+    const { config, registry } = createPluginRegistryFixture();
+    expect(() =>
+      registerTestPlugin({
+        registry,
+        config,
+        record: createPluginRecord({ id: "sigil", name: "Sigil", origin: "bundled" }),
+        register(api) {
+          api.registerApprovalResolver(
+            execResolver({
+              id: "sigil-empty",
+              scope: { capabilities: [] as never },
+            }),
+          );
+        },
+      }),
+    ).toThrow(/only supports the process\.exec capability/);
+    expect(registry.registry.approvalResolvers).toEqual([]);
+  });
+
   it("THROWS (hard fail-closed) when scope.capabilities includes a non-process.exec entry", () => {
     const { config, registry } = createPluginRegistryFixture();
     expect(() =>
