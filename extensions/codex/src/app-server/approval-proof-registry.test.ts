@@ -84,6 +84,33 @@ describe("Codex approval-proof registry", () => {
     expect(assertProofFresh(undefined)).toEqual({ ok: true });
   });
 
+  it("rejects recordAndConsumeProof when requestId is empty", () => {
+    expect(
+      recordAndConsumeProof({
+        requestId: "",
+        paramsDigest: "sha256:aaaa",
+        outcome: "allow",
+      }),
+    ).toEqual({ ok: false, reason: "invalid_identifier" });
+  });
+
+  it("rejects recordAndConsumeProof when paramsDigest is empty", () => {
+    expect(
+      recordAndConsumeProof({
+        requestId: "req-1",
+        paramsDigest: "",
+        outcome: "allow",
+      }),
+    ).toEqual({ ok: false, reason: "invalid_identifier" });
+  });
+
+  it("rejects assertProofFresh when proof is an empty string", () => {
+    expect(assertProofFresh("")).toEqual({
+      ok: false,
+      reason: "invalid_identifier",
+    });
+  });
+
   it("__resetProofRegistryForTest clears both the consumed keys and the seen proofs", () => {
     recordAndConsumeProof({
       requestId: "req-1",

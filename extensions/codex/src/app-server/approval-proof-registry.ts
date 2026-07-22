@@ -14,7 +14,7 @@
  * treat a restart as a fresh registry.
  */
 
-type ProofKey = string; // `${requestId} ${paramsDigest}`
+type ProofKey = string; // `${requestId.length}:${requestId}\0${paramsDigest}` — length-prefixed + null-byte, injective
 
 type ProofRecord = {
   requestId: string;
@@ -44,7 +44,13 @@ export function recordAndConsumeProof(rec: {
   paramsDigest: string;
   outcome: "allow" | "deny";
   proof?: string;
-}): { ok: true } | { ok: false; reason: "already_consumed" } {
+}): { ok: true } | { ok: false; reason: "already_consumed" | "invalid_identifier" } {
+  if (!rec.requestId) {
+    return { ok: false, reason: "invalid_identifier" };
+  }
+  if (!rec.paramsDigest) {
+    return { ok: false, reason: "invalid_identifier" };
+  }
   const key = proofKey(rec.requestId, rec.paramsDigest);
   if (consumedRecords.has(key)) {
     return { ok: false, reason: "already_consumed" };
@@ -60,9 +66,12 @@ export function recordAndConsumeProof(rec: {
  */
 export function assertProofFresh(
   proof: string | undefined,
-): { ok: true } | { ok: false; reason: "replayed" } {
+): { ok: true } | { ok: false; reason: "replayed" | "invalid_identifier" } {
   if (proof === undefined) {
     return { ok: true };
+  }
+  if (proof === "") {
+    return { ok: false, reason: "invalid_identifier" };
   }
   if (seenProofs.has(proof)) {
     return { ok: false, reason: "replayed" };
