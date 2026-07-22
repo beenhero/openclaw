@@ -226,6 +226,7 @@ export const ja_JP: TranslationMap = {
     whatsapp: {
       title: "WhatsApp",
       subtitle: "WhatsApp Web をリンクし、接続の健全性を監視します。",
+      phoneNumber: "電話番号",
       loggedOut: "ログアウトしました。",
       logoutNotCleared:
         "保存されている WhatsApp セッションは消去されませんでした。すでに存在しないか、認証ディレクトリを手動でクリーンアップする必要がある可能性があります。",
@@ -539,6 +540,9 @@ export const ja_JP: TranslationMap = {
     browserLoadFailed: "そのフォルダを一覧表示できませんでした。",
     hiddenFolder: "隠しフォルダ",
     worktree: "ワークツリー",
+    checkingGit: "Git の利用可否を確認中…",
+    gitCheckUnavailable:
+      "このフォルダーで Git を確認できませんでした。再試行するには、もう一度選択してください。",
     worktreeUnavailable: "エージェントワークスペースは git checkout ではありません",
     baseBranch: "ベースブランチ",
     worktreeName: "ワークツリー名",
@@ -1350,6 +1354,24 @@ export const ja_JP: TranslationMap = {
       liveActivityHint:
         "実行中のセッションの下に、最新のアシスタントまたはツールのアクティビティを表示します。",
     },
+    sessionObserver: {
+      title: "セッションオブザーバー",
+      hint: "小規模なユーティリティモデルを使用して、長時間実行中のセッションを要約します。",
+      toggle: "セッションオブザーバー",
+      toggleHint: "購読中の Control UI セッションのライブステータス概要を生成します。",
+      resolvedModel: "解決済みの小規模モデル",
+      modelAuto: "自動（{model}）",
+      modelConfigured: "設定済み（{model}）",
+      modelDisabled: "無効",
+      modelUnavailable: "利用不可（小規模モデルなし）",
+      modelPicker: "小規模モデル",
+      modelPickerHint: "オブザーバーの概要やその他の短いユーティリティタスクに使用されます。",
+      modelCatalogUnavailable: "明示的なモデルカタログを利用できません",
+      auto: "自動（プロバイダーのデフォルト）",
+      disabled: "無効",
+      toggleNote: "Control UI セッションオブザーバーを更新",
+      modelNote: "デフォルトのユーティリティモデルを更新",
+    },
     connection: {
       title: "接続",
       gateway: "Gateway",
@@ -1636,6 +1658,7 @@ export const ja_JP: TranslationMap = {
     pages: "ページ",
     customize: "サイドバーをカスタマイズ",
     customizeReset: "デフォルトに戻す",
+    workboardGroup: "WorkBoard",
   },
   terminal: {
     title: "Terminal",
@@ -2716,9 +2739,23 @@ export const ja_JP: TranslationMap = {
       errorShow: "詳細を表示",
       kindMcp: "MCP",
       kindHtml: "HTML",
+      kindPlugin: "プラグイン",
+      pluginLoading: "プラグインウィジェットを読み込み中…",
+      disabledPlugin: "無効化されたプラグイン {pluginId} のウィジェット",
     },
   },
   workboard: {
+    widget: {
+      cardLabel: "Workboard カード",
+      summaryLabel: "Workboard の概要",
+      loading: "Workboard を読み込み中…",
+      cardIdRequired: "このウィジェットには cardId プロパティが必要です。",
+      cardMissing: "この Workboard カードは利用できなくなりました。",
+      unassigned: "未割り当て",
+      openBoard: "ボードを開く",
+      statusCounts: "ステータス別のカード",
+      noActiveCards: "準備完了または実行中のカードはありません。",
+    },
     disabledHelpStart: "Workboard は無効になっています。有効にするには",
     enableConfigKey: "plugins.entries.workboard.enabled = true",
     disabledHelpEnd: "を設定してから、このタブを再読み込みしてください。",
@@ -3719,6 +3756,12 @@ export const ja_JP: TranslationMap = {
   chat: {
     disconnected: "Gateway から切断されました。",
     waitingForApproval: "承認を待っています…",
+    startupStatus: {
+      preparingWorkspace: "ワークスペースを準備中…",
+      provisioningEnvironment: "環境をプロビジョニング中…",
+      preparingContext: "コンテキストを準備中…",
+      startingModel: "モデルを起動中…",
+    },
     archivedSessionDisabled: "メッセージを送信するには、このセッションを復元してください。",
     loadOlder: "以前の項目を読み込む",
     sessionHeader: {
@@ -4008,6 +4051,7 @@ export const ja_JP: TranslationMap = {
     },
     messages: {
       activity: "アクティビティ",
+      copySelection: "コピー",
       forkFromHere: "ここからフォーク",
       hide: "非表示",
       hideConfirm:
@@ -4044,6 +4088,33 @@ export const ja_JP: TranslationMap = {
       followUp: "フォローアップ…",
       followUpLabel: "サイドチャットでフォローアップ",
       sendFollowUp: "フォローアップを送信",
+    },
+    observer: {
+      title: "セッションオブザーバー",
+      expand: "セッションオブザーバーを展開",
+      collapse: "セッションオブザーバーを折りたたむ",
+      plan: "プラン",
+      progress: "{total} 件中 {completed} 件",
+      pullRequests: "プルリクエスト",
+      running: "実行中",
+      checksPassing: "{count} 件が合格",
+      checksFailing: "{count} 件失敗",
+      checksPending: "{count} 件実行中",
+      askLabel: "このセッションについて質問",
+      askPlaceholder: "なぜこのような動作をしているのですか？",
+      askSubmit: "確認",
+      askPending: "観察結果を確認中…",
+      askBusy: "オブザーバーはすでに別の質問に回答中です。",
+      askUnavailable: "現在、オブザーバーは回答できません。",
+      health: {
+        "on-track": "順調",
+        grinding: "作業中",
+        stuck: "行き詰まり",
+        "waiting-on-user": "あなたの対応待ち",
+        "wrapping-up": "完了処理中",
+        done: "完了",
+        failed: "失敗",
+      },
     },
     detailPanel: {
       close: "サイドバーを閉じる",
@@ -4524,6 +4595,7 @@ export const ja_JP: TranslationMap = {
       repeatInterval: "間隔",
       repeatOnce: "1回",
       repeatOnExit: "終了時",
+      repeatStream: "ストリームソース",
       onExitHelp:
         "監視対象のコマンドが終了したときに実行されます。スケジュールはここでは編集できません。",
       every: "毎",
@@ -4563,6 +4635,9 @@ export const ja_JP: TranslationMap = {
       wakeModeHelp: "Now は即時にトリガーされます。Next heartbeat は次のサイクルまで待機します。",
       action: "アクション",
       command: "Command",
+      script: "スクリプト",
+      readOnlyPayloadHelp:
+        "このペイロードは Control UI の外部で作成されました。内容は読み取り専用のまま保持され、他の変更を保存しても維持されます。",
       systemEvent: "メインタイムラインにメッセージを投稿",
       agentTurn: "アシスタントタスクを実行（分離）",
       systemEventHelp:

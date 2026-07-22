@@ -226,6 +226,7 @@ export const it: TranslationMap = {
     whatsapp: {
       title: "WhatsApp",
       subtitle: "Collega WhatsApp Web e monitora lo stato della connessione.",
+      phoneNumber: "Numero di telefono",
       loggedOut: "Disconnesso.",
       logoutNotCleared:
         "Nessuna sessione WhatsApp memorizzata è stata cancellata. Potrebbe essere già assente oppure la relativa directory di autenticazione potrebbe richiedere una pulizia manuale.",
@@ -538,6 +539,9 @@ export const it: TranslationMap = {
     browserLoadFailed: "Impossibile elencare quella cartella.",
     hiddenFolder: "Cartella nascosta",
     worktree: "Worktree",
+    checkingGit: "Verifica della disponibilità di Git…",
+    gitCheckUnavailable:
+      "Impossibile verificare Git per questa cartella. Selezionala di nuovo per riprovare.",
     worktreeUnavailable: "L'area di lavoro dell'agente non è un checkout git",
     baseBranch: "Branch di base",
     worktreeName: "Nome del worktree",
@@ -1357,6 +1361,26 @@ export const it: TranslationMap = {
       liveActivityHint:
         "Mostra l'attività più recente dell'assistente o degli strumenti sotto le sessioni in esecuzione.",
     },
+    sessionObserver: {
+      title: "Osservatore delle sessioni",
+      hint: "Riassumi le sessioni di lunga durata con un piccolo modello di utilità.",
+      toggle: "Osservatore delle sessioni",
+      toggleHint:
+        "Genera riepiloghi di stato in tempo reale per le sessioni Control UI sottoscritte.",
+      resolvedModel: "Piccolo modello risolto",
+      modelAuto: "automatico ({model})",
+      modelConfigured: "configurato ({model})",
+      modelDisabled: "disabilitato",
+      modelUnavailable: "non disponibile (nessun piccolo modello)",
+      modelPicker: "Piccolo modello",
+      modelPickerHint:
+        "Utilizzato per i riepiloghi dell'osservatore e altre brevi attività di utilità.",
+      modelCatalogUnavailable: "Catalogo esplicito dei modelli non disponibile",
+      auto: "Automatico (impostazione predefinita del provider)",
+      disabled: "Disabilitato",
+      toggleNote: "Aggiorna l'osservatore delle sessioni di Control UI",
+      modelNote: "Aggiorna il modello di utilità predefinito",
+    },
     connection: {
       title: "Connessione",
       gateway: "Gateway",
@@ -1643,6 +1667,7 @@ export const it: TranslationMap = {
     pages: "Pagine",
     customize: "Personalizza barra laterale",
     customizeReset: "Ripristina impostazioni predefinite",
+    workboardGroup: "WorkBoard",
   },
   terminal: {
     title: "Terminal",
@@ -2739,9 +2764,23 @@ export const it: TranslationMap = {
       errorShow: "Mostra dettagli",
       kindMcp: "MCP",
       kindHtml: "HTML",
+      kindPlugin: "Plugin",
+      pluginLoading: "Caricamento del widget del plugin…",
+      disabledPlugin: "Widget del plugin disabilitato {pluginId}",
     },
   },
   workboard: {
+    widget: {
+      cardLabel: "Scheda Workboard",
+      summaryLabel: "Riepilogo Workboard",
+      loading: "Caricamento di Workboard…",
+      cardIdRequired: "Questo widget richiede una proprietà cardId.",
+      cardMissing: "Questa scheda Workboard non è più disponibile.",
+      unassigned: "Non assegnata",
+      openBoard: "Apri bacheca",
+      statusCounts: "Schede per stato",
+      noActiveCards: "Nessuna scheda pronta o in esecuzione.",
+    },
     disabledHelpStart: "Workboard è disabilitata. Abilita",
     enableConfigKey: "plugins.entries.workboard.enabled = true",
     disabledHelpEnd: ", quindi ricarica questa scheda.",
@@ -3748,6 +3787,12 @@ export const it: TranslationMap = {
   chat: {
     disconnected: "Disconnesso dal gateway.",
     waitingForApproval: "In attesa di approvazione…",
+    startupStatus: {
+      preparingWorkspace: "Preparazione dell'area di lavoro…",
+      provisioningEnvironment: "Configurazione dell'ambiente…",
+      preparingContext: "Preparazione del contesto…",
+      startingModel: "Avvio del modello…",
+    },
     archivedSessionDisabled: "Ripristina questa sessione per inviare messaggi.",
     loadOlder: "Carica precedenti",
     sessionHeader: {
@@ -4039,6 +4084,7 @@ export const it: TranslationMap = {
     },
     messages: {
       activity: "Attività",
+      copySelection: "Copia",
       forkFromHere: "Crea una diramazione da qui",
       hide: "Nascondi",
       hideConfirm: "Nascondere questo messaggio in questo browser? L'agente continuerà a vederlo.",
@@ -4074,6 +4120,33 @@ export const it: TranslationMap = {
       followUp: "Continua…",
       followUpLabel: "Continua nella chat laterale",
       sendFollowUp: "Invia messaggio di continuazione",
+    },
+    observer: {
+      title: "Osservatore della sessione",
+      expand: "Espandi l'osservatore della sessione",
+      collapse: "Comprimi l'osservatore della sessione",
+      plan: "Piano",
+      progress: "{completed} di {total}",
+      pullRequests: "Pull request",
+      running: "In esecuzione",
+      checksPassing: "{count} superati",
+      checksFailing: "{count} non superati",
+      checksPending: "{count} in esecuzione",
+      askLabel: "Chiedi informazioni su questa sessione",
+      askPlaceholder: "Perché si comporta così?",
+      askSubmit: "Chiedi",
+      askPending: "Verifica delle osservazioni…",
+      askBusy: "L'osservatore sta già rispondendo a una domanda.",
+      askUnavailable: "L'osservatore non può rispondere al momento.",
+      health: {
+        "on-track": "In linea",
+        grinding: "Al lavoro",
+        stuck: "Bloccato",
+        "waiting-on-user": "In attesa di una tua risposta",
+        "wrapping-up": "In conclusione",
+        done: "Completato",
+        failed: "Non riusciti",
+      },
     },
     detailPanel: {
       close: "Chiudi barra laterale",
@@ -4560,6 +4633,7 @@ export const it: TranslationMap = {
       repeatInterval: "Intervallo",
       repeatOnce: "Una volta",
       repeatOnExit: "All'uscita",
+      repeatStream: "Sorgente del flusso",
       onExitHelp:
         "Viene eseguito quando un comando monitorato termina. La pianificazione non può essere modificata qui.",
       every: "Ogni",
@@ -4599,6 +4673,9 @@ export const it: TranslationMap = {
       wakeModeHelp: "Ora attiva immediatamente. Prossimo heartbeat attende il ciclo successivo.",
       action: "Azione",
       command: "Command",
+      script: "Script",
+      readOnlyPayloadHelp:
+        "Questo payload è stato creato al di fuori di Control UI. Il suo contenuto rimane di sola lettura e viene conservato quando salvi altre modifiche.",
       systemEvent: "Pubblica messaggio nella timeline principale",
       agentTurn: "Esegui attività assistente (isolata)",
       systemEventHelp:
