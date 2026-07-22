@@ -196,7 +196,7 @@ Supported in Codex runtime v1:
 | Dynamic tool hooks                            | Supported                                                                        | `before_tool_call`, `after_tool_call`, and tool-result middleware run around OpenClaw-owned dynamic tools.                                                                                                                                                                                                                                                                                                                                                                          |
 | Lifecycle hooks                               | Supported as adapter observations                                                | `llm_input`, `llm_output`, `agent_end`, `before_compaction`, and `after_compaction` fire with honest Codex-mode payloads.                                                                                                                                                                                                                                                                                                                                                           |
 | Final-answer revision gate                    | Supported through native hook relay                                              | Codex `Stop` is relayed to `before_agent_finalize`; `revise` asks Codex for one more model pass before finalization.                                                                                                                                                                                                                                                                                                                                                                |
-| Native shell, patch, and MCP block or observe | Supported through native hook relay                                              | Codex `PreToolUse` and `PostToolUse` are relayed for committed native tool surfaces, including MCP payloads on Codex app-server `0.142.0` or newer. Blocking is supported; argument rewriting is not.                                                                                                                                                                                                                                                                               |
+| Native shell, patch, and MCP block or observe | Supported through native hook relay                                              | Codex `PreToolUse` and `PostToolUse` are relayed for committed native tool surfaces, including MCP payloads on Codex app-server `0.142.0` or newer (this MCP-payload relay floor is distinct from and lower than the `0.143.0` app-server attach floor enforced at initialize). Blocking is supported; argument rewriting is not.                                                                                                                                                   |
 | Native permission policy                      | Supported through Codex app-server approvals and compatibility native hook relay | Codex app-server approval requests route through OpenClaw after Codex review. The `PermissionRequest` native hook relay is opt-in for native approval modes because Codex emits it before guardian review.                                                                                                                                                                                                                                                                          |
 | App-server trajectory capture                 | Supported                                                                        | OpenClaw records the request it sent to app-server and the app-server notifications it receives.                                                                                                                                                                                                                                                                                                                                                                                    |
 
@@ -210,6 +210,142 @@ Not supported in Codex runtime v1:
 | Rich native compaction metadata                     | OpenClaw can request native compaction, but does not receive a stable kept/dropped list, token delta, completion summary, or summary payload.   | Needs richer Codex compaction events.                                                     |
 | Compaction intervention                             | OpenClaw does not let plugins or context engines veto, rewrite, or replace native Codex compaction.                                             | Add Codex pre/post compaction hooks if plugins need to veto or rewrite native compaction. |
 | Byte-for-byte model API request capture             | OpenClaw can capture app-server requests and notifications, but Codex core builds the final OpenAI API request internally.                      | Needs a Codex model-request tracing event or debug API.                                   |
+
+## Approval resolver seam (process.exec)
+
+`api.registerApprovalResolver(...)` lets a bundled or explicitly-enabled
+plugin become the authoritative decision owner for a scoped native
+capability. The v1 contract wires exactly one capability, `process.exec`,
+onto Codex app-server `commandExecution` approval escalations. The registrar
+is additive and parallel to `registerTrustedToolPolicy`; the trusted-policy
+path is byte-unchanged when no resolver is registered.
+
+### Registration shape
+
+```ts
+api.registerApprovalResolver({
+  id: string;
+  description: string;
+  scope: { capabilities: ["process.exec"] };
+  exclusive: true;
+  resolve: (
+    req: {
+      requestId: string;
+      capability: "process.exec";
+      toolName: string;
+      command?: string;
+      cwd?: string;
+      agentId?: string;
+      sessionKey?: string;
+      runId?: string;
+      toolCallId?: string;
+      paramsDigest: string;
+    },
+    opts: { signal: AbortSignal; deadlineMs: number },
+  ) => Promise<{
+    requestId: string;
+    decision: "allow" | "deny";
+    reason?: string;
+    proof?: string;
+  }>;
+}): { dispose(): void };
+```
+
+`ApprovalCapability` is `"process.exec"` only in v1. Registering a
+resolver whose `scope.capabilities` names any other capability (for example
+`net.egress` or `fs.write`) is rejected at registration with a hard throw:
+those capabilities are named-but-unwired, and a fail-closed rejection is
+preferred over silently accepting a resolver that would never be consulted.
+Installed (non-bundled) plugins must be explicitly enabled and must declare
+every resolver id in `contracts.approvalResolvers`; undeclared ids are
+rejected before registration, and a second registration of the same
+`(pluginId, id)` is refused as a diagnostic error.
+
+### process.exec wiring
+
+For a native `item/commandExecution/requestApproval` escalation, OpenClaw
+computes a `paramsDigest` gateway-side — `"sha256:" + fingerprintJson(params)`
+over the exact exec params Codex will run (`{ command?, cwd?, approval }`),
+not the display-preview command — and hands the resolver an `ApprovalRequest`
+carrying that digest plus a fresh opaque `requestId`. The resolver's returned
+`ApprovalDecision` is bound back to the parked request by `requestId` echo,
+and the digest keys the recorded-proof registry (below). This decision is
+taken on the direct authoritative path, so both `allow` and `deny` are
+honored by Codex: `allow` maps to `approved-once`, `deny` maps to a decline.
+
+### Exclusive-over-scope structural suppression
+
+A registered `process.exec` resolver is the **sole** decision owner for
+in-scope `commandExecution` escalations (exclusive-over-scope). OpenClaw
+resolves the decision before the human `/approve` tap surface is ever
+dispatched and before the `before_tool_call` / trusted-tool-policy branch
+runs, so exclusivity is structural — there is no first-to-resolve race and no
+suppression flag on the parallel tap. When a `process.exec` resolver is present it takes exclusive
+ownership of `commandExecution` and the trusted-tool-policy branch is bypassed
+for that capability (resolver-wins precedence). Resolver presence also
+promotes a `never` Codex approval posture to `untrusted` so the escalation
+actually reaches the seam; an explicit operator approval policy or mode still
+wins over that promotion.
+
+This seam covers `process.exec` command-execution approvals only. Other
+approval kinds — file changes, native `PermissionRequest`, and MCP
+elicitations — keep their existing behavior and are never routed through the
+resolver.
+
+### Fail-closed matrix
+
+| Resolver outcome                                                | Codex disposition                     |
+| --------------------------------------------------------------- | ------------------------------------- |
+| `{ decision: "allow" }` with matching `requestId` + fresh proof | `approved-once` → accept              |
+| `{ decision: "deny" }`                                          | `denied` → decline                    |
+| resolver throws                                                 | `unavailable` → decline (fail-closed) |
+| resolver Promise never resolves within `deadlineMs`             | `unavailable` → decline (fail-closed) |
+| returned `requestId` does not echo the parked request           | `unavailable` → decline (fail-closed) |
+| proof already consumed / replayed onto a second request         | `denied` → decline (fail-closed)      |
+| `opts.signal` aborted                                           | `cancelled` → decline                 |
+
+Every non-`allow` path — including no-decision, timeout, mismatch, throw, and
+replay — declines the command. There is no "no decision means allow" branch.
+
+### Recorded-proof registry (structural)
+
+The resolver's optional `proof` string is passed through a recorded-proof
+registry that enforces two structural invariants: **single-use** (a
+`(requestId, paramsDigest)` decision cannot be consumed twice) and
+**replay-rejection** (a `proof` already seen cannot be re-presented against a
+different parked request). These checks are STRUCTURAL only — the registry
+does not parse, verify, or trust the `proof` bytes. Cryptographic validation
+of the proof (signature verification, revocation, provider identity) is
+**provider-internal and out of gateway scope**: the resolver plugin performs
+it before returning `allow`, and OpenClaw treats an accepted decision as
+authoritative. The registry is in-memory only; single-use and replay
+enforcement do not survive a gateway restart, matching the known plugin
+file-store / nonce cross-process caveat.
+
+### Version floor
+
+The Codex shell-exec approval seam requires app-server
+`MIN_CODEX_APP_SERVER_VERSION` = `0.143.0` (window `0.143.0`–`0.144.6`). This
+floor is hard-enforced fail-closed at initialize by
+`assertSupportedCodexAppServerVersion`, which throws below the floor so a
+sub-`0.143.0` app-server never attaches and no in-scope exec is ever
+promoted-then-hoped. Do not confuse this with the lower `0.142.0` MCP-payload
+relay figure in the V1 support contract; that is a different, lower floor for
+MCP payload blocking, not the app-server attach floor the resolver depends on.
+
+### Capability coverage (honest scope)
+
+The v1 resolver seam **opens the approval path, it does not close it**: it
+makes a scoped, authoritative, fail-closed decision available for
+`process.exec` command execution, but it does not guarantee that every
+command-running surface flows through it. `net.egress` and `fs.write` are
+named in the capability vocabulary but are **not wired** in v1 — a resolver
+scoped to them is rejected at registration. The single wired, live-confirmed
+capability is `process.exec` over Codex `commandExecution`; treat the rest as
+reserved names, not enforcement points. `net.egress` (the live-confirmed
+web_fetch-vs-curl asymmetry), sub-agent spawn, MCP, and cross-harness surfaces
+(ACP `onPermissionRequest`, native) remain open extension points not closed by
+this PR.
 
 ## Native permissions and MCP elicitations
 

@@ -422,6 +422,8 @@ plugin, so different plugins may reuse the same local id. Use this tier only
 for host-trusted gates such as workspace policy, budget enforcement, or
 reserved workflow safety.
 
+> **Authority note.** When a plugin registers a `process.exec` approval resolver via `api.registerApprovalResolver(...)`, that resolver takes exclusive ownership of Codex `commandExecution` approval escalations. For that capability the trusted-tool-policy branch is bypassed (resolver-wins precedence): the resolver is the sole, fail-closed decision owner, and the ordinary `before_tool_call` / trusted-policy chain does not also decide the same in-scope exec. This exclusive ownership of commandExecution is structural — the resolver branch runs before the trusted-policy hook, not at a shared concurrency boundary. See [Codex harness runtime](/plugins/codex-harness-runtime) for the seam, exclusivity, and fail-closed matrix.
+
 ### Exec environment hook
 
 `resolve_exec_env` lets plugins contribute environment variables to `exec`
