@@ -510,6 +510,10 @@ export const sharedVitestConfig = {
         find: `openclaw/plugin-sdk/${subpath}`,
         replacement: path.join(repoRoot, "src", "plugin-sdk", `${subpath}.ts`),
       })),
+      {
+        find: /^openclaw\/plugins\/(.+)$/u,
+        replacement: path.join(repoRoot, "src", "plugins", "$1.ts"),
+      },
       ...pluginSdkSubpaths.map((subpath) => ({
         find: `@openclaw/plugin-sdk/${subpath}`,
         replacement: path.join(repoRoot, "packages", "plugin-sdk", "src", `${subpath}.ts`),
