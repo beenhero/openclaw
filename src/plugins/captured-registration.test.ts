@@ -175,4 +175,30 @@ describe("captured plugin registration", () => {
       },
     ]);
   });
+
+  it("captures approval resolvers and returns a working dispose()", () => {
+    let dispose: (() => void) | undefined;
+    const resolve = async () => ({
+      requestId: "req-1",
+      decision: "deny" as const,
+    });
+    const captured = capturePluginRegistration({
+      register(api) {
+        const handle = api.registerApprovalResolver({
+          id: "captured-resolver",
+          description: "Captured approval resolver",
+          scope: { capabilities: ["process.exec"] },
+          exclusive: true,
+          resolve,
+        });
+        dispose = handle.dispose;
+      },
+    });
+
+    expect(captured.approvalResolvers.map((entry) => entry.id)).toEqual(["captured-resolver"]);
+    expect(captured.approvalResolvers[0]?.resolve).toBe(resolve);
+
+    dispose?.();
+    expect(captured.approvalResolvers).toEqual([]);
+  });
 });

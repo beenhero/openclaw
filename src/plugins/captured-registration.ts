@@ -11,6 +11,7 @@ import type { CodexAppServerExtensionFactory } from "./codex-app-server-extensio
 import type { EmbeddingProviderAdapter } from "./embedding-providers.js";
 import type {
   PluginAgentEventSubscriptionRegistration,
+  PluginApprovalResolverRegistration,
   PluginControlUiDescriptor,
   PluginRuntimeLifecycleRegistration,
   PluginSessionActionRegistration,
@@ -79,6 +80,7 @@ export type CapturedPluginRegistration = {
   memoryEmbeddingProviders: MemoryEmbeddingProviderAdapter[];
   sessionExtensions: PluginSessionExtensionRegistration[];
   trustedToolPolicies: PluginTrustedToolPolicyRegistration[];
+  approvalResolvers: PluginApprovalResolverRegistration[];
   toolMetadata: PluginToolMetadataRegistration[];
   controlUiDescriptors: PluginControlUiDescriptor[];
   runtimeLifecycles: PluginRuntimeLifecycleRegistration[];
@@ -120,6 +122,7 @@ export function createCapturedPluginRegistration(params?: {
   const memoryEmbeddingProviders: MemoryEmbeddingProviderAdapter[] = [];
   const sessionExtensions: PluginSessionExtensionRegistration[] = [];
   const trustedToolPolicies: PluginTrustedToolPolicyRegistration[] = [];
+  const approvalResolvers: PluginApprovalResolverRegistration[] = [];
   const toolMetadata: PluginToolMetadataRegistration[] = [];
   const controlUiDescriptors: PluginControlUiDescriptor[] = [];
   const runtimeLifecycles: PluginRuntimeLifecycleRegistration[] = [];
@@ -164,6 +167,7 @@ export function createCapturedPluginRegistration(params?: {
     memoryEmbeddingProviders,
     sessionExtensions,
     trustedToolPolicies,
+    approvalResolvers,
     toolMetadata,
     controlUiDescriptors,
     runtimeLifecycles,
@@ -288,6 +292,17 @@ export function createCapturedPluginRegistration(params?: {
         },
         registerTrustedToolPolicy(policy: PluginTrustedToolPolicyRegistration) {
           trustedToolPolicies.push(policy);
+        },
+        registerApprovalResolver(registration: PluginApprovalResolverRegistration) {
+          approvalResolvers.push(registration);
+          return {
+            dispose() {
+              const index = approvalResolvers.indexOf(registration);
+              if (index >= 0) {
+                approvalResolvers.splice(index, 1);
+              }
+            },
+          };
         },
         registerToolMetadata(metadata: PluginToolMetadataRegistration) {
           toolMetadata.push(metadata);
