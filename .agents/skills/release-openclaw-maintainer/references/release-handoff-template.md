@@ -44,11 +44,9 @@ Ship `<version>` on `<channel>` and stop when `<terminal success criteria>`.
   and invalidate downstream product evidence
 - regular changelog-only failure: change only `CHANGELOG.md`, freeze a new
   Release SHA, and reuse green Code SHA evidence after delta proof
-- extended-stable product or changelog failure: land an approved branch PR,
-  freeze the new exact tip, and replace all exact-head validation evidence
-- extended-stable frozen-target incompatibility: land only the smallest
-  branch-owned workflow/harness repair, record its source and invariant, and
-  replace all exact-head validation evidence
+- extended-stable branch change: land the approved product/changelog change or
+  smallest frozen-target repair by PR, record its source/invariant, and replace
+  all exact-head evidence
 - workflow/tooling/credential failure: keep the candidate frozen and recover
   the smallest owning surface
 - external approval or permission blocker: stop with the exact job, URL,
@@ -56,9 +54,7 @@ Ship `<version>` on `<channel>` and stop when `<terminal success criteria>`.
 
 Do not scan moving `main`, add optional backports, dispatch a replacement
 validation parent, or repeat completed phases unless a named invalidating event
-requires it. For extended-stable, resume only after rechecking that the branch
-tip, immutable tag, versions, workflow run identities, and registry selectors
-still agree.
+requires it.
 
 ## Stop conditions
 

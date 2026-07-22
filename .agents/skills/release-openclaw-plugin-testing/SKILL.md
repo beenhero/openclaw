@@ -117,10 +117,9 @@ Use `source=npm -f package_spec=openclaw@beta` for published beta proof. Keep
 `workflow_ref` as trusted current harness code unless the release process says
 otherwise.
 
-For an extended-stable candidate, the canonical branch-owned Full Release
-Validation run is the publication evidence; do not replace it with a standalone
-Package Acceptance run. After publication, use trusted current harness code to
-exercise the selector explicitly:
+Extended-stable publication evidence is its canonical branch-owned Full Release
+Validation, not standalone Package Acceptance. After publish, exercise the
+selector with current trusted harness code:
 
 ```bash
 gh workflow run package-acceptance.yml \
@@ -133,10 +132,9 @@ gh workflow run package-acceptance.yml \
   -f telegram_mode=mock-openai
 ```
 
-Record the exact resolved core version. Separately derive the complete
-`all-publishable` plugin inventory from the immutable release tag and require
-every package version and `extended-stable` selector to match it; one package
-smoke cannot stand in for registry-wide plugin readback.
+Record the resolved core version. Separately require every package and selector
+in the tag's `all-publishable` inventory to match it; one smoke is not complete
+registry readback.
 
 ## Plugin npm Artifact Preflight
 

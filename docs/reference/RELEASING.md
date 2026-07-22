@@ -1,4 +1,5 @@
 ---
+doc-schema-version: 1
 summary: "Release lanes, operator checklist, validation boxes, version naming, and cadence"
 title: "Release policy"
 read_when:
@@ -35,7 +36,8 @@ Tideclaw alpha builds are a separate internal prerelease track (npm dist-tag `al
 - `latest` continues to follow the current regular/daily npm line; `beta` is the current beta install target
 - `extended-stable` means the supported trailing-month npm package, beginning at patch `33`; patch `34` and later are maintenance releases on that monthly line
 - Regular final and regular correction releases publish to npm `beta` by default; release operators can target `latest` explicitly, or promote a vetted beta build later
-- The dedicated monthly extended-stable path publishes the core npm package and every npm-publishable official plugin at the same exact version. Its release tag also publishes exact Docker images to GHCR and Docker Hub, then advances only `extended-stable`, `extended-stable-slim`, and `extended-stable-browser`. It does not publish plugins to ClawHub or publish macOS or Windows artifacts, a GitHub Release, private-repository dist-tags, mobile artifacts, or website downloads.
+- Extended-stable publishes core, every npm-publishable official plugin, and its
+  Docker images at one exact version; see the dedicated workflow below.
 - Every regular final release ships the npm package, macOS app, signed standalone Android APK, and signed Windows Hub installers together. Beta releases normally validate and publish the npm/package path first, with native app build/sign/notarize/promote reserved for regular final unless explicitly requested.
 
 ## Release cadence
@@ -84,14 +86,15 @@ gh workflow run openclaw-npm-release.yml \
   -f preflight_only=true \
   -f npm_dist_tag=extended-stable
 
-node scripts/full-release-validation-at-sha.mjs \
-  --sha "$RELEASE_SHA" \
-  --target-ref extended-stable/YYYY.M.33
+gh workflow run full-release-validation.yml \
+  --ref extended-stable/YYYY.M.33 \
+  -f ref=extended-stable/YYYY.M.33 \
+  -f release_profile=stable
 ```
 
-The SHA form is preflight-only. The helper pins trusted workflow code while
-recording the product SHA and canonical branch context; do not substitute a
-regular `release-ci/*` run. Save both run IDs and the successful validation
+The SHA form is preflight-only. Validation must run from the canonical branch:
+publish checks its workflow ref, head and target SHA, run ID, and attempt. Do
+not substitute `release-ci/*`. Save both run IDs and the successful validation
 `run_attempt`.
 
 Classify failures before editing:
@@ -177,15 +180,10 @@ If immutable images exist but an alias needs repair, dispatch `Docker Channel
 Promotion` from current `main` with the exact tag. It verifies every source
 image before mutation and never rebuilds immutable images.
 
-Public support documentation initially designates Slack, Discord, and Codex as
-covered extended-stable plugin surfaces. That list is a support statement, not
-a release-code allowlist: every npm-publishable official plugin follows the
-same exact-version publication path.
-
-The regular checklist below continues to own beta, `latest`, GitHub Release,
-ClawHub plugin, macOS, Windows, and other platform publication. Do not run those
-steps for this extended-stable path; its Docker publication is owned only by the
-tag-triggered workflow and the digest-based channel-repair workflow above.
+Slack, Discord, and Codex are the initial documented support surfaces, not a
+release allowlist: every npm-publishable official plugin ships. The regular
+checklist alone owns beta/`latest`, GitHub Release, ClawHub, native apps, mobile,
+website, and private dist-tags; do not run those steps here.
 
 ## Regular release operator checklist
 

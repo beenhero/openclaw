@@ -265,38 +265,21 @@ version and SHA.
 
 ## Stabilize the Landed Candidate
 
-The approved product backport set and release-infrastructure compatibility are
-separate decisions. After the coordinated PR lands, validate the exact
-canonical branch before creating its immutable tag:
+Keep approved product backports separate from release-tooling compatibility.
+After the coordinated PR lands:
 
-1. Fetch the canonical branch again. Require its tip, root version, and every
-   npm-publishable official plugin version to identify the intended release.
-   Require current-main Docker release workflow and policy-helper versions in
-   the same tree.
-2. Run the focused combined proof, then dispatch Full Release Validation
-   directly from and against `extended-stable/YYYY.M.33` with
-   `release_profile=stable`.
-3. Classify the first blocker before changing the branch:
-   - **Product defect:** return to the candidate ledger, obtain approval for the
-     additional bounded backport, and land it through another PR.
-   - **Frozen-target incompatibility:** prefer current trusted harness behavior
-     that can test the old product unchanged. If the branch itself owns the
-     workflow, installer, package, or QA contract, land only the smallest
-     compatibility repair through a separate PR and record its current-main
-     source and invariant.
-   - **Provider, approval, runner, or transient service failure:** keep the
-     branch unchanged and use the release retry budget.
-4. Do not import current product behavior merely to satisfy current tooling.
-   Do not turn a missing frozen-target scenario into a blanket skipped gate.
-   An omission is acceptable only through the explicit compatibility contract
-   and only when the old target cannot represent that scenario.
-5. Any branch change invalidates prior exact-head validation evidence. Repeat
-   the complete parent run and replace its run id and attempt. Do not create or
-   move the immutable release tag while the candidate is still changing.
-6. Freeze the candidate only when the exact branch tip has green complete
-   validation and every repair is represented in the durable ledger and PR
-   history. Publication then preflights that exact SHA before creating the tag
-   at the unchanged commit.
+1. Refetch the canonical branch. Require its tip, root/plugin versions, and
+   current-main Docker workflow/policy helper to identify one candidate.
+2. Run focused proof, then complete Full Release Validation from and against
+   `extended-stable/YYYY.M.33` with `release_profile=stable`.
+3. Classify the first blocker: product defects need another approved backport
+   PR; frozen-target tooling needs the smallest behavior-preserving repair with
+   its source and invariant recorded; transient provider, approval, or runner
+   failures keep the candidate unchanged.
+4. Never import product behavior or broadly skip a gate to satisfy new tooling.
+   Omit only an explicitly unsupported frozen-target scenario.
+5. Any branch change requires a new complete run and updated ledger. Keep the
+   candidate untagged until its final tip is green and npm preflight passes.
 
 ## Handoff
 
@@ -315,18 +298,7 @@ Report:
 - exact intended Docker images and aliases, plus explicit confirmation that no
   other non-npm publication is planned.
 
-After candidate stabilization succeeds, continue with this skill's canonical
-extended-stable release flow. Require exact branch-tip/tag/package identity;
-run npm preflight against the green branch tip's full SHA, create the immutable
-tag only after preflight succeeds, reuse only the matching successful complete
-Full Release Validation run and attempt, publish every
-npm-publishable official plugin from the exact release SHA; publish the
-prepared core tarball with the referenced successful run IDs; verify every
-exact package and `extended-stable` selector; and preserve the generated
-core `openclaw` selector-repair command. Repair missing or stale official-
-plugin selectors on already-published versions with the approved credential-
-isolated release tooling for manual tag repair; the OIDC source workflow cannot
-mutate those tags. Never republish an immutable version when only a selector
-needs repair. Require the tag-triggered Docker run to publish and attest the
-exact images while moving only the `extended-stable*` aliases; use the
-digest-based current-main channel-promotion workflow for alias-only recovery.
+After stabilization, follow the parent skill's canonical publish and recovery
+sequence. Preserve exact branch/tag/package/run identity, never republish an
+immutable version for selector repair, and require Docker to move only the
+`extended-stable*` aliases.

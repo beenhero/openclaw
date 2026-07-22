@@ -243,9 +243,9 @@ on pinned current `main` as the exact command and validation contract.
 2. From that branch, dispatch `openclaw-npm-release.yml` with the SHA as `tag`,
    `preflight_only=true`, and `npm_dist_tag=extended-stable`. Save the successful
    run ID.
-3. Run `node scripts/full-release-validation-at-sha.mjs --sha <sha>
-   --target-ref extended-stable/YYYY.M.33`. Save the successful complete run ID
-   and its `run_attempt`. Classify failures per
+3. Dispatch `full-release-validation.yml` from and against
+   `extended-stable/YYYY.M.33` with `release_profile=stable`. Save the successful
+   complete run ID and its `run_attempt`. Classify failures per
    `references/extended-stable-backports.md`; any branch change requires new
    preflight and validation evidence for its new tip.
 4. Re-resolve the branch tip, require it still equals the frozen SHA, then create

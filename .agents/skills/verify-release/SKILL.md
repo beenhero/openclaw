@@ -78,79 +78,48 @@ Use these checks only for the regular orchestrated release track.
 
 ## Extended-stable checks
 
-Extended-stable intentionally has no GitHub Release to use as a release ledger.
-Start with the immutable tag and canonical branch, then reconstruct the exact
-publication chain from live workflow and registry state.
+Extended-stable has no GitHub Release ledger. Reconstruct it from live tag,
+workflow, registry, provenance, and image state.
 
 1. Identity:
-   - Resolve `v<VERSION>` and require a final `YYYY.M.PATCH` with `PATCH >= 33`
-     and no prerelease or correction suffix.
-   - Derive `extended-stable/YYYY.M.33`; require the tag SHA to be contained in
-     that remote branch. Require tag-to-tip equality only while verifying the
-     active pre-publication candidate; later maintenance patches legitimately
-     advance the shared branch.
-   - Read version and package metadata from that tag, not from the local
-     checkout. Every npm-publishable official plugin must declare `<VERSION>`.
-   - Confirm `gh release view v<VERSION>` has no published GitHub Release. A
-     Git tag is required; a GitHub Release would indicate the wrong track ran.
+   - Require final `v<VERSION>` with patch `>= 33`, no prerelease/correction
+     suffix, and containment in `extended-stable/YYYY.M.33`. Tip equality is
+     required only for an active candidate; later patches advance the branch.
+   - Read metadata from the tag. Root and every npm-publishable official plugin
+     must declare `<VERSION>`.
+   - Require the Git tag and no published GitHub Release.
 2. Workflow chain:
-   - Find the successful exact-head `OpenClaw NPM Release` preflight, `Full
-Release Validation`, `Plugin NPM Release`, and real `OpenClaw NPM Release`
-     publish runs on the canonical branch.
-   - Require every run's `headSha` to equal the release SHA. Require Full
-     Release Validation to be `rerun_group=all`, use `release_profile=stable`,
-     record blocking soak/performance evidence, and retain the exact successful
-     `run_attempt`.
-   - Confirm the real core publish references those exact three run IDs and the
-     saved validation attempt. Its prepared tarball digest and validation
-     manifest must bind to the release SHA and canonical workflow ref.
-3. Root npm:
-   - `npm view openclaw@<VERSION> version dist.tarball dist.integrity time.<VERSION> --json`
-   - `npm view openclaw@extended-stable version --json`
-   - Both version reads must equal `<VERSION>`. `latest` is deliberately not an
-     extended-stable acceptance condition.
-4. Prepared core npm packages:
-   - Read `corePackageTarballs` from the saved npm preflight manifest. For every
-     listed package, require the exact version and its `extended-stable`
-     selector to equal `<VERSION>`.
-   - This includes `@openclaw/ai` when the target depends on the split AI
-     runtime and may include `@openclaw/gateway-protocol` or
-     `@openclaw/gateway-client` when that frozen target publishes them.
-5. Official plugin npm set:
-   - Derive the exact `publishToNpm === true` inventory from the tag tarball.
-   - Require every package version and every package's `extended-stable`
-     selector to equal `<VERSION>`.
-   - Compare the inventory with the Plugin NPM Release plan, publish jobs, and
-     complete registry readback. Do not infer scope from changed paths.
-6. Provenance and install paths:
-   - Run `node --import tsx scripts/openclaw-npm-postpublish-verify.ts
-<VERSION>` from trusted current tooling. Require registry signatures and
-     npm provenance to bind the package to the canonical extended-stable
-     workflow branch. Use the saved publish run, preflight manifest, and
-     tarball digest to bind its exact bytes to the release SHA.
-   - Preserve the verifier output and exact workflow URLs as release evidence.
-7. Docker publication:
-   - Find the successful tag-triggered `Docker Release` run at the release SHA.
-   - Require exact default, slim, browser, and architecture images in GHCR and
-     Docker Hub, with successful source and attestation verification.
-   - Require `extended-stable`, `extended-stable-slim`, and
-     `extended-stable-browser` to resolve to that release's verified digests.
-     Confirm regular `latest`, `main`, and their variants did not move.
-   - If aliases were repaired, require a successful current-main `Docker Channel
-Promotion` run for the exact tag. It must promote verified source digests
-     without rebuilding immutable images.
-8. Partial-publish recovery:
-   - An immutable package version that already exists is success to reuse, not
-     permission to republish it.
-   - If only the root `openclaw` selector is stale, use the repair command
-     emitted by the core publish workflow. If a prepared core-package or plugin
-     selector is stale, use the approved credential-isolated tag repair path;
-     the generated command does not cover those packages. Repeat the complete
-     registry readback afterward.
-9. Excluded surfaces:
-   - Do not require ClawHub, macOS, Windows, mobile, website, private dist-tags,
-     regular `latest`, or a GitHub Release unless the current release policy
-     explicitly adds that surface to extended-stable.
+   - Find successful preflight, complete Full Release Validation, plugin npm,
+     and core publish runs on the canonical branch and release SHA.
+   - Require validation `rerun_group=all`, `release_profile=stable`, blocking
+     soak/performance evidence, and the saved successful attempt.
+   - Require core publish to reference those three run IDs and attempt; bind its
+     manifest, workflow ref, and prepared tarball digest to the release SHA.
+3. Registry inventory:
+   - Require both `openclaw@<VERSION>` and `openclaw@extended-stable` to return
+     `<VERSION>`; `latest` is irrelevant.
+   - From preflight `corePackageTarballs`, verify every prepared core package at
+     its exact version and selector.
+   - From the tag, derive every `publishToNpm === true` official plugin and
+     compare its exact version/selector with the plugin plan, jobs, and complete
+     readback. Never infer inventory from changed paths.
+4. Provenance and install:
+   - Run `node --import tsx scripts/openclaw-npm-postpublish-verify.ts <VERSION>`
+     from trusted current tooling. Require registry signatures and npm
+     provenance for the canonical branch, plus publish/preflight digest binding
+     to the release SHA. Preserve output and workflow URLs.
+5. Docker:
+   - Require the tag-triggered run to verify exact default, slim, browser, and
+     architecture images plus attestations in GHCR and Docker Hub.
+   - Require only the three `extended-stable*` aliases to resolve to those
+     digests; regular aliases must not move. Alias repair requires a successful
+     current-main `Docker Channel Promotion` for the exact tag, with no rebuild.
+6. Recovery and exclusions:
+   - Reuse existing immutable versions. Repair only root with the generated
+     command; use approved credential-isolated tooling for prepared-core/plugin
+     selectors, then repeat full readback.
+   - Do not require ClawHub, native apps, mobile, website, private dist-tags,
+     regular `latest`, or a GitHub Release unless policy adds that surface.
 
 ## Shared live smoke
 

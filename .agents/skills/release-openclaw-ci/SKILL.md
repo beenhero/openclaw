@@ -175,8 +175,8 @@ publish workflow reads the effective profile from the full-validation manifest.
 
 ### Extended-stable validation
 
-For the trailing completed month's `.33+` line, dispatch from the canonical
-branch instead of the regular SHA-pinned helper:
+For `.33+`, dispatch from and target the canonical branch; the regular
+SHA-pinned helper would produce a rejected `release-ci/*` identity:
 
 ```bash
 gh workflow run full-release-validation.yml \
@@ -185,42 +185,19 @@ gh workflow run full-release-validation.yml \
   -f release_profile=stable
 ```
 
-Require all of these identities before accepting the run:
+Accept only a complete `rerun_group=all` run whose head branch, head and target
+SHAs, manifest `workflowRef`, branch tip, and package versions identify the same
+commit. Save its successful `run_attempt`; after preflight and tagging, require
+the tag to resolve there too. Do not use `release-ci/*`, current-main, narrow,
+or earlier-attempt evidence.
 
-- the workflow head branch is `extended-stable/YYYY.M.33`;
-- the workflow head SHA, resolved target SHA, branch tip, root version, and
-  every publishable official plugin version identify one release commit;
-- the manifest `workflowRef` is the canonical branch;
-- the parent is a complete `rerun_group=all` run with blocking performance and
-  soak evidence;
-- the saved run id is paired with its exact successful `run_attempt`.
-
-The immutable tag need not exist during candidate stabilization. After npm
-preflight succeeds and the tag is created, require it to resolve to the saved
-validation SHA before using that run as publication evidence.
-
-The direct branch run is fresh and publication-critical. Do not substitute a
-`release-ci/*` run, current-main workflow run, narrow diagnostic rerun, or an
-earlier attempt. The core npm publisher checks these identities.
-
-Treat validation repairs as a separate release-infrastructure stream:
-
-1. Reproduce and classify the first blocking failure before editing.
-2. Product defects require an approved bounded backport and a new exact release
-   commit.
-3. Frozen-target incompatibility requires the smallest trusted workflow,
-   installer, package, QA, or harness repair that preserves the target product.
-   Record the source PR and why the target lacks the newer contract.
-4. Provider 5xx responses, runner capacity, approval delays, and terminal-log
-   races keep the release commit unchanged. Use the retry budget and retain the
-   supersession reason.
-5. Any branch change invalidates the prior exact-head run. Rerun the complete
-   parent and replace all downstream run identity evidence.
-
-Current tooling may omit only scenarios that a frozen target cannot represent,
-and only through the workflow's explicit frozen-target compatibility contract.
-Never use an omission to hide a behavior regression, missing package surface,
-or failed required provider/channel lane.
+Classify the first blocker before editing: product defects need an approved
+backport; frozen-target tooling needs the smallest compatibility repair that
+preserves product behavior; transient provider, approval, runner, or log races
+keep the candidate unchanged. Record compatibility repairs and retry
+supersession. Any branch change requires a new complete parent. Omit only an
+explicitly unsupported frozen-target scenario, never a required behavior or
+package surface.
 
 ## Watch
 

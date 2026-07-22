@@ -8739,7 +8739,10 @@ Do not edit it by hand; run `pnpm docs:map:gen`.
 - Headings:
   - H2: Version naming
   - H2: Release cadence
-  - H2: Monthly npm-only extended-stable publication
+  - H2: Monthly extended-stable publication
+  - H3: Prepare and stabilize the candidate
+  - H3: Publish the npm packages
+  - H3: Verify and recover
   - H2: Regular release operator checklist
   - H2: Stable main closeout
   - H2: Release preflight
@@ -8811,6 +8814,7 @@ Do not edit it by hand; run `pnpm docs:map:gen`.
 
 - Route: /reference/full-release-validation
 - Headings:
+  - H2: Extended-stable exception
   - H2: Top-level stages
   - H2: Release checks stages
   - H2: Docker release-path chunks

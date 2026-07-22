@@ -257,26 +257,14 @@ every human `Thanks @...` attribution.
 
 ## Extended-Stable Variant
 
-Extended-stable has no regular Code-SHA/Release-SHA evidence-reuse split and no
-GitHub Release body. Its changelog still must describe the exact shipped
-maintenance patch.
-
-1. Complete and approve the backport ledger first. Do not write release notes
-   from an incomplete PR list or from validation failures discovered later.
-2. On the coordinated candidate branch, regenerate the matching `## YYYY.M.P`
-   section after version prep and all approved product backports are present.
-   Use the same complete manifest and original-main-PR provenance rules as a
-   regular release.
-3. Land the changelog through the candidate PR or a dedicated follow-up PR to
-   the canonical extended-stable branch. Do not push it directly.
-4. Run the complete branch-owned Full Release Validation only after the
-   changelog is final. Any later branch change invalidates that exact-head run.
-5. A tooling-only compatibility repair does not need a user-facing changelog
-   bullet, but it still requires fresh exact-head validation. A later product
-   backport requires regenerating the section from the updated ledger before
-   validating again.
-6. Create the immutable tag only after the final changelog tree is green. Never
-   rewrite the tag or changelog for a package version already published.
+Extended-stable has one exact release commit, no Code/Release-SHA reuse split,
+and no GitHub Release body. After the backport ledger, version prep, and approved
+product backports are complete, regenerate `## YYYY.M.P` with the regular
+manifest and original-main-PR provenance rules. Land it by PR to the canonical
+branch, then run fresh complete validation before tagging. A later product
+backport requires another changelog audit; a tooling-only repair does not need a
+bullet, but every branch change needs fresh validation. Never rewrite a
+published version's tag or changelog.
 
 ## Quota / API Outage Rule
 

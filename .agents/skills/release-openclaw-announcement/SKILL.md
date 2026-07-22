@@ -72,23 +72,18 @@ openclaw --version
 
 Fresh installs still point to `https://openclaw.ai`.
 
-For extended-stable announcements, make the maintenance-track scope explicit
-and use its supported channel:
+For extended-stable, name the exact version and trailing month, summarize only
+observable bounded backports, and use:
 
 ```sh
 openclaw update --channel extended-stable
 openclaw --version
 ```
 
-Include the exact version and trailing completed month, summarize the bounded
-reliability/security backports users can observe, and link the tag or changelog.
-Do not add `--yes`: users on a newer regular stable version must see and
-explicitly accept the downgrade warning because older versions may not
-understand newer configuration.
-Do not require or imply a GitHub Release. Mention only the package, plugin, or
-other artifacts that the current extended-stable release policy actually
-publishes; do not inherit regular stable macOS, Windows, ClawHub, `latest`, or
-website claims.
+Do not add `--yes`: users moving from newer regular stable must see the downgrade
+warning because older versions may not understand newer configuration. Link the
+tag or changelog; do not imply a GitHub Release or inherit regular stable
+macOS, Windows, ClawHub, `latest`, or website claims.
 
 ## Style
 
