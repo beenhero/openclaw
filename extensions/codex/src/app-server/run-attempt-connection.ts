@@ -252,7 +252,8 @@ export async function prepareCodexAttemptConnection({ params, options }: CodexRu
       env: process.env,
       shouldPromote:
         beforeToolCallPolicy.hasBeforeToolCallHook ||
-        beforeToolCallPolicy.trustedToolPolicies.length > 0,
+        beforeToolCallPolicy.trustedToolPolicies.length > 0 ||
+        beforeToolCallPolicy.hasApprovalResolverForScope,
       execPolicy,
       canUseUntrustedApprovalPolicy:
         configuredAppServer.start.transport !== "stdio" ||
@@ -273,6 +274,7 @@ export async function prepareCodexAttemptConnection({ params, options }: CodexRu
       to: "untrusted",
       beforeToolCallHook: beforeToolCallPolicy.hasBeforeToolCallHook,
       trustedToolPolicies: beforeToolCallPolicy.trustedToolPolicies,
+      hasApprovalResolver: beforeToolCallPolicy.hasApprovalResolverForScope,
     });
   }
   preDynamicStartupStages.mark("app-server-policy");
