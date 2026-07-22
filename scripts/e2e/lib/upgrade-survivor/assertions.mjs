@@ -171,6 +171,22 @@ function hasCoverage(coverage) {
   return Boolean(coverage);
 }
 
+function resolveConfiguredAgents(config) {
+  const entries = config.agents?.entries;
+  if (entries && typeof entries === "object" && !Array.isArray(entries)) {
+    return entries;
+  }
+  const list = config.agents?.list;
+  if (!Array.isArray(list)) {
+    return null;
+  }
+  return Object.fromEntries(
+    list
+      .filter((agent) => typeof agent?.id === "string" && agent.id.length > 0)
+      .map((agent) => [agent.id, agent]),
+  );
+}
+
 function seedState() {
   const stateDir = requireEnv("OPENCLAW_STATE_DIR");
   const workspace = requireEnv("OPENCLAW_TEST_WORKSPACE_DIR");
@@ -270,11 +286,8 @@ function assertConfigSurvived() {
   }
 
   if (acceptsIntent(coverage, "agents")) {
-    const agents = config.agents?.entries ?? {};
-    assert(
-      agents && typeof agents === "object" && !Array.isArray(agents),
-      "agents.entries missing after update/doctor",
-    );
+    const agents = resolveConfiguredAgents(config);
+    assert(agents, "agents.entries or agents.list missing during upgrade assertions");
     assert(agents.main, "main agent missing");
     assert(agents.ops, "ops agent missing");
     if (hasCoverage(coverage)) {
