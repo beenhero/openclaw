@@ -226,6 +226,7 @@ export const nl: TranslationMap = {
     whatsapp: {
       title: "WhatsApp",
       subtitle: "Koppel WhatsApp Web en bewaak de verbindingsstatus.",
+      phoneNumber: "Telefoonnummer",
       loggedOut: "Uitgelogd.",
       logoutNotCleared:
         "Er is geen opgeslagen WhatsApp-sessie gewist. Deze is mogelijk al afwezig of de verificatiemap moet handmatig worden opgeschoond.",
@@ -536,6 +537,9 @@ export const nl: TranslationMap = {
     browserLoadFailed: "Kan die map niet weergeven.",
     hiddenFolder: "Verborgen map",
     worktree: "Worktree",
+    checkingGit: "Beschikbaarheid van Git controleren…",
+    gitCheckUnavailable:
+      "Git kon niet worden geverifieerd voor deze map. Kies de map opnieuw om het nogmaals te proberen.",
     worktreeUnavailable: "Agent-werkruimte is geen git checkout",
     baseBranch: "Basisbranch",
     worktreeName: "Worktree-naam",
@@ -1352,6 +1356,24 @@ export const nl: TranslationMap = {
       liveActivityHint:
         "Geef de meest recente activiteit van de assistent of tool weer onder actieve sessies.",
     },
+    sessionObserver: {
+      title: "Sessiewaarnemer",
+      hint: "Vat langlopende sessies samen met een klein hulpprogrammamodel.",
+      toggle: "Sessiewaarnemer",
+      toggleHint: "Genereer live statusoverzichten voor geabonneerde Control UI-sessies.",
+      resolvedModel: "Bepaald klein model",
+      modelAuto: "automatisch ({model})",
+      modelConfigured: "geconfigureerd ({model})",
+      modelDisabled: "uitgeschakeld",
+      modelUnavailable: "niet beschikbaar (geen klein model)",
+      modelPicker: "Klein model",
+      modelPickerHint: "Wordt gebruikt voor waarnemersoverzichten en andere korte hulptaken.",
+      modelCatalogUnavailable: "Expliciete modelcatalogus niet beschikbaar",
+      auto: "Automatisch (standaardinstelling van provider)",
+      disabled: "Uitgeschakeld",
+      toggleNote: "Werk de sessiewaarnemer van Control UI bij",
+      modelNote: "Werk het standaard hulpprogrammamodel bij",
+    },
     connection: {
       title: "Verbinding",
       gateway: "Gateway",
@@ -1638,6 +1660,7 @@ export const nl: TranslationMap = {
     pages: "Pagina's",
     customize: "Zijbalk aanpassen",
     customizeReset: "Standaardinstellingen herstellen",
+    workboardGroup: "WorkBoard",
   },
   terminal: {
     title: "Terminal",
@@ -2720,9 +2743,23 @@ export const nl: TranslationMap = {
       errorShow: "Details tonen",
       kindMcp: "MCP",
       kindHtml: "HTML",
+      kindPlugin: "Plugin",
+      pluginLoading: "Pluginwidget laden…",
+      disabledPlugin: "Widget van uitgeschakelde plugin {pluginId}",
     },
   },
   workboard: {
+    widget: {
+      cardLabel: "Workboard-kaart",
+      summaryLabel: "Workboard-overzicht",
+      loading: "Workboard laden…",
+      cardIdRequired: "Deze widget heeft een cardId-prop nodig.",
+      cardMissing: "Deze Workboard-kaart is niet meer beschikbaar.",
+      unassigned: "Niet toegewezen",
+      openBoard: "Bord openen",
+      statusCounts: "Kaarten per status",
+      noActiveCards: "Geen kaarten die gereed of actief zijn.",
+    },
     disabledHelpStart: "Workboard is uitgeschakeld. Schakel",
     enableConfigKey: "plugins.entries.workboard.enabled = true",
     disabledHelpEnd: "in en laad dit tabblad opnieuw.",
@@ -3724,6 +3761,12 @@ export const nl: TranslationMap = {
   chat: {
     disconnected: "Verbinding met Gateway verbroken.",
     waitingForApproval: "Wachten op goedkeuring…",
+    startupStatus: {
+      preparingWorkspace: "Werkruimte voorbereiden…",
+      provisioningEnvironment: "Omgeving inrichten…",
+      preparingContext: "Context voorbereiden…",
+      startingModel: "Model starten…",
+    },
     archivedSessionDisabled: "Herstel deze sessie om berichten te verzenden.",
     loadOlder: "Oudere laden",
     sessionHeader: {
@@ -4013,6 +4056,7 @@ export const nl: TranslationMap = {
     },
     messages: {
       activity: "Activiteit",
+      copySelection: "Kopiëren",
       forkFromHere: "Vanaf hier afsplitsen",
       hide: "Verbergen",
       hideConfirm: "Dit bericht in deze browser verbergen? De agent blijft het zien.",
@@ -4048,6 +4092,33 @@ export const nl: TranslationMap = {
       followUp: "Vervolgvraag…",
       followUpLabel: "Vervolgen in zijgesprek",
       sendFollowUp: "Vervolgvraag verzenden",
+    },
+    observer: {
+      title: "Sessiewaarnemer",
+      expand: "Sessiewaarnemer uitvouwen",
+      collapse: "Sessiewaarnemer samenvouwen",
+      plan: "Plan",
+      progress: "{completed} van {total}",
+      pullRequests: "Pull requests",
+      running: "Actief",
+      checksPassing: "{count} geslaagd",
+      checksFailing: "{count} mislukt",
+      checksPending: "{count} actief",
+      askLabel: "Vraag over deze sessie",
+      askPlaceholder: "Waarom doet het dat?",
+      askSubmit: "Vragen",
+      askPending: "De observaties worden gecontroleerd…",
+      askBusy: "De observator beantwoordt al een vraag.",
+      askUnavailable: "De observator kan nu niet antwoorden.",
+      health: {
+        "on-track": "Op schema",
+        grinding: "Bezig",
+        stuck: "Vastgelopen",
+        "waiting-on-user": "Wacht op jou",
+        "wrapping-up": "Bezig met afronden",
+        done: "Klaar",
+        failed: "Mislukt",
+      },
     },
     detailPanel: {
       close: "Zijbalk sluiten",
@@ -4531,6 +4602,7 @@ export const nl: TranslationMap = {
       repeatInterval: "Interval",
       repeatOnce: "Eén keer",
       repeatOnExit: "Bij afsluiten",
+      repeatStream: "Streambron",
       onExitHelp:
         "Draait wanneer een bewaakte opdracht wordt afgesloten. De planning kan hier niet worden bewerkt.",
       every: "Elke",
@@ -4569,6 +4641,9 @@ export const nl: TranslationMap = {
       wakeModeHelp: "Nu triggert onmiddellijk. Volgende heartbeat wacht op de volgende cyclus.",
       action: "Actie",
       command: "Command",
+      script: "Script",
+      readOnlyPayloadHelp:
+        "Deze payload is buiten Control UI aangemaakt. De inhoud blijft alleen-lezen en wordt behouden wanneer je andere wijzigingen opslaat.",
       systemEvent: "Bericht plaatsen op main-tijdlijn",
       agentTurn: "Assistenttaak uitvoeren (geïsoleerd)",
       systemEventHelp:

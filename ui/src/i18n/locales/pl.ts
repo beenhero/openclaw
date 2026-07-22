@@ -227,6 +227,7 @@ export const pl: TranslationMap = {
     whatsapp: {
       title: "WhatsApp",
       subtitle: "Połącz WhatsApp Web i monitoruj stan połączenia.",
+      phoneNumber: "Numer telefonu",
       loggedOut: "Wylogowano.",
       logoutNotCleared:
         "Nie usunięto żadnej zapisanej sesji WhatsApp. Być może już jej nie ma lub jej katalog uwierzytelniania wymaga ręcznego wyczyszczenia.",
@@ -535,6 +536,9 @@ export const pl: TranslationMap = {
     browserLoadFailed: "Nie udało się wyświetlić zawartości tego folderu.",
     hiddenFolder: "Ukryty folder",
     worktree: "Worktree",
+    checkingGit: "Sprawdzanie dostępności Git…",
+    gitCheckUnavailable:
+      "Nie udało się zweryfikować Git dla tego folderu. Wybierz go ponownie, aby spróbować jeszcze raz.",
     worktreeUnavailable: "Obszar roboczy agenta nie jest checkoutem git",
     baseBranch: "Gałąź bazowa",
     worktreeName: "Nazwa worktree",
@@ -1352,6 +1356,24 @@ export const pl: TranslationMap = {
       liveActivityHint:
         "Pokazuj najnowszą aktywność asystenta lub narzędzia pod trwającymi sesjami.",
     },
+    sessionObserver: {
+      title: "Obserwator sesji",
+      hint: "Podsumowuj długotrwałe sesje za pomocą małego modelu pomocniczego.",
+      toggle: "Obserwator sesji",
+      toggleHint: "Generuj bieżące podsumowania stanu subskrybowanych sesji Control UI.",
+      resolvedModel: "Wybrany mały model",
+      modelAuto: "automatycznie ({model})",
+      modelConfigured: "skonfigurowano ({model})",
+      modelDisabled: "wyłączone",
+      modelUnavailable: "niedostępny (brak małego modelu)",
+      modelPicker: "Mały model",
+      modelPickerHint: "Używany do podsumowań obserwatora i innych krótkich zadań pomocniczych.",
+      modelCatalogUnavailable: "Jawny katalog modeli jest niedostępny",
+      auto: "Automatycznie (domyślne ustawienie dostawcy)",
+      disabled: "Wyłączone",
+      toggleNote: "Zaktualizuj obserwatora sesji Control UI",
+      modelNote: "Zaktualizuj domyślny model pomocniczy",
+    },
     connection: {
       title: "Połączenie",
       gateway: "Gateway",
@@ -1639,6 +1661,7 @@ export const pl: TranslationMap = {
     pages: "Strony",
     customize: "Dostosuj pasek boczny",
     customizeReset: "Przywróć ustawienia domyślne",
+    workboardGroup: "WorkBoard",
   },
   terminal: {
     title: "Terminal",
@@ -2731,9 +2754,23 @@ export const pl: TranslationMap = {
       errorShow: "Pokaż szczegóły",
       kindMcp: "MCP",
       kindHtml: "HTML",
+      kindPlugin: "Wtyczka",
+      pluginLoading: "Ładowanie widżetu wtyczki…",
+      disabledPlugin: "Widżet z wyłączonej wtyczki {pluginId}",
     },
   },
   workboard: {
+    widget: {
+      cardLabel: "Karta tablicy roboczej",
+      summaryLabel: "Podsumowanie tablicy roboczej",
+      loading: "Ładowanie tablicy roboczej…",
+      cardIdRequired: "Ten widżet wymaga właściwości cardId.",
+      cardMissing: "Ta karta tablicy roboczej nie jest już dostępna.",
+      unassigned: "Nieprzypisane",
+      openBoard: "Otwórz tablicę",
+      statusCounts: "Karty według statusu",
+      noActiveCards: "Brak kart gotowych lub w toku.",
+    },
     disabledHelpStart: "Workboard jest wyłączony. Włącz",
     enableConfigKey: "plugins.entries.workboard.enabled = true",
     disabledHelpEnd: ", a następnie odśwież tę kartę.",
@@ -3734,6 +3771,12 @@ export const pl: TranslationMap = {
   chat: {
     disconnected: "Rozłączono z Gateway.",
     waitingForApproval: "Oczekiwanie na zatwierdzenie…",
+    startupStatus: {
+      preparingWorkspace: "Przygotowywanie obszaru roboczego…",
+      provisioningEnvironment: "Konfigurowanie środowiska…",
+      preparingContext: "Przygotowywanie kontekstu…",
+      startingModel: "Uruchamianie modelu…",
+    },
     archivedSessionDisabled: "Przywróć tę sesję, aby wysyłać wiadomości.",
     loadOlder: "Załaduj starsze",
     sessionHeader: {
@@ -4023,6 +4066,7 @@ export const pl: TranslationMap = {
     },
     messages: {
       activity: "Aktywność",
+      copySelection: "Kopiuj",
       forkFromHere: "Rozgałęź od tego miejsca",
       hide: "Ukryj",
       hideConfirm: "Ukryć tę wiadomość w tej przeglądarce? Agent nadal ją widzi.",
@@ -4058,6 +4102,33 @@ export const pl: TranslationMap = {
       followUp: "Kontynuuj…",
       followUpLabel: "Kontynuuj w czacie bocznym",
       sendFollowUp: "Wyślij kontynuację",
+    },
+    observer: {
+      title: "Obserwator sesji",
+      expand: "Rozwiń obserwator sesji",
+      collapse: "Zwiń obserwator sesji",
+      plan: "Plan",
+      progress: "{completed} z {total}",
+      pullRequests: "Żądania ściągnięcia",
+      running: "W toku",
+      checksPassing: "{count} zakończono pomyślnie",
+      checksFailing: "{count} nieudanych",
+      checksPending: "{count} w toku",
+      askLabel: "Zapytaj o tę sesję",
+      askPlaceholder: "Dlaczego to robi?",
+      askSubmit: "Pytaj",
+      askPending: "Sprawdzanie obserwacji…",
+      askBusy: "Obserwator już odpowiada na pytanie.",
+      askUnavailable: "Obserwator nie może teraz odpowiedzieć.",
+      health: {
+        "on-track": "Zgodnie z planem",
+        grinding: "Pracuje",
+        stuck: "Utknął",
+        "waiting-on-user": "Czeka na Ciebie",
+        "wrapping-up": "Kończy pracę",
+        done: "Gotowe",
+        failed: "Niepowodzenie",
+      },
     },
     detailPanel: {
       close: "Zamknij pasek boczny",
@@ -4539,6 +4610,7 @@ export const pl: TranslationMap = {
       repeatInterval: "Interwał",
       repeatOnce: "Jednokrotnie",
       repeatOnExit: "Przy zakończeniu",
+      repeatStream: "Źródło strumienia",
       onExitHelp:
         "Uruchamia się, gdy obserwowane polecenie zakończy działanie. Harmonogramu nie można tutaj edytować.",
       every: "Co",
@@ -4578,6 +4650,9 @@ export const pl: TranslationMap = {
       wakeModeHelp: "Teraz uruchamia od razu. Następny heartbeat czeka na kolejny cykl.",
       action: "Akcja",
       command: "Command",
+      script: "Skrypt",
+      readOnlyPayloadHelp:
+        "Ten ładunek został utworzony poza Control UI. Jego zawartość pozostaje tylko do odczytu i jest zachowywana podczas zapisywania innych zmian.",
       systemEvent: "Opublikuj wiadomość na głównej osi czasu",
       agentTurn: "Uruchom zadanie asystenta (izolowane)",
       systemEventHelp:

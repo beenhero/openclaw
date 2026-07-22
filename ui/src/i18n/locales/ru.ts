@@ -224,6 +224,7 @@ export const ru: TranslationMap = {
     whatsapp: {
       title: "WhatsApp",
       subtitle: "Подключение WhatsApp Web и мониторинг состояния соединения.",
+      phoneNumber: "Номер телефона",
       loggedOut: "Выход выполнен.",
       logoutNotCleared:
         "Сохранённая сессия WhatsApp не была удалена. Возможно, она уже отсутствует или каталог аутентификации необходимо очистить вручную.",
@@ -534,6 +535,9 @@ export const ru: TranslationMap = {
     browserLoadFailed: "Не удалось получить список этой папки.",
     hiddenFolder: "Скрытая папка",
     worktree: "Рабочее дерево",
+    checkingGit: "Проверка доступности Git…",
+    gitCheckUnavailable:
+      "Не удалось проверить Git для этой папки. Выберите её снова, чтобы повторить попытку.",
     worktreeUnavailable: "Рабочая область агента не является git checkout",
     baseBranch: "Базовая ветка",
     worktreeName: "Имя рабочего дерева",
@@ -1353,6 +1357,25 @@ export const ru: TranslationMap = {
       liveActivityHint:
         "Показывать последние действия ассистента или инструмента под выполняемыми сеансами.",
     },
+    sessionObserver: {
+      title: "Наблюдатель за сеансами",
+      hint: "Создавайте сводки длительных сеансов с помощью небольшой вспомогательной модели.",
+      toggle: "Наблюдатель за сеансами",
+      toggleHint: "Создавайте сводки текущего состояния для сеансов Control UI с подпиской.",
+      resolvedModel: "Выбранная небольшая модель",
+      modelAuto: "автоматически ({model})",
+      modelConfigured: "настроено ({model})",
+      modelDisabled: "отключено",
+      modelUnavailable: "недоступно (нет небольшой модели)",
+      modelPicker: "Небольшая модель",
+      modelPickerHint:
+        "Используется для сводок наблюдателя и других коротких вспомогательных задач.",
+      modelCatalogUnavailable: "Явный каталог моделей недоступен",
+      auto: "Автоматически (по умолчанию для провайдера)",
+      disabled: "Отключено",
+      toggleNote: "Обновить наблюдатель за сеансами Control UI",
+      modelNote: "Обновить вспомогательную модель по умолчанию",
+    },
     connection: {
       title: "Подключение",
       gateway: "Gateway",
@@ -1641,6 +1664,7 @@ export const ru: TranslationMap = {
     pages: "Страницы",
     customize: "Настроить боковую панель",
     customizeReset: "Сбросить настройки",
+    workboardGroup: "WorkBoard",
   },
   terminal: {
     title: "Терминал",
@@ -2727,9 +2751,23 @@ export const ru: TranslationMap = {
       errorShow: "Показать подробности",
       kindMcp: "MCP",
       kindHtml: "HTML",
+      kindPlugin: "Плагин",
+      pluginLoading: "Загрузка виджета плагина…",
+      disabledPlugin: "Виджет отключённого плагина {pluginId}",
     },
   },
   workboard: {
+    widget: {
+      cardLabel: "Карточка рабочей доски",
+      summaryLabel: "Сводка рабочей доски",
+      loading: "Загрузка рабочей доски…",
+      cardIdRequired: "Для этого виджета требуется свойство cardId.",
+      cardMissing: "Эта карточка рабочей доски больше недоступна.",
+      unassigned: "Не назначено",
+      openBoard: "Открыть доску",
+      statusCounts: "Карточки по статусу",
+      noActiveCards: "Нет готовых или выполняющихся карточек.",
+    },
     disabledHelpStart: "Workboard отключен. Включите",
     enableConfigKey: "plugins.entries.workboard.enabled = true",
     disabledHelpEnd: ", затем перезагрузите эту вкладку.",
@@ -3735,6 +3773,12 @@ export const ru: TranslationMap = {
   chat: {
     disconnected: "Отключено от gateway.",
     waitingForApproval: "Ожидание одобрения…",
+    startupStatus: {
+      preparingWorkspace: "Подготовка рабочего пространства…",
+      provisioningEnvironment: "Настройка среды…",
+      preparingContext: "Подготовка контекста…",
+      startingModel: "Запуск модели…",
+    },
     archivedSessionDisabled: "Восстановите этот сеанс, чтобы отправлять сообщения.",
     loadOlder: "Загрузить более ранние",
     sessionHeader: {
@@ -4025,6 +4069,7 @@ export const ru: TranslationMap = {
     },
     messages: {
       activity: "Активность",
+      copySelection: "Копировать",
       forkFromHere: "Создать ответвление отсюда",
       hide: "Скрыть",
       hideConfirm: "Скрыть это сообщение в этом браузере? Агент по-прежнему будет его видеть.",
@@ -4060,6 +4105,33 @@ export const ru: TranslationMap = {
       followUp: "Уточнить…",
       followUpLabel: "Уточнить в боковом чате",
       sendFollowUp: "Отправить уточнение",
+    },
+    observer: {
+      title: "Наблюдение за сеансом",
+      expand: "Развернуть панель наблюдения за сеансом",
+      collapse: "Свернуть панель наблюдения за сеансом",
+      plan: "План",
+      progress: "{completed} из {total}",
+      pullRequests: "Запросы на слияние",
+      running: "Выполняется",
+      checksPassing: "Пройдено: {count}",
+      checksFailing: "{count} неудачных",
+      checksPending: "Выполняется: {count}",
+      askLabel: "Задать вопрос об этом сеансе",
+      askPlaceholder: "Почему он это делает?",
+      askSubmit: "Запрос",
+      askPending: "Проверка наблюдений…",
+      askBusy: "Наблюдатель уже отвечает на вопрос.",
+      askUnavailable: "Наблюдатель сейчас не может ответить.",
+      health: {
+        "on-track": "Всё по плану",
+        grinding: "В работе",
+        stuck: "Нет продвижения",
+        "waiting-on-user": "Ожидание вашего ответа",
+        "wrapping-up": "Завершение работы",
+        done: "Готово",
+        failed: "Сбой",
+      },
     },
     detailPanel: {
       close: "Закрыть боковую панель",
@@ -4540,6 +4612,7 @@ export const ru: TranslationMap = {
       repeatInterval: "Интервал",
       repeatOnce: "Один раз",
       repeatOnExit: "При выходе",
+      repeatStream: "Источник потока",
       onExitHelp:
         "Запускается при завершении отслеживаемой команды. Расписание здесь редактировать нельзя.",
       every: "Каждые",
@@ -4580,6 +4653,9 @@ export const ru: TranslationMap = {
         "Сейчас — запускает немедленно. Следующая пульсация — ожидает следующего цикла.",
       action: "Действие",
       command: "Команда",
+      script: "Скрипт",
+      readOnlyPayloadHelp:
+        "Эта полезная нагрузка была создана вне Control UI. Её содержимое доступно только для чтения и сохраняется при сохранении других изменений.",
       systemEvent: "Опубликовать сообщение в основной ленте",
       agentTurn: "Запустить задачу ассистента (изолированно)",
       systemEventHelp:
