@@ -1,6 +1,8 @@
 // Codex tests cover the exclusive process.exec approval-resolver decision branch.
 import {
   callGatewayTool,
+  getApprovalResolverForScope,
+  hasApprovalResolverForScope,
   hasNativeHookRelayInvocation,
   invokeNativeHookRelay,
   resolveNativeHookRelayDeferredToolApproval,
@@ -24,17 +26,25 @@ import type { JsonObject } from "./protocol.js";
 // Keep the real approval-resolver retrieval helpers (they read the active plugin
 // registry we set below) while neutralizing the gateway + trusted-tool hook +
 // native-relay so the only decision surface under test is the resolver branch.
-vi.mock("openclaw/plugin-sdk/agent-harness-runtime", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("openclaw/plugin-sdk/agent-harness-runtime")>()),
-  callGatewayTool: vi.fn(),
-  hasNativeHookRelayInvocation: vi.fn(() => false),
-  invokeNativeHookRelay: vi.fn(),
-  resolveNativeHookRelayDeferredToolApproval: vi.fn(),
-  runBeforeToolCallHook: vi.fn(async ({ params }: { params: unknown }) => ({
-    blocked: false,
-    params,
-  })),
-}));
+// hasApprovalResolverForScope / getApprovalResolverForScope default to the real
+// implementations (they read the active registry) but are wrapped as spies so a
+// single test can force the has*=true / get*=undefined registry-swap TOCTOU.
+vi.mock("openclaw/plugin-sdk/agent-harness-runtime", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("openclaw/plugin-sdk/agent-harness-runtime")>();
+  return {
+    ...actual,
+    callGatewayTool: vi.fn(),
+    hasNativeHookRelayInvocation: vi.fn(() => false),
+    invokeNativeHookRelay: vi.fn(),
+    resolveNativeHookRelayDeferredToolApproval: vi.fn(),
+    runBeforeToolCallHook: vi.fn(async ({ params }: { params: unknown }) => ({
+      blocked: false,
+      params,
+    })),
+    hasApprovalResolverForScope: vi.fn(actual.hasApprovalResolverForScope),
+    getApprovalResolverForScope: vi.fn(actual.getApprovalResolverForScope),
+  };
+});
 
 vi.mock("openclaw/plugin-sdk/agent-harness-exec-review-runtime", async (importOriginal) => ({
   ...(await importOriginal<
@@ -43,9 +53,19 @@ vi.mock("openclaw/plugin-sdk/agent-harness-exec-review-runtime", async (importOr
   reviewExecRequestWithConfiguredModel: vi.fn(),
 }));
 
+// The real (unmocked) registry-reading implementations, captured once so
+// beforeEach can restore the spies' default behavior after any per-test override.
+const actualRuntime = await vi.importActual<
+  typeof import("openclaw/plugin-sdk/agent-harness-runtime")
+>("openclaw/plugin-sdk/agent-harness-runtime");
+
 const mockCallGatewayTool = vi.mocked(callGatewayTool);
 const mockHasNativeHookRelayInvocation = vi.mocked(hasNativeHookRelayInvocation);
 const mockRunBeforeToolCallHook = vi.mocked(runBeforeToolCallHook);
+// These two default to the real registry-reading impl; a single test overrides
+// them to force the has*=true / get*=undefined registry-swap TOCTOU (Fix 4).
+const mockHasApprovalResolverForScope = vi.mocked(hasApprovalResolverForScope);
+const mockGetApprovalResolverForScope = vi.mocked(getApprovalResolverForScope);
 
 const WORKSPACE_DIR = "/tmp/resolver-exec-workspace";
 
@@ -118,10 +138,17 @@ describe("approval-bridge process.exec resolver branch", () => {
       blocked: false,
       params,
     }));
+    // Restore the resolver-retrieval spies to the real registry-reading impls so
+    // every test but the TOCTOU one exercises the true has*/get* agreement.
+    mockHasApprovalResolverForScope.mockReset();
+    mockHasApprovalResolverForScope.mockImplementation(actualRuntime.hasApprovalResolverForScope);
+    mockGetApprovalResolverForScope.mockReset();
+    mockGetApprovalResolverForScope.mockImplementation(actualRuntime.getApprovalResolverForScope);
     __resetProofRegistryForTest();
     setActivePluginRegistry(createEmptyPluginRegistry());
   });
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     setActivePluginRegistry(createEmptyPluginRegistry());
   });
@@ -190,6 +217,49 @@ describe("approval-bridge process.exec resolver branch", () => {
   it("requestId echo mismatch → fail-closed decline (request-binding guard)", async () => {
     registerResolver(() => ({ requestId: "attacker-substituted", decision: "allow" }));
     expect(await drive()).toEqual({ decision: "decline" });
+    expect(mockCallGatewayTool).not.toHaveBeenCalled();
+  });
+
+  it("verdict with a malformed decision (neither allow nor deny) → fail-closed decline (allow-list, not deny-list)", async () => {
+    // The gate must APPROVE only on an explicit "allow"; any other decision value —
+    // including an unexpected/malformed string the type forbids — fails closed.
+    registerResolver((req) => ({
+      requestId: req.requestId,
+      // Cast through `never` to smuggle a value the ApprovalDecision type forbids.
+      decision: "maybe" as never,
+    }));
+    expect(await drive()).toEqual({ decision: "decline" });
+    expect(mockCallGatewayTool).not.toHaveBeenCalled();
+    expect(mockRunBeforeToolCallHook).not.toHaveBeenCalled();
+  });
+
+  it("resolver that never resolves → bridge-enforced deadline denies with timed_out", async () => {
+    vi.useFakeTimers();
+    // The resolver hold never settles; only the bridge's deadline timer can end it.
+    registerResolver(() => new Promise<ApprovalDecision>(() => {}));
+
+    const pending = drive();
+    // Advance past DEFAULT_CODEX_APPROVAL_TIMEOUT_MS (120s) so the race deadline fires.
+    await vi.advanceTimersByTimeAsync(120_000);
+
+    // A timed_out disposition maps to a decline (fail-closed), and the codex
+    // approval is NOT parked forever waiting on the resolver.
+    expect(await pending).toEqual({ decision: "decline" });
+    expect(mockCallGatewayTool).not.toHaveBeenCalled();
+    expect(mockRunBeforeToolCallHook).not.toHaveBeenCalled();
+  });
+
+  it("registry-swap TOCTOU (has* true, get* undefined) → decline, never falls through to the tap", async () => {
+    // Force the total-exclusivity guard: the scope is claimed (has*=true) but no
+    // usable resolver can be read (get*=undefined). Must deny, NOT fall through.
+    mockHasApprovalResolverForScope.mockReturnValue(true);
+    mockGetApprovalResolverForScope.mockReturnValue(undefined);
+
+    const response = await drive();
+
+    expect(response).toEqual({ decision: "decline" });
+    // Neither the trusted-tool hook nor the human tap may run — total exclusivity.
+    expect(mockRunBeforeToolCallHook).not.toHaveBeenCalled();
     expect(mockCallGatewayTool).not.toHaveBeenCalled();
   });
 

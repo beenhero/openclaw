@@ -455,73 +455,130 @@ async function runOpenClawToolPolicyForApprovalRequest(params: {
   // both the trusted-tool-policy hook (below) and the human requestPluginApproval
   // tap (handleCodexAppServerApprovalRequest:151) — means those surfaces are
   // never reached, giving structural exclusivity with no suppressDelivery flag.
+  // The sub-floor server case is handled UPSTREAM: a Codex app-server below
+  // MIN_CODEX_APP_SERVER_VERSION (0.143.0) hard-throws at initialize via
+  // assertSupportedCodexAppServerVersion (client.ts) before any approval reaches
+  // this branch, so no in-branch version check is needed (regression-tested).
   if (
     params.method === "item/commandExecution/requestApproval" &&
     hasApprovalResolverForScope("process.exec")
   ) {
     const resolverEntry = getApprovalResolverForScope("process.exec");
-    if (resolverEntry) {
-      const paramsDigest = computeParamsDigest(policyRequest.params);
-      const requestId = randomUUID();
-      const resolverCommand = readPolicyCommand(params.requestParams);
-      let verdict: ApprovalDecision | undefined;
-      try {
-        verdict = await resolverEntry.registration.resolve(
-          {
-            requestId,
-            capability: "process.exec",
-            toolName: policyRequest.toolName,
-            ...(resolverCommand ? { command: resolverCommand } : {}),
-            ...(cwd ? { cwd } : {}),
-            ...(params.paramsForRun.agentId ? { agentId: params.paramsForRun.agentId } : {}),
-            ...(params.paramsForRun.sessionKey
-              ? { sessionKey: params.paramsForRun.sessionKey }
-              : {}),
-            ...(params.paramsForRun.runId ? { runId: params.paramsForRun.runId } : {}),
-            ...(params.context.approvalId ? { toolCallId: params.context.approvalId } : {}),
-            paramsDigest,
-          },
-          {
-            signal: params.signal ?? new AbortController().signal,
-            deadlineMs: DEFAULT_CODEX_APPROVAL_TIMEOUT_MS,
-          },
-        );
-      } catch {
-        verdict = undefined;
-      }
-      // Fail-closed: aborted hold, no verdict, a mismatched requestId echo (the
-      // request-binding guard), or an explicit deny all resolve to a decline.
-      if (
-        params.signal?.aborted === true ||
-        !verdict ||
-        verdict.requestId !== requestId ||
-        verdict.decision === "deny"
-      ) {
-        return {
-          outcome: "denied",
-          reason: verdict?.reason ?? "approval resolver denied",
-          failureDisposition: params.signal?.aborted === true ? "timed_out" : "failed",
-        };
-      }
-      // Structural single-use + cross-request replay rejection (no crypto here).
-      const fresh = assertProofFresh(verdict.proof);
-      const consumed = recordAndConsumeProof({
-        requestId,
-        paramsDigest,
-        outcome: "allow",
-        ...(verdict.proof !== undefined ? { proof: verdict.proof } : {}),
-      });
-      if (!fresh.ok || !consumed.ok) {
-        return {
-          outcome: "denied",
-          reason: "approval proof rejected",
-          failureDisposition: "failed",
-        };
-      }
-      // allow-always durability is plugin-owned, not Codex session trust; keep
-      // this scoped to the current item (mirrors the :486-491 rationale).
-      return { outcome: "approved-once" };
+    // Total exclusivity: a registry-swap TOCTOU (has* true, get* now undefined)
+    // must NOT fall through to the human tap / trusted-tool hook. Deny instead —
+    // the scope is owned by a resolver even though we cannot read one right now.
+    if (!resolverEntry) {
+      return {
+        outcome: "denied",
+        reason: "approval resolver unavailable",
+        failureDisposition: "failed",
+      };
     }
+    const paramsDigest = computeParamsDigest(policyRequest.params);
+    const requestId = randomUUID();
+    const resolverCommand = readPolicyCommand(params.requestParams);
+    // Abort the resolver on the run signal OR on the deadline so a well-behaved
+    // resolver can stop waiting; the bridge itself also enforces the deadline
+    // (below) so a resolver that ignores the signal cannot park codex forever.
+    const resolverAbort = new AbortController();
+    const onRunAbort = () => resolverAbort.abort();
+    if (params.signal) {
+      if (params.signal.aborted) {
+        resolverAbort.abort();
+      } else {
+        params.signal.addEventListener("abort", onRunAbort, { once: true });
+      }
+    }
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    let verdict: ApprovalDecision | undefined;
+    let timedOut = false;
+    try {
+      const resolvePromise = resolverEntry.registration.resolve(
+        {
+          requestId,
+          capability: "process.exec",
+          toolName: policyRequest.toolName,
+          ...(resolverCommand ? { command: resolverCommand } : {}),
+          ...(cwd ? { cwd } : {}),
+          ...(params.paramsForRun.agentId ? { agentId: params.paramsForRun.agentId } : {}),
+          ...(params.paramsForRun.sessionKey ? { sessionKey: params.paramsForRun.sessionKey } : {}),
+          ...(params.paramsForRun.runId ? { runId: params.paramsForRun.runId } : {}),
+          ...(params.context.approvalId ? { toolCallId: params.context.approvalId } : {}),
+          paramsDigest,
+        },
+        {
+          signal: resolverAbort.signal,
+          deadlineMs: DEFAULT_CODEX_APPROVAL_TIMEOUT_MS,
+        },
+      );
+      // Bridge-enforced deadline: race the resolver hold against a timer so a
+      // resolver that never resolves cannot park the codex approval forever. The
+      // timeout rejects; the catch below maps it to denied/timed_out. Aborting
+      // the resolver signal lets a cooperative resolver stop waiting too.
+      const deadlinePromise = new Promise<never>((_, reject) => {
+        deadlineTimer = setTimeout(() => {
+          timedOut = true;
+          resolverAbort.abort();
+          reject(new Error("approval resolver timed out"));
+        }, DEFAULT_CODEX_APPROVAL_TIMEOUT_MS);
+      });
+      verdict = await Promise.race([resolvePromise, deadlinePromise]);
+    } catch {
+      verdict = undefined;
+    } finally {
+      // Clear the timer on every exit path (happy path included) — no leaked timers.
+      if (deadlineTimer !== undefined) {
+        clearTimeout(deadlineTimer);
+      }
+      if (params.signal) {
+        params.signal.removeEventListener("abort", onRunAbort);
+      }
+    }
+    // Deadline expiry maps to a timed_out decline (caught above, not propagated).
+    if (timedOut) {
+      return {
+        outcome: "denied",
+        reason: "approval resolver timed out",
+        failureDisposition: "timed_out",
+      };
+    }
+    // Fail-closed: an aborted hold or no verdict declines. `timed_out` disposition
+    // covers the run-abort; other misses report `failed`.
+    if (params.signal?.aborted === true || !verdict) {
+      return {
+        outcome: "denied",
+        reason: verdict?.reason ?? "approval resolver denied",
+        failureDisposition: params.signal?.aborted === true ? "timed_out" : "failed",
+      };
+    }
+    // Allow-LIST the verdict: approve ONLY on an explicit `allow` that echoes the
+    // request's requestId (the request-binding guard). ANY other decision value —
+    // "deny", or a malformed/unexpected string — fails closed to a decline.
+    if (verdict.requestId !== requestId || verdict.decision !== "allow") {
+      return {
+        outcome: "denied",
+        reason: verdict.reason ?? "approval resolver denied",
+        failureDisposition: "failed",
+      };
+    }
+    // Structural single-use + cross-request replay rejection (no crypto here).
+    const fresh = assertProofFresh(verdict.proof);
+    const consumed = recordAndConsumeProof({
+      requestId,
+      paramsDigest,
+      outcome: "allow",
+      ...(verdict.proof !== undefined ? { proof: verdict.proof } : {}),
+    });
+    if (!fresh.ok || !consumed.ok) {
+      return {
+        outcome: "denied",
+        reason: "approval proof rejected",
+        failureDisposition: "failed",
+      };
+    }
+    // allow-always durability is plugin-owned, not Codex session trust; keep
+    // this scoped to the current item (mirrors the :486-491 rationale).
+    return { outcome: "approved-once" };
   }
   const hookChannelId = buildAgentHookContextChannelFields({
     sessionKey: params.paramsForRun.sessionKey,

@@ -5,6 +5,7 @@ import {
   CodexAppServerClient,
   isCodexAppServerApprovalRequest,
   isCodexAppServerIndeterminateTransportError,
+  isUnsupportedCodexAppServerVersionError,
 } from "./client.js";
 import { resetSharedCodexAppServerClientForTests } from "./shared-client.js";
 import { createClientHarness } from "./test-support.js";
@@ -406,6 +407,37 @@ describe("CodexAppServerClient", () => {
     await expect(initializing).rejects.toThrow(
       `A stable Codex app-server from ${MIN_CODEX_APP_SERVER_VERSION} through ${MAX_CODEX_APP_SERVER_VERSION} is required`,
     );
+    expect(harness.writes).toHaveLength(1);
+  });
+
+  // Approval-resolver spec §7 fail-closed floor: a Codex app-server below
+  // MIN_CODEX_APP_SERVER_VERSION (0.143.0) must hard-throw at initialize, BEFORE
+  // any approval could reach the exclusive process.exec resolver branch. This is
+  // the reason no in-branch version check is needed in approval-bridge.ts — the
+  // session never reaches that branch on a sub-floor server. Regressing this floor
+  // (or making it resolver-presence-dependent) would silently ungate sub-floor
+  // codex, so the throw is asserted here as a CodexAppServerVersionError.
+  it("sub-floor Codex app-server (< MIN) throws a version error at initialize, never reaching the resolver branch (§7)", async () => {
+    const { harness, initializing, outbound } = startInitialize();
+    // 0.142.9 is one patch below the 0.143.0 floor.
+    harness.send({
+      id: outbound.id,
+      result: { userAgent: "openclaw/0.142.9 (macOS; test)" },
+    });
+
+    const error = await initializing.then(
+      () => {
+        throw new Error("initialize resolved for a sub-floor app-server; expected a throw");
+      },
+      (rejection: unknown) => rejection,
+    );
+    expect(isUnsupportedCodexAppServerVersionError(error)).toBe(true);
+    expect((error as Error).name).toBe("CodexAppServerVersionError");
+    expect((error as Error).message).toContain(
+      `A stable Codex app-server from ${MIN_CODEX_APP_SERVER_VERSION} through ${MAX_CODEX_APP_SERVER_VERSION} is required, but detected 0.142.9`,
+    );
+    // Only the initialize write happened — the session never advanced to a state
+    // where an approval (and thus the resolver branch) could be reached.
     expect(harness.writes).toHaveLength(1);
   });
 
