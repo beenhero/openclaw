@@ -12,7 +12,14 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { FileProofLedger, InMemoryProofLedger, proofKey } from "./proof-ledger.js";
+import { getAgentDir } from "../agents/config.js";
+import {
+  __resetDefaultProofLedgerForTest,
+  FileProofLedger,
+  getDefaultProofLedger,
+  InMemoryProofLedger,
+  proofKey,
+} from "./proof-ledger.js";
 import type { ProofLedger } from "./proof-ledger.js";
 
 const sha256hex = (s: string): string => createHash("sha256").update(s).digest("hex");
@@ -675,5 +682,56 @@ describe("FileProofLedger — decision suite + structural assertions", () => {
     // The original proof is also still replay-blocked from the committed seenProofHashes.
     const r3 = restarted.consumeOnce("proof-crash-1", "req-2", "digest-2", "allow");
     expect(r3).toEqual({ ok: false, reason: "replayed" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// L2.6 — default durable ledger singleton (getDefaultProofLedger)
+// ---------------------------------------------------------------------------
+
+describe("getDefaultProofLedger — lazy durable singleton", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-proof-default-"));
+  });
+
+  afterEach(() => {
+    __resetDefaultProofLedgerForTest(); // clear the singleton so it never leaks a temp dir
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("getAgentDir() resolves to a non-empty path in-harness (the un-overridden default root)", () => {
+    // The un-overridden default is FileProofLedger(join(getAgentDir(), "proof-ledger")).
+    // Confirming getAgentDir resolves proves the live default path is constructible.
+    const root = getAgentDir();
+    expect(typeof root).toBe("string");
+    expect(root.length).toBeGreaterThan(0);
+  });
+
+  it("override re-points the singleton at a temp dir; a consume durably lands there", () => {
+    const dir = path.join(tmpDir, "proof-ledger");
+    __resetDefaultProofLedgerForTest(dir);
+    const ledger = getDefaultProofLedger();
+
+    const r = ledger.consumeOnce("proof-default-1", "req-d1", "digest-d1", "allow");
+    expect(r).toEqual({ ok: true });
+
+    // Durable artifacts landed under the override dir (not the real agent dir).
+    const index = JSON.parse(fs.readFileSync(path.join(dir, "proof-index.json"), "utf-8"));
+    expect(Object.keys(index.records).length).toBe(1);
+    const jsonl = fs.readFileSync(path.join(dir, "proof-ledger.jsonl"), "utf-8").trim();
+    expect(jsonl.split("\n").length).toBe(1);
+    expect(JSON.parse(jsonl).decision).toBe("consumed");
+  });
+
+  it("is a stable singleton across calls until reset", () => {
+    __resetDefaultProofLedgerForTest(path.join(tmpDir, "proof-ledger"));
+    expect(getDefaultProofLedger()).toBe(getDefaultProofLedger());
+    __resetDefaultProofLedgerForTest(path.join(tmpDir, "proof-ledger-2"));
+    // after reset the instance differs
+    const first = getDefaultProofLedger();
+    __resetDefaultProofLedgerForTest(path.join(tmpDir, "proof-ledger-3"));
+    expect(getDefaultProofLedger()).not.toBe(first);
   });
 });
