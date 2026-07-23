@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { computeParamsDigest } from "./capability-approval.js";
 import {
   EXEC_CAPABLE_TOOL_NAMES,
+  FS_WRITE_TOOL_NAMES,
   NET_EGRESS_TOOL_NAMES,
   SUPERSET_EFFECTS,
   classifyEffects,
@@ -699,5 +700,129 @@ describe("caller-side backstop (belt-and-suspenders proof)", () => {
     expect(execEffect?.["unparseable"]).toBe(true);
     const egressEffect = result.find((e) => e.kind === "net.egress");
     expect(egressEffect?.hosts).toEqual(["*"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// L6.1 — fs.write capability + classifier (Layer 6, Dispatch A)
+// ---------------------------------------------------------------------------
+
+describe("L6.1 fs.write — FS_WRITE_TOOL_NAMES (Tier-A)", () => {
+  it("FS_WRITE_TOOL_NAMES is intentionally empty for OpenClaw (file writes go via exec + Tier-C)", () => {
+    // OpenClaw has no dedicated native write tool. Writes go through the shell
+    // exec `command` tool and are classified via Tier-C (refineWriteFsPaths).
+    // FS_WRITE_TOOL_NAMES exists for future integrators with a named write tool.
+    expect(FS_WRITE_TOOL_NAMES.size).toBe(0);
+  });
+});
+
+describe("L6.1 fs.write — Tier-C classifyEffects integration", () => {
+  it("touch /tmp/x command → effects include fs.write paths:['/tmp/x']", async () => {
+    const result = await classifyEffects(null, "bash", { command: "touch /tmp/x" });
+    expect(result.some((e) => e.kind === "process.exec")).toBe(true);
+    const fsWrite = result.find((e) => e.kind === "fs.write");
+    expect(fsWrite).toBeDefined();
+    expect(fsWrite?.paths).toEqual(["/tmp/x"]);
+  });
+
+  it("bash -lc 'tee /a/b' → effects include fs.write (shell-unwrapped path)", async () => {
+    const result = await classifyEffects(null, "bash", {
+      command: "/bin/bash -lc 'tee /a/b'",
+    });
+    expect(result.some((e) => e.kind === "process.exec")).toBe(true);
+    const fsWrite = result.find((e) => e.kind === "fs.write");
+    expect(fsWrite).toBeDefined();
+    expect(fsWrite?.paths).toEqual(["/a/b"]);
+  });
+
+  it("echo hi > /out → effects include fs.write (redirection)", async () => {
+    const result = await classifyEffects(null, "bash", { command: "echo hi > /out" });
+    const fsWrite = result.find((e) => e.kind === "fs.write");
+    expect(fsWrite).toBeDefined();
+    expect(fsWrite?.paths).toEqual(["/out"]);
+  });
+
+  it("ls -la /tmp (non-write) → NO fs.write effect", async () => {
+    const result = await classifyEffects(null, "bash", { command: "ls -la /tmp" });
+    expect(result.find((e) => e.kind === "fs.write")).toBeUndefined();
+  });
+
+  it("curl command → NO fs.write effect (network fetch, not a writer)", async () => {
+    const result = await classifyEffects(null, "bash", { command: "curl https://x.com" });
+    expect(result.find((e) => e.kind === "fs.write")).toBeUndefined();
+    // But it DOES have net.egress
+    expect(result.find((e) => e.kind === "net.egress")).toBeDefined();
+  });
+
+  it("malformed command → NO crash (falls through without fs.write)", async () => {
+    await expect(
+      classifyEffects(null, "bash", { command: "touch '/tmp/bad" }),
+    ).resolves.toBeDefined();
+  });
+});
+
+describe("L6.1 fs.write — refineTierC integration for fs.write", () => {
+  it("process.exec effect with write command → PUSHES fs.write (refineTierC monotonic)", () => {
+    const baseEffects: EffectDescriptor[] = [{ kind: "process.exec", command: "touch /tmp/x" }];
+    const result = refineTierC(baseEffects, "bash", { command: "touch /tmp/x" });
+    expect(result.length).toBeGreaterThanOrEqual(baseEffects.length);
+    const fsWrite = result.find((e) => e.kind === "fs.write");
+    expect(fsWrite).toBeDefined();
+    expect(fsWrite?.paths).toEqual(["/tmp/x"]);
+  });
+
+  it("process.exec effect with non-write command → NO fs.write pushed", () => {
+    const baseEffects: EffectDescriptor[] = [{ kind: "process.exec", command: "ls -la /tmp" }];
+    const result = refineTierC(baseEffects, "bash", { command: "ls -la /tmp" });
+    expect(result.find((e) => e.kind === "fs.write")).toBeUndefined();
+    expect(result.length).toBe(baseEffects.length);
+  });
+
+  it("tee command → gets BOTH process.exec AND fs.write (multi-effect)", () => {
+    const baseEffects: EffectDescriptor[] = [{ kind: "process.exec", command: "tee /tmp/output" }];
+    const result = refineTierC(baseEffects, "bash", { command: "tee /tmp/output" });
+    expect(result.some((e) => e.kind === "process.exec")).toBe(true);
+    expect(result.some((e) => e.kind === "fs.write")).toBe(true);
+    expect(result.find((e) => e.kind === "fs.write")?.paths).toEqual(["/tmp/output"]);
+  });
+
+  it("refineTierC monotonic for fs.write: result.length >= input.length", () => {
+    const cases = [
+      {
+        effects: [{ kind: "process.exec", command: "touch /a" }] as EffectDescriptor[],
+        params: { command: "touch /a" },
+      },
+      {
+        effects: [{ kind: "process.exec", command: "rm /b" }] as EffectDescriptor[],
+        params: { command: "rm /b" },
+      },
+      {
+        effects: [{ kind: "process.exec", command: "ls /c" }] as EffectDescriptor[],
+        params: { command: "ls /c" },
+      },
+    ];
+    for (const { effects, params } of cases) {
+      const result = refineTierC(effects, "bash", params);
+      expect(result.length).toBeGreaterThanOrEqual(effects.length);
+    }
+  });
+});
+
+describe("L6.1 fs.write — SUPERSET floor does NOT include fs.write", () => {
+  it("SUPERSET_EFFECTS has exactly 2 effects: process.exec + net.egress (NOT fs.write)", () => {
+    // Design decision: fs.write is NOT in the superset. An unparseable op is gated
+    // under process.exec + net.egress, not additionally classified as a writer.
+    // Adding fs.write to SUPERSET would over-classify every unknown op as a writer.
+    expect(SUPERSET_EFFECTS.length).toBe(2);
+    expect(SUPERSET_EFFECTS.some((e) => e.kind === "process.exec")).toBe(true);
+    expect(SUPERSET_EFFECTS.some((e) => e.kind === "net.egress")).toBe(true);
+    expect(SUPERSET_EFFECTS.some((e) => e.kind === "fs.write")).toBe(false);
+  });
+
+  it("fully-unparseable input does NOT produce fs.write effect (superset is exec+egress only)", async () => {
+    const result = await classifyEffects(null, "totally-unknown-xyz", null);
+    expect(result.find((e) => e.kind === "fs.write")).toBeUndefined();
+    expect(result.some((e) => e.kind === "process.exec")).toBe(true);
+    expect(result.some((e) => e.kind === "net.egress")).toBe(true);
   });
 });

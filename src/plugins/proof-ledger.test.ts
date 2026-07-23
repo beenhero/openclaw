@@ -20,7 +20,7 @@ import {
   InMemoryProofLedger,
   proofKey,
 } from "./proof-ledger.js";
-import type { ProofLedger } from "./proof-ledger.js";
+import type { ProofAuditRecord, ProofLedger } from "./proof-ledger.js";
 
 const sha256hex = (s: string): string => createHash("sha256").update(s).digest("hex");
 
@@ -134,6 +134,74 @@ function runDecisionSuite(suiteName: string, makeLedger: () => ProofLedger) {
       // Try to replay on a fresh pair — should be rejected as replayed, not ok
       const r2 = ledger.consumeOnce(proof, "req-NEW", "digest-NEW", "allow");
       expect(r2).toEqual({ ok: false, reason: "replayed" });
+    });
+
+    // ---------------------------------------------------------------------------
+    // L6.2 — getAuditRecord RETAIN query (shared suite, both impls)
+    // ---------------------------------------------------------------------------
+
+    // Test A: unknown requestId → [] (no crash)
+    it("getAuditRecord: unknown requestId → [] (not found, no throw)", () => {
+      const result = ledger.getAuditRecord("req-not-exists");
+      expect(result).toEqual([]);
+    });
+
+    // Test B: empty requestId → []
+    it("getAuditRecord: empty requestId → []", () => {
+      expect(ledger.getAuditRecord("")).toEqual([]);
+    });
+
+    // Test C: consume → getAuditRecord returns the record with correct fields
+    it("getAuditRecord: consume then query → returns {requestId, paramsDigest, outcome, consumedAt}", () => {
+      const before = Date.now();
+      ledger.consumeOnce("proof-audit-1", "req-audit", "digest-audit", "allow");
+      const after = Date.now();
+
+      const records = ledger.getAuditRecord("req-audit");
+      expect(records).toHaveLength(1);
+      const rec = records[0] as ProofAuditRecord;
+      expect(rec.requestId).toBe("req-audit");
+      expect(rec.paramsDigest).toBe("digest-audit");
+      expect(rec.outcome).toBe("allow");
+      expect(rec.consumedAt).toBeGreaterThanOrEqual(before);
+      expect(rec.consumedAt).toBeLessThanOrEqual(after + 10);
+    });
+
+    // Test D: raw proof is NOT present in the returned record (L2 secret-at-rest)
+    it("getAuditRecord: raw proof is NOT present in the returned record (secret-at-rest)", () => {
+      ledger.consumeOnce("secret-proof-xyz", "req-secret", "digest-secret", "deny");
+      const records = ledger.getAuditRecord("req-secret");
+      expect(records).toHaveLength(1);
+      const rec = records[0]!;
+      expect("proof" in rec).toBe(false);
+      // The string "secret-proof-xyz" must not appear anywhere in the serialized record
+      expect(JSON.stringify(rec)).not.toContain("secret-proof-xyz");
+    });
+
+    // Test E: outcome "deny" is preserved
+    it("getAuditRecord: deny outcome is preserved in the record", () => {
+      ledger.consumeOnce("proof-deny-1", "req-deny", "digest-deny", "deny");
+      const records = ledger.getAuditRecord("req-deny");
+      expect(records).toHaveLength(1);
+      expect(records[0]?.outcome).toBe("deny");
+    });
+
+    // Test F: getAuditRecord is read-only (does NOT prevent subsequent consumeOnce rejection)
+    it("getAuditRecord: does NOT consume or burn the pair (consumeOnce still rejects already_consumed)", () => {
+      ledger.consumeOnce("proof-ro", "req-ro", "digest-ro", "allow");
+      // Query the record — must not burn anything
+      ledger.getAuditRecord("req-ro");
+      // The pair is still single-use → already_consumed
+      const r2 = ledger.consumeOnce("proof-ro-2", "req-ro", "digest-ro", "allow");
+      expect(r2).toEqual({ ok: false, reason: "already_consumed" });
+    });
+
+    // Test G: undefined-proof consumed → getAuditRecord returns record
+    it("getAuditRecord: undefined-proof consume → record is still retrievable", () => {
+      ledger.consumeOnce(undefined, "req-noproof", "digest-noproof", "allow");
+      const records = ledger.getAuditRecord("req-noproof");
+      expect(records).toHaveLength(1);
+      expect(records[0]?.outcome).toBe("allow");
     });
   });
 }
@@ -682,6 +750,59 @@ describe("FileProofLedger — decision suite + structural assertions", () => {
     // The original proof is also still replay-blocked from the committed seenProofHashes.
     const r3 = restarted.consumeOnce("proof-crash-1", "req-2", "digest-2", "allow");
     expect(r3).toEqual({ ok: false, reason: "replayed" });
+  });
+
+  // ---------------------------------------------------------------------------
+  // L6.2 — getAuditRecord durable retrieval (File-specific)
+  // ---------------------------------------------------------------------------
+
+  it("getAuditRecord: File ledger — record survives a fresh instance (durable retrieval)", () => {
+    // The key durability test: a committed consume persists to disk;
+    // a FRESH FileProofLedger over the same dir can retrieve it via getAuditRecord.
+    const dir = path.join(tmpDir, "ledger-audit-durable");
+    const ledger1 = new FileProofLedger(dir);
+    ledger1.consumeOnce("proof-durable-1", "req-durable", "digest-durable", "allow");
+
+    // Create a FRESH instance (simulates process restart) — reads the on-disk index.
+    const ledger2 = new FileProofLedger(dir);
+    const records = ledger2.getAuditRecord("req-durable");
+    expect(records).toHaveLength(1);
+    expect(records[0]?.requestId).toBe("req-durable");
+    expect(records[0]?.paramsDigest).toBe("digest-durable");
+    expect(records[0]?.outcome).toBe("allow");
+    expect(typeof records[0]?.consumedAt).toBe("number");
+  });
+
+  it("getAuditRecord: File ledger — raw proof NOT in returned record (secret-at-rest, durable)", () => {
+    const dir = path.join(tmpDir, "ledger-audit-secret");
+    const ledger = new FileProofLedger(dir);
+    ledger.consumeOnce("super-secret-proof", "req-secret-f", "digest-secret-f", "deny");
+
+    const records = ledger.getAuditRecord("req-secret-f");
+    expect(records).toHaveLength(1);
+    const rec = records[0]!;
+    expect("proof" in rec).toBe(false);
+    expect(JSON.stringify(rec)).not.toContain("super-secret-proof");
+    expect(rec.outcome).toBe("deny");
+  });
+
+  it("getAuditRecord: File ledger — unknown requestId returns [] (no throw)", () => {
+    const dir = path.join(tmpDir, "ledger-audit-unknown");
+    const ledger = new FileProofLedger(dir);
+    expect(() => ledger.getAuditRecord("not-found")).not.toThrow();
+    expect(ledger.getAuditRecord("not-found")).toEqual([]);
+  });
+
+  it("getAuditRecord: File ledger — does NOT consume the pair (getAuditRecord is read-only)", () => {
+    const dir = path.join(tmpDir, "ledger-audit-readonly");
+    const ledger = new FileProofLedger(dir);
+    ledger.consumeOnce("proof-ro-f", "req-ro-f", "digest-ro-f", "allow");
+    // Query twice — read-only, should not burn anything
+    ledger.getAuditRecord("req-ro-f");
+    ledger.getAuditRecord("req-ro-f");
+    // The pair is still single-use
+    const r2 = ledger.consumeOnce("proof-ro-f-2", "req-ro-f", "digest-ro-f", "allow");
+    expect(r2).toEqual({ ok: false, reason: "already_consumed" });
   });
 });
 

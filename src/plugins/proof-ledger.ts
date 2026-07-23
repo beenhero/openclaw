@@ -106,6 +106,20 @@ export type LedgerConsumeResult =
   | { ok: true }
   | { ok: false; reason: "already_consumed" | "replayed" | "invalid_identifier" };
 
+/**
+ * A non-repudiable audit record returned by getAuditRecord.
+ *
+ * Intentionally does NOT carry the raw proof (L2 secret-at-rest invariant:
+ * the raw proof is a reusable secret and must never leave the ledger).
+ * Contains only the data needed to correlate a requestId to its disposition.
+ */
+export type ProofAuditRecord = {
+  requestId: string;
+  paramsDigest: string;
+  outcome: "allow" | "deny";
+  consumedAt: number;
+};
+
 export interface ProofLedger {
   /**
    * CONSUME half — single-use + replay gate.
@@ -127,6 +141,26 @@ export interface ProofLedger {
     paramsDigest: string,
     outcome: "allow" | "deny",
   ): LedgerConsumeResult;
+
+  /**
+   * RETAIN query half — retrieve non-repudiable audit record(s) by requestId.
+   *
+   * Returns all retained ProofAuditRecord entries whose requestId matches.
+   * In normal operation there is exactly ONE record per requestId (single-use
+   * constraint), but the return type is an array for forward-compatibility.
+   *
+   * Properties:
+   *   - READ-ONLY: never consumes, never mutates, never throws (returns [] on
+   *     missing requestId, missing ledger, or any I/O error).
+   *   - NO raw proof: ProofAuditRecord intentionally omits the raw proof
+   *     (L2 secret-at-rest invariant). The caller receives only the disposition.
+   *   - DISTINCT from consumeOnce: calling getAuditRecord does NOT burn the proof.
+   *   - DURABLE for FileProofLedger: survives process restart; reads the index.
+   *
+   * This makes the RETAIN half of the ledger QUERYABLE — closes the
+   * #97152 "retrievable non-repudiable record" requirement.
+   */
+  getAuditRecord(requestId: string): ProofAuditRecord[];
 }
 
 // ---------------------------------------------------------------------------
@@ -208,6 +242,31 @@ export class InMemoryProofLedger implements ProofLedger {
       consumedAt: Date.now(),
     });
     return { ok: true };
+  }
+
+  /**
+   * RETAIN query: scan the consumed Map for entries whose requestId matches.
+   * Returns the matching ProofAuditRecord(s) — never throws, returns [] when
+   * the requestId is unknown or has not been consumed yet.
+   *
+   * READ-ONLY. Does NOT burn the proof or mutate any state.
+   * The raw proof is NEVER returned (L2 secret-at-rest invariant: ProofRecord
+   * and ProofAuditRecord carry no raw proof field — only the disposition).
+   */
+  getAuditRecord(requestId: string): ProofAuditRecord[] {
+    if (!requestId) return [];
+    const results: ProofAuditRecord[] = [];
+    for (const record of this.consumed.values()) {
+      if (record.requestId === requestId) {
+        results.push({
+          requestId: record.requestId,
+          paramsDigest: record.paramsDigest,
+          outcome: record.outcome,
+          consumedAt: record.consumedAt,
+        });
+      }
+    }
+    return results;
   }
 
   /** Clears all state. Test-only. */
@@ -496,6 +555,48 @@ export class FileProofLedger implements ProofLedger {
       return { ok: true };
     } finally {
       release();
+    }
+  }
+
+  /**
+   * RETAIN query: read the on-disk index and return ProofAuditRecord entries
+   * whose requestId matches.
+   *
+   * READ-ONLY. Does NOT acquire a write lock — only reads the current snapshot.
+   * This is consistent with the crash-consistency invariant: the index is the
+   * authoritative record; any committed consume is durable before the lock releases.
+   *
+   * Never throws: returns [] on missing requestId, absent/malformed index, or
+   * any I/O error. The caller must not need to distinguish "not found" from "error".
+   *
+   * Does NOT return the raw proof (L2 secret-at-rest): ProofAuditRecord is a
+   * copy of ProofRecord fields without any raw proof material.
+   */
+  getAuditRecord(requestId: string): ProofAuditRecord[] {
+    if (!requestId) return [];
+    try {
+      this.ensureDir();
+      this.ensureIndex();
+      if (!existsSync(this.indexPath)) return [];
+      const raw = readFileSync(this.indexPath, "utf-8");
+      const parsed: unknown = JSON.parse(raw);
+      assertProofIndexShape(parsed); // shape-validate — throws on corrupt index
+      const results: ProofAuditRecord[] = [];
+      for (const record of Object.values(parsed.records)) {
+        const r = record as ProofRecord;
+        if (r.requestId === requestId) {
+          results.push({
+            requestId: r.requestId,
+            paramsDigest: r.paramsDigest,
+            outcome: r.outcome,
+            consumedAt: r.consumedAt,
+          });
+        }
+      }
+      return results;
+    } catch {
+      // Read-only: never throw to caller (returns [] on any error)
+      return [];
     }
   }
 }

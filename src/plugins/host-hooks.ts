@@ -109,8 +109,29 @@ export type ApprovalCapability = string;
  *                   Convention: hosts are sorted, lowercased, port-stripped. ports are sorted
  *                   ascending. url is a human-UX hint only — resolvers decide on hosts/ports,
  *                   not the raw url string.
+ *
+ *   "fs.write"     — filesystem write gate (Layer 6). EffectDescriptor shape:
+ *                     { kind: "fs.write", paths: string[] }
+ *
+ *                   IMPORTANT — paths: ['*'] means "unknown/any path" and MUST be treated
+ *                   as deny-by-default. A resolver MUST NEVER treat the literal string '*'
+ *                   as an allowlistable glob pattern. It is the conservative superset marker
+ *                   emitted when the target path cannot be determined (e.g. unparseable argv,
+ *                   write command with no path argument). Deny or prompt the user; do not allow.
+ *
+ *                   Convention: paths are sorted. Tier-C refines paths from shell argv;
+ *                   a native write-tool's params.path / params.file_path also resolves here.
+ *                   fs.write is emitted ALONGSIDE process.exec for shell write commands
+ *                   (e.g. `touch /x` → [process.exec, fs.write paths:['/x']]).
+ *                   fs.write is NOT added to SUPERSET_EFFECTS — an unparseable op is
+ *                   process.exec+net.egress (the existing superset floor); we do not add
+ *                   fs.write to avoid over-classifying every unknown op as a writer.
  */
-export const KNOWN_CAPABILITIES: ReadonlySet<string> = new Set(["process.exec", "net.egress"]);
+export const KNOWN_CAPABILITIES: ReadonlySet<string> = new Set([
+  "process.exec",
+  "net.egress",
+  "fs.write",
+]);
 
 /** Static scope declaration for an approval resolver. */
 export type ApprovalScope = {

@@ -80,9 +80,8 @@ describe("registerApprovalResolver host registrar", () => {
   });
 
   it("THROWS (hard fail-closed) when scope.capabilities includes a capability NOT in KNOWN_CAPABILITIES", () => {
-    // L3.1: KNOWN_CAPABILITIES = {"process.exec", "net.egress"}. An unknown capability like
-    // "fs.write" must still hard-throw — the guard is now 'not in KNOWN_CAPABILITIES', not
-    // 'not process.exec'.
+    // L3.1: KNOWN_CAPABILITIES = {"process.exec", "net.egress", "fs.write"} (L6.1 adds fs.write).
+    // An unknown capability like "http.request" must hard-throw — guard is 'not in KNOWN_CAPABILITIES'.
     const { config, registry } = createPluginRegistryFixture();
     expect(() =>
       registerTestPlugin({
@@ -92,14 +91,34 @@ describe("registerApprovalResolver host registrar", () => {
         register(api) {
           api.registerApprovalResolver(
             execResolver({
-              id: "sigil-fs",
-              scope: { capabilities: ["process.exec", "fs.write"] as never },
+              id: "sigil-http",
+              scope: { capabilities: ["process.exec", "http.request"] as never },
             }),
           );
         },
       }),
     ).toThrow(/KNOWN_CAPABILITIES/);
     expect(registry.registry.approvalResolvers).toEqual([]);
+  });
+
+  it("registers an fs.write resolver now that fs.write is in KNOWN_CAPABILITIES (L6.1)", () => {
+    // L6.1 adds "fs.write" to KNOWN_CAPABILITIES — a resolver claiming it must no longer throw.
+    const { config, registry } = createPluginRegistryFixture();
+    registerTestPlugin({
+      registry,
+      config,
+      record: createPluginRecord({ id: "sigil", name: "Sigil", origin: "bundled" }),
+      register(api) {
+        api.registerApprovalResolver(
+          execResolver({
+            id: "sigil-fs",
+            scope: { capabilities: ["fs.write"] as unknown as ["process.exec"] },
+          }),
+        );
+      },
+    });
+    expect(registry.registry.approvalResolvers).toHaveLength(1);
+    expect(registry.registry.diagnostics).toEqual([]);
   });
 
   it("soft-rejects a duplicate pluginId+id (diagnostic, no second entry, no throw)", () => {
@@ -209,8 +228,8 @@ describe("registerApprovalResolver host registrar", () => {
     expect(registry.registry.diagnostics).toEqual([]);
   });
 
-  it("L3.1: THROWS for a capability NOT in KNOWN_CAPABILITIES (e.g. fs.write)", () => {
-    // KNOWN_CAPABILITIES = {"process.exec", "net.egress"} in L3. Anything else hard-throws.
+  it("L3.1: THROWS for a capability NOT in KNOWN_CAPABILITIES (e.g. 'mcp.invoke')", () => {
+    // KNOWN_CAPABILITIES = {"process.exec", "net.egress", "fs.write"} (L6.1). Anything else hard-throws.
     const { config, registry } = createPluginRegistryFixture();
     expect(() =>
       registerTestPlugin({
@@ -220,8 +239,8 @@ describe("registerApprovalResolver host registrar", () => {
         register(api) {
           api.registerApprovalResolver(
             execResolver({
-              id: "sigil-fs",
-              scope: { capabilities: ["fs.write"] as never },
+              id: "sigil-mcp",
+              scope: { capabilities: ["mcp.invoke"] as never },
             }),
           );
         },
@@ -230,11 +249,14 @@ describe("registerApprovalResolver host registrar", () => {
     expect(registry.registry.approvalResolvers).toEqual([]);
   });
 
-  it("L3.1: KNOWN_CAPABILITIES Set membership — process.exec and net.egress are members, fs.write is not", () => {
-    // Asserts the Set directly via the exported constant.
+  it("L3.1 + L6.1: KNOWN_CAPABILITIES Set membership — process.exec, net.egress, and fs.write are members", () => {
+    // L3.1 established process.exec + net.egress; L6.1 adds fs.write.
     expect(KNOWN_CAPABILITIES.has("process.exec")).toBe(true);
     expect(KNOWN_CAPABILITIES.has("net.egress")).toBe(true);
-    expect(KNOWN_CAPABILITIES.has("fs.write")).toBe(false);
+    expect(KNOWN_CAPABILITIES.has("fs.write")).toBe(true);
+    // Unknown capabilities remain outside the set
+    expect(KNOWN_CAPABILITIES.has("http.request")).toBe(false);
+    expect(KNOWN_CAPABILITIES.has("mcp.invoke")).toBe(false);
   });
 
   it("STILL registers process.exec after the KNOWN_CAPABILITIES contract reshape (regression)", () => {
@@ -398,7 +420,32 @@ describe("registerToolMetadata capabilities validation (L3.6 Tier-B)", () => {
     expect(registry.registry.diagnostics).toHaveLength(0);
   });
 
-  it("THROWS (fail-closed) when capabilities includes 'fs.write' (not in KNOWN_CAPABILITIES)", () => {
+  it("registers tool metadata with capabilities=['fs.write'] now that fs.write is in KNOWN_CAPABILITIES (L6.1)", () => {
+    // L6.1 adds "fs.write" to KNOWN_CAPABILITIES — registerToolMetadata with fs.write must succeed.
+    const { config, registry } = createPluginRegistryFixture();
+    registerTestPlugin({
+      registry,
+      config,
+      record: createPluginRecord({
+        id: "my-plugin",
+        name: "My Plugin",
+        origin: "workspace",
+        contracts: { tools: ["my_tool"] },
+      }),
+      register(api) {
+        api.registerToolMetadata({
+          toolName: "my_tool",
+          displayName: "My Write Tool",
+          capabilities: ["fs.write"] as unknown as ["process.exec"],
+        });
+      },
+    });
+    expect(registry.registry.toolMetadata).toHaveLength(1);
+    expect(registry.registry.diagnostics).toHaveLength(0);
+  });
+
+  it("THROWS (fail-closed) when capabilities includes an unknown capability (e.g. 'mcp.invoke')", () => {
+    // 'mcp.invoke' is NOT in KNOWN_CAPABILITIES — must still hard-throw.
     const { config, registry } = createPluginRegistryFixture();
     expect(() =>
       registerTestPlugin({
@@ -414,7 +461,7 @@ describe("registerToolMetadata capabilities validation (L3.6 Tier-B)", () => {
           api.registerToolMetadata({
             toolName: "my_tool",
             // @ts-expect-error testing invalid capability
-            capabilities: ["fs.write"],
+            capabilities: ["mcp.invoke"],
           });
         },
       }),
@@ -446,11 +493,14 @@ describe("registerToolMetadata capabilities validation (L3.6 Tier-B)", () => {
     expect(registry.registry.diagnostics).toHaveLength(0);
   });
 
-  it("KNOWN_CAPABILITIES contains both process.exec and net.egress", () => {
+  it("KNOWN_CAPABILITIES contains process.exec, net.egress, and fs.write (L6.1)", () => {
+    // L6.1 adds "fs.write" to the wired capability set.
     expect(KNOWN_CAPABILITIES.has("process.exec")).toBe(true);
     expect(KNOWN_CAPABILITIES.has("net.egress")).toBe(true);
-    expect(KNOWN_CAPABILITIES.has("fs.write")).toBe(false);
+    expect(KNOWN_CAPABILITIES.has("fs.write")).toBe(true);
+    // Unknown capabilities still outside the set:
     expect(KNOWN_CAPABILITIES.has("http.request")).toBe(false);
+    expect(KNOWN_CAPABILITIES.has("mcp.invoke")).toBe(false);
   });
 
   // SHRINK-1: duplicate capabilities must be deduped at registration

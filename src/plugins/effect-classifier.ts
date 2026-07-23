@@ -31,6 +31,7 @@
  */
 
 import { computeParamsDigest } from "./capability-approval.js";
+import { refineWriteFsPaths } from "./effect-refiners/fs-write.js";
 import { extractWebFetchEgress, refineCurlNetEgress } from "./effect-refiners/net-egress.js";
 import { KNOWN_CAPABILITIES } from "./host-hooks.js";
 import type { EffectDescriptor } from "./host-hooks.js";
@@ -165,6 +166,28 @@ export const NET_EGRESS_TOOL_NAMES: ReadonlySet<string> = new Set([
   "browser_fetch",
 ]);
 
+/**
+ * Tool names that map to a base fs.write effect (Layer 6, L6.1).
+ *
+ * OpenClaw has NO dedicated native write tool with a distinct tool name —
+ * file edits go through the shell exec `command` tool (process.exec), which
+ * the Tier-C refiner (refineWriteFsPaths) then refines to extract fs.write
+ * target paths. So this set is EMPTY (or minimal) for the OpenClaw host;
+ * any future native write-tool would be added here.
+ *
+ * Rationale: if there were a named tool like "write_file" or "edit_file",
+ * it would appear here with a base effect of {kind:'fs.write', paths:['*']}.
+ * The Tier-C refiner then refines the paths from params.path / params.file_path.
+ *
+ * INTENTIONALLY EMPTY for the current OpenClaw host — fs.write is primarily
+ * Tier-C (shell command refinement), not Tier-A (tool identity).
+ */
+export const FS_WRITE_TOOL_NAMES: ReadonlySet<string> = new Set([
+  // No dedicated OpenClaw native write tool found. File writes go through
+  // the exec `command` tool and are refined by Tier-C (refineWriteFsPaths).
+  // Future integrators with a dedicated write-tool would add its name here.
+]);
+
 // ---------------------------------------------------------------------------
 // Soundness constants (L3.8)
 // ---------------------------------------------------------------------------
@@ -260,6 +283,12 @@ export function classifyTierA(
     return [{ kind: "net.egress", hosts: ["*"] }];
   }
 
+  if (FS_WRITE_TOOL_NAMES.has(name)) {
+    // Native write tool: return base effect with paths:['*'] (Tier-C refines from params)
+    // Currently empty for OpenClaw — file writes go through exec + Tier-C refinement.
+    return [{ kind: "fs.write", paths: ["*"] }];
+  }
+
   // Unrecognized tool — return [] (floor in classifyEffects handles this)
   return [];
 }
@@ -325,6 +354,8 @@ export function classifyTierB(toolName: unknown): EffectDescriptor[] {
       effects.push({ kind: "process.exec" });
     } else if (cap === "net.egress") {
       effects.push({ kind: "net.egress", hosts: ["*"] });
+    } else if (cap === "fs.write") {
+      effects.push({ kind: "fs.write", paths: ["*"] });
     }
   }
   return effects;
@@ -340,11 +371,20 @@ export function classifyTierB(toolName: unknown): EffectDescriptor[] {
  * For a process.exec effect whose command parses as curl/wget/http:
  *   - PUSH a net.egress effect with extracted host+port info.
  *
+ * For a process.exec effect whose command is a write command (touch/tee/cp/mv/
+ * dd/mkdir/rm/sed -i/install/rsync/> redirection etc.):
+ *   - PUSH an fs.write effect with extracted target path(s).
+ *
  * For a net.egress base effect (web_fetch shape):
  *   - REFINE hosts/ports/url from params.url.
  *
  * REFINE/WIDEN-ONLY: on parse failure return effects unchanged, NEVER shrink.
  * Guarantees: refineTierC(effects, ...).length >= effects.length
+ *
+ * MULTI-EFFECT NOTE (design §2b): a command like `tee /f` → [process.exec, fs.write].
+ * Both effects travel in the single ApprovalRequest (minted with ONE requestId and
+ * ONE paramsDigest over the full effect set). The double-push here does NOT produce
+ * a double-prompt — the decision site mints ONE request for the whole effect set.
  */
 export function refineTierC(
   effects: readonly EffectDescriptor[],
@@ -354,12 +394,14 @@ export function refineTierC(
   const refined = [...effects];
   const p = params && typeof params === "object" ? (params as Record<string, unknown>) : {};
 
-  // Check if we already have process.exec or net.egress effects
+  // Check if we already have process.exec, net.egress, or fs.write effects
   const execIndex = refined.findIndex((e) => e.kind === "process.exec");
   const egressIndex = refined.findIndex((e) => e.kind === "net.egress");
+  const fsWriteIndex = refined.findIndex((e) => e.kind === "fs.write");
 
   if (execIndex !== -1) {
-    // We have a process.exec effect. Try to parse the command as curl/wget/http.
+    // We have a process.exec effect. Try to parse the command as curl/wget/http
+    // and/or as a write command to push net.egress and fs.write effects.
     const execEffect = refined[execIndex];
     if (!execEffect) return refined;
 
@@ -374,6 +416,7 @@ export function refineTierC(
     const command = commandFromEffect ?? argvFromEffect ?? commandFromParams;
 
     if (command !== undefined) {
+      // --- net.egress refinement (curl/wget/http commands) ---
       const curlResult = refineCurlNetEgress(command);
       if (curlResult !== undefined && egressIndex === -1) {
         // It's a fetch command and no existing net.egress — push a new one
@@ -384,6 +427,17 @@ export function refineTierC(
         if (curlResult.ports.length > 0) egressEffect["ports"] = curlResult.ports;
         if (curlResult.url !== undefined) egressEffect["url"] = curlResult.url;
         refined.push(egressEffect);
+      }
+
+      // --- fs.write refinement (write-capable shell commands) ---
+      const writeResult = refineWriteFsPaths(command);
+      if (writeResult !== undefined && fsWriteIndex === -1) {
+        // It's a write command and no existing fs.write — push a new one
+        const fsWriteEffect: EffectDescriptor = {
+          kind: "fs.write",
+          paths: writeResult.paths,
+        };
+        refined.push(fsWriteEffect);
       }
     }
   } else if (egressIndex !== -1) {
