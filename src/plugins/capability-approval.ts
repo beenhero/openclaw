@@ -135,10 +135,23 @@ export function __resetProofRegistryForTest(): void {
 /**
  * Verdict returned by the core capability-approval decision loop.
  * - `allow`: the resolver approved this request; `requestId` echoes the minted id.
- * - `deny`:  fail-closed decline; `failureDisposition` disambiguates timeout vs
- *            other failure so callers can surface the right UX message.
+ * - `deny`:  fail-closed decline. Two flavours, disambiguated by `failureDisposition`:
+ *            • CLEAN POLICY DENY — the resolver returned a well-formed
+ *              `decision:'deny'` with a matching requestId. This is a DECISION,
+ *              not a failure, so `failureDisposition` is ABSENT and the caller
+ *              should surface a graceful block (e.g. the front-stage veto path /
+ *              a codex "decline"), mirroring a codex curl-deny.
+ *            • FAILURE DENY — something went wrong (timeout, requestId mismatch,
+ *              malformed decision value, resolver threw, ledger unavailable,
+ *              proof replay/consume, abort). `failureDisposition` is SET
+ *              (`timed_out` for deadline/abort-timeout, `failed` otherwise) so
+ *              callers can surface the right error UX. Still fail-closed.
  * - `fallthrough`: no exclusive resolver owns `req.capability` so the caller
  *                  should proceed to the next decision stage (e.g. human tap).
+ *
+ * FAIL-CLOSED INVARIANT: the ONLY allow path is a matching-requestId
+ * `decision:'allow'` that also passes proof-freshness + single-use consume.
+ * Every other outcome — including a clean policy deny — denies.
  */
 export type CapabilityApprovalVerdict =
   | { kind: "allow"; requestId: string }
@@ -156,15 +169,16 @@ export type CapabilityApprovalVerdict =
  * only the active plugin registry and the in-process proof state; it never
  * references any Codex / app-server types.
  *
- * Fail-closed matrix (ported verbatim from approval-bridge.ts:555-678):
+ * Fail-closed matrix:
  *  - no resolver              → fallthrough
  *  - poisoned entry           → deny (failed)  [TOCTOU guard]
  *  - resolver throws / catch  → deny (failed)
  *  - deadline expires         → deny (timed_out)
  *  - external signal aborted  → deny (timed_out)
  *  - verdict undefined        → deny (failed)
- *  - requestId mismatch       → deny (failed)
- *  - decision !== "allow"     → deny (failed)
+ *  - requestId mismatch       → deny (failed)    [protocol failure]
+ *  - decision === "deny"      → deny (NO disposition)  [CLEAN policy deny → graceful block]
+ *  - decision !∈ {allow,deny} → deny (failed)    [malformed → fail-closed]
  *  - proof replayed           → deny (failed)
  *  - pair already consumed    → deny (failed)
  *  - all guards pass          → allow
@@ -277,16 +291,47 @@ export async function decideCapabilityApproval(
     };
   }
 
-  // Allow-LIST: approve ONLY on an explicit `allow` that echoes the request's
-  // requestId.  Any other decision value or requestId mismatch → deny (failed).
-  if (verdict.requestId !== req.requestId || verdict.decision !== "allow") {
+  // Allow-LIST — the ONLY allow path is a matching-requestId `decision:'allow'`.
+  // Everything else denies (fail-closed). We split the deny reasons so a CLEAN
+  // policy deny surfaces as a graceful block, while genuine protocol failures
+  // keep a failureDisposition.
+
+  // requestId mismatch = protocol failure (resolver echoed the wrong id).
+  // Checked FIRST so a `decision:'deny'` with a mismatched id is still a failure,
+  // not mistaken for a clean policy decision about THIS request.
+  if (verdict.requestId !== req.requestId) {
     return {
       kind: "deny",
       requestId: req.requestId,
-      reason: verdict.reason ?? "approval resolver denied",
+      reason: verdict.reason ?? "approval resolver requestId mismatch",
       failureDisposition: "failed",
     };
   }
+
+  // Clean policy DENY (matching requestId) = a DECISION, not a failure.
+  // Emit NO failureDisposition → the caller's graceful-block branch (front-stage
+  // veto / codex "decline") fires, mirroring a codex curl-deny.
+  if (verdict.decision === "deny") {
+    return {
+      kind: "deny",
+      requestId: req.requestId,
+      reason: verdict.reason ?? "denied by resolver",
+    };
+  }
+
+  // Any decision value that is neither "allow" nor "deny" = malformed →
+  // fail-closed failure (do NOT trust an unrecognized decision).
+  if (verdict.decision !== "allow") {
+    return {
+      kind: "deny",
+      requestId: req.requestId,
+      reason: verdict.reason ?? "approval resolver returned an invalid decision",
+      failureDisposition: "failed",
+    };
+  }
+
+  // decision === "allow" with matching requestId → continue to the
+  // proof-freshness / single-use consume check below (unchanged).
 
   // Structural single-use + cross-request replay rejection via durable ledger.
   // One atomic consumeOnce under a proper-lockfile advisory lock replaces the

@@ -94,7 +94,7 @@ describe("decideCapabilityApproval", () => {
     expect(verdict).toEqual({ kind: "allow", requestId: req.requestId });
   });
 
-  it("deny — resolver returns deny → {kind:'deny',failureDisposition:'failed'}", async () => {
+  it("deny — clean policy deny (matching requestId) → {kind:'deny',reason} with NO failureDisposition (graceful block)", async () => {
     setActivePluginRegistry(
       makeRegistryWithResolver(async (r) => ({
         requestId: r.requestId,
@@ -103,12 +103,16 @@ describe("decideCapabilityApproval", () => {
       })),
     );
     const verdict = await decideCapabilityApproval(makeRequest(), { deadlineMs: 5000 });
+    // A clean policy DENY is a DECISION, not a failure: no failureDisposition is
+    // emitted, so the caller's graceful-block (front-stage veto) branch fires.
     expect(verdict).toEqual({
       kind: "deny",
       requestId: makeRequest().requestId,
       reason: "not allowed",
-      failureDisposition: "failed",
     });
+    expect(
+      (verdict as { kind: "deny"; failureDisposition?: string }).failureDisposition,
+    ).toBeUndefined();
   });
 
   it("deny — resolver throws → {kind:'deny',failureDisposition:'failed'}", async () => {

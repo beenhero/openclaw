@@ -9,13 +9,16 @@
  * This is the "web_fetch gated like curl" acceptance sketch (#97152), enforced
  * in-harness with the network mocked.
  *
- * Enforcement detail: on resolver DENY, decideCapabilityApproval returns
- * { kind:"deny", failureDisposition:"failed" }, which causes runFrontStageResolver
- * to return { blocked:true, kind:"failure" }, which causes wrapToolWithBeforeToolCallHook
- * to throw BeforeToolCallFailureError (not return a blocked result) — still
- * short-circuiting execute() so the fetch spy is NEVER called. This is the
- * correct fail-closed behavior: BeforeToolCallFailureError is the "failure"
- * path and buildBlockedToolResult is the "veto" path; both prevent execute().
+ * Enforcement detail: on a CLEAN policy DENY, decideCapabilityApproval returns
+ * { kind:"deny", reason } with NO failureDisposition (a decision, not a failure),
+ * which causes runFrontStageResolver to return { blocked:true, kind:"veto",
+ * deniedReason:"capability-resolver" }, which causes wrapToolWithBeforeToolCallHook
+ * to return a graceful BLOCKED RESULT (details.status==="blocked") — short-circuiting
+ * execute() so the fetch spy is NEVER called. This mirrors a codex curl-deny's
+ * graceful "decline". A GENUINE failure (timeout, requestId-mismatch, malformed
+ * decision) still carries a failureDisposition → kind:"failure" → the wrapper
+ * throws BeforeToolCallFailureError. Both paths are fail-closed: execute() is
+ * never reached, the fetch is never made.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -142,16 +145,18 @@ describe("web_fetch net.egress gate (L4.8 — #97152 acceptance sketch)", () => 
   });
 
   // -------------------------------------------------------------------------
-  // Test 1 — DENY blocks the fetch (the headline assertion)
+  // Test 1 — a CLEAN policy DENY blocks the fetch GRACEFULLY (the headline)
   //
-  // When a resolver denies, decideCapabilityApproval returns
-  // { kind:"deny", failureDisposition:"failed" } → runFrontStageResolver
-  // returns { blocked:true, kind:"failure" } → wrapToolWithBeforeToolCallHook
-  // throws BeforeToolCallFailureError before calling execute(). The fetch spy
-  // is NEVER called — this is the enforcement proof.
+  // When a resolver returns a clean deny (matching requestId, decision:"deny"),
+  // decideCapabilityApproval returns { kind:"deny", reason } with NO
+  // failureDisposition → runFrontStageResolver returns { blocked:true,
+  // kind:"veto", deniedReason:"capability-resolver" } → wrapToolWithBeforeToolCallHook
+  // returns a GRACEFUL BLOCKED RESULT (details.status==="blocked") before calling
+  // execute(). The fetch spy is NEVER called — this is the enforcement proof,
+  // and it now declines gracefully like a codex curl-deny (no throw).
   // -------------------------------------------------------------------------
 
-  it("DENY: resolver deny → wrapped.execute() throws (block enforced), fetchSpy NOT called", async () => {
+  it("DENY (clean policy): resolver deny → graceful blocked result, fetchSpy NOT called", async () => {
     const { seen } = registerNetEgressResolver((req) => ({
       requestId: req.requestId,
       decision: "deny",
@@ -165,15 +170,15 @@ describe("web_fetch net.egress gate (L4.8 — #97152 acceptance sketch)", () => 
       emitDiagnostics: false,
     });
 
-    // The wrapper throws because the front-stage returns kind:"failure" (not
-    // "veto") on a resolver deny with failureDisposition. Both paths are
-    // fail-closed — execute() is never reached.
-    await expect(wrapped.execute?.("call-deny", { url: TEST_URL })).rejects.toThrow(
-      "blocked by policy",
-    );
+    // A clean deny is a DECISION → front-stage veto → graceful blocked RESULT
+    // (not a throw). This mirrors a codex curl-deny declining gracefully.
+    const result = await wrapped.execute?.("call-deny", { url: TEST_URL });
+    const details = (result as { details?: { status?: unknown; deniedReason?: unknown } }).details;
+    expect(details?.status).toBe("blocked");
+    expect(details?.deniedReason).toBe("capability-resolver");
 
     // THE KEY ASSERTION: the outbound fetch was NEVER called.
-    // This proves the block is genuinely enforced — execute() was short-circuited.
+    // The block is still genuinely enforced — execute() was short-circuited.
     expect(fetchSpy).not.toHaveBeenCalled();
 
     // AND: the resolver observed the request with net.egress effects containing example.com.
@@ -187,6 +192,36 @@ describe("web_fetch net.egress gate (L4.8 — #97152 acceptance sketch)", () => 
       const hosts = egressEffect.hosts as string[];
       expect(hosts.some((h) => h === "example.com" || h === "*")).toBe(true);
     }
+  });
+
+  // -------------------------------------------------------------------------
+  // Test 1b — a GENUINE failure (requestId mismatch) still THROWS (fail-closed)
+  //
+  // A resolver that echoes the WRONG requestId is a protocol failure, not a
+  // clean policy decision → decideCapabilityApproval returns
+  // { kind:"deny", failureDisposition:"failed" } → front-stage kind:"failure"
+  // → the wrapper throws BeforeToolCallFailureError. The fetch is STILL never
+  // made — fail-closed holds for the failure path too.
+  // -------------------------------------------------------------------------
+
+  it("FAILURE (requestId mismatch): resolver echoes wrong id → throws, fetchSpy NOT called", async () => {
+    registerNetEgressResolver(() => ({
+      requestId: "WRONG-request-id",
+      decision: "allow",
+    }));
+
+    const fetchSpy = setMockFetch();
+
+    const tool = createWebFetchToolForTest();
+    const wrapped = wrapToolWithBeforeToolCallHook(tool, TEST_CTX, {
+      emitDiagnostics: false,
+    });
+
+    // A protocol failure (not a clean decision) → front-stage failure → throw.
+    await expect(wrapped.execute?.("call-mismatch", { url: TEST_URL })).rejects.toThrow();
+
+    // Fail-closed: the fetch was never made on the failure path either.
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   // -------------------------------------------------------------------------

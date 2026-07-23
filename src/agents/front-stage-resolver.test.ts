@@ -466,6 +466,34 @@ describe("L4.5 — runFrontStageResolver", () => {
     expect((result as { params: unknown }).params).toBe(specificParams);
   });
 
+  it("REAL core: clean policy deny (matching requestId) → {kind:'veto'} (not failure), params carried", async () => {
+    // End-to-end through the REAL decideCapabilityApproval (no core mock): a
+    // resolver clean deny must surface as a graceful veto, activating the
+    // front-stage block branch — NOT a failure/throw.
+    setActivePluginRegistry(
+      makeRegistryWithResolver("process.exec", async (req) => ({
+        requestId: req.requestId,
+        decision: "deny",
+        reason: "clean policy deny",
+      })),
+    );
+
+    const result = await runFrontStageResolver({
+      toolName: "bash",
+      params: PARAMS,
+      ctx: makeCtx(),
+      signal: AbortSignal.timeout(5000),
+    });
+
+    expect(result?.blocked).toBe(true);
+    expect((result as { kind: string }).kind).toBe("veto");
+    expect((result as { deniedReason: string }).deniedReason).toBe("capability-resolver");
+    expect((result as { reason: string }).reason).toBe("clean policy deny");
+    // No disposition field on a veto (graceful block).
+    expect((result as { disposition?: string }).disposition).toBeUndefined();
+    expect((result as { params: unknown }).params).toBe(PARAMS);
+  });
+
   it("deny verdict with no reason → uses fallback reason string", async () => {
     setActivePluginRegistry(
       makeRegistryWithResolver("process.exec", async (req) => ({
