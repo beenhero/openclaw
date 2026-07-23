@@ -47,6 +47,7 @@ import {
   resolveFixedWindowRateLimitInteger,
   type FixedWindowRateLimiter,
 } from "../infra/fixed-window-rate-limit.js";
+import { decideCapabilityApproval } from "../plugins/capability-approval.js";
 import { createLazyRuntimeModule } from "../shared/lazy-runtime.js";
 import { shortenHomePath } from "../utils.js";
 import {
@@ -71,6 +72,11 @@ import {
   type GatewayExecApprovalDetails,
   type GatewayExecApprovalEvent,
 } from "./permission-relay.js";
+import {
+  ACP_RESOLVER_DECISION_DEADLINE_MS,
+  buildAcpServerApprovalRequest,
+  mapVerdictToGatewayDecision,
+} from "./resolver-first.js";
 import { parseSessionMeta, resetSessionIfNeeded, resolveSessionKey } from "./session-mapper.js";
 import {
   ACP_ELEVATED_LEVEL_CONFIG_ID,
@@ -1038,6 +1044,64 @@ export class AcpGatewayAgent implements Agent {
       if (!this.isApprovalRelayActive(relay)) {
         resolved = await this.resolveGatewayApproval(relay.approvalId, "deny");
         return;
+      }
+
+      // ---------------------------------------------------------------------------
+      // L5.2 — ACP server-mode resolver-first decision (closes #97152 ACP bypass).
+      //
+      // BEFORE the ACP relay surfaces this to the client (requestPermission), check
+      // whether a registered resolver owns the process.exec capability for this
+      // command. If so, the resolver decides and we resolve the approval without
+      // ever calling this.connection.requestPermission — the ACP client tap is
+      // bypassed (deny = blocked, allow = allowed-once, both without user prompt).
+      //
+      // BYTE-UNCHANGED when no resolver is registered: buildAcpServerApprovalRequest
+      // returns undefined (hasApprovalResolverForScope=false fast-path) and we fall
+      // through to the existing ACP relay below.
+      //
+      // FAIL-CLOSED: classifyEffects throw → SUPERSET_EFFECTS; decide throw → log +
+      // fallthrough to human (not deny outright — matches L4 fail-closed-to-human).
+      // ---------------------------------------------------------------------------
+      try {
+        const acpResolverCtx = await buildAcpServerApprovalRequest(
+          details,
+          approvalEvent,
+          relay.sessionKey,
+          relay.runId,
+        );
+        if (acpResolverCtx !== undefined) {
+          // A resolver is registered for this capability — let it decide.
+          const verdict = await decideCapabilityApproval(acpResolverCtx.req, {
+            deadlineMs: ACP_RESOLVER_DECISION_DEADLINE_MS,
+          });
+          const gatewayDecision = mapVerdictToGatewayDecision(verdict);
+          if (gatewayDecision !== undefined) {
+            // Resolver decided (allow or deny) — resolve and SKIP the ACP relay.
+            if (verdict.kind === "deny") {
+              if (verdict.failureDisposition) {
+                this.log(
+                  `[acp-resolver] resolver-first deny (failureDisposition=${verdict.failureDisposition}) for ${relay.approvalId}: ${verdict.reason ?? ""}`,
+                );
+              } else {
+                this.log(
+                  `[acp-resolver] resolver-first deny for ${relay.approvalId}: ${verdict.reason ?? ""}`,
+                );
+              }
+            } else {
+              this.log(`[acp-resolver] resolver-first allow for ${relay.approvalId}`);
+            }
+            resolved = await this.resolveGatewayApproval(relay.approvalId, gatewayDecision);
+            return; // SKIP this.connection.requestPermission — ACP client tap bypassed.
+          }
+          // verdict.kind === 'fallthrough' — no resolver owns this scope; fall
+          // through to the existing ACP relay below (byte-unchanged).
+        }
+      } catch (err) {
+        // Resolver decision path threw unexpectedly — log and fall through to
+        // human (fail-closed-to-human, matches L4 policy).
+        this.log(
+          `[acp-resolver] resolver-first decision threw for ${relay.approvalId}: ${String(err)}; falling through to ACP relay`,
+        );
       }
 
       const request = buildAcpPermissionRequest({
