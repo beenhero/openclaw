@@ -214,12 +214,22 @@ describe("registerApprovalResolver process.exec (mock app-server, structural)", 
     // Exclusivity: the resolver owns the decision; the human tap is never reached.
     expect(result.tapSpy).not.toHaveBeenCalled();
     // The resolver saw the fully-bound request handed by the gateway.
+    // L6: classifyEffects now emits TWO effects for `/bin/bash -lc 'rm -rf /tmp/x'`:
+    //   1. process.exec (with command + cwd)
+    //   2. fs.write (Tier-C unwraps bash -lc, sees 'rm' as a write head-token → paths:['/tmp/x'])
+    // Assert the effects CONTAIN (not strict-equal) the expected kinds.
     expect(seen).toMatchObject({
       capability: "process.exec",
       toolName: "exec",
-      effects: [{ kind: "process.exec", command: COMMAND }],
       toolCallId: "cmd-1",
     });
+    // process.exec effect is present with the correct command.
+    const execEffect = seen?.effects?.find((e: { kind: string }) => e.kind === "process.exec");
+    expect(execEffect).toMatchObject({ command: COMMAND });
+    // fs.write effect is present — L6 multi-effect: rm is a write head-token.
+    const fsWriteEffect = seen?.effects?.find((e: { kind: string }) => e.kind === "fs.write");
+    expect(fsWriteEffect).toBeDefined();
+    expect((fsWriteEffect as { paths?: string[] })?.paths).toContain("/tmp/x");
     // The opaque requestId is gateway-generated, NOT the codex approvalId (toolCallId).
     expect(seen?.requestId).not.toBe(seen?.toolCallId);
     expect(seen?.paramsDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
@@ -253,12 +263,19 @@ describe("registerApprovalResolver process.exec (mock app-server, structural)", 
     // Exclusivity holds under the relay: the human tap is never reached.
     expect(result.tapSpy).not.toHaveBeenCalled();
     // The resolver received the fully-bound request (proving it, not the relay, decided).
+    // L6: effects now contain BOTH process.exec AND fs.write (rm is a write head-token).
     expect(seen).toMatchObject({
       capability: "process.exec",
       toolName: "exec",
-      effects: [{ kind: "process.exec", command: COMMAND }],
       toolCallId: "cmd-1",
     });
+    // process.exec effect is present with the correct command.
+    const relayExecEffect = seen?.effects?.find((e: { kind: string }) => e.kind === "process.exec");
+    expect(relayExecEffect).toMatchObject({ command: COMMAND });
+    // fs.write effect is present — L6 multi-effect: rm is a write head-token.
+    const relayFsWriteEffect = seen?.effects?.find((e: { kind: string }) => e.kind === "fs.write");
+    expect(relayFsWriteEffect).toBeDefined();
+    expect((relayFsWriteEffect as { paths?: string[] })?.paths).toContain("/tmp/x");
     expect(seen?.paramsDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
     // No leaked native-relay state: the resolver-first path returns before the
     // native relay is ever invoked, so NO `pre_tool_use` invocation is recorded for
