@@ -10,6 +10,7 @@ import crypto from "node:crypto";
 import { getApprovalResolverForScope, hasApprovalResolverForScope } from "./approval-resolver.js";
 import type { PluginJsonValue } from "./host-hook-json.js";
 import type { ApprovalRequest } from "./host-hooks.js";
+import { proofKey } from "./proof-ledger.js";
 
 export function fingerprintJson(value: PluginJsonValue): string {
   return crypto.createHash("sha256").update(stableStringify(value)).digest("hex");
@@ -67,12 +68,6 @@ type ProofRecord = {
 
 const consumedRecords = new Map<ProofKey, ProofRecord>();
 const seenProofs = new Set<string>();
-
-function proofKey(requestId: string, paramsDigest: string): ProofKey {
-  // Use a length-prefix encoding to avoid key ambiguity:
-  // ("a b","c") and ("a","b c") must not produce the same composite key.
-  return `${requestId.length}:${requestId}\0${paramsDigest}`;
-}
 
 /**
  * Records and consumes a resolver decision keyed by {requestId, paramsDigest}.
