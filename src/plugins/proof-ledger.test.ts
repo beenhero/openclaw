@@ -7,12 +7,15 @@
  *   3. FileProofLedger-specific structural assertions (L2.3)
  */
 
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { FileProofLedger, InMemoryProofLedger, proofKey } from "./proof-ledger.js";
 import type { ProofLedger } from "./proof-ledger.js";
+
+const sha256hex = (s: string): string => createHash("sha256").update(s).digest("hex");
 
 // ---------------------------------------------------------------------------
 // L2.1 — proofKey injectivity
@@ -215,16 +218,44 @@ describe("FileProofLedger — decision suite + structural assertions", () => {
     const parsed = JSON.parse(raw) as {
       v: number;
       records: Record<string, unknown>;
-      seenProofs: string[];
+      seenProofHashes: string[];
     };
     expect(parsed.v).toBe(1);
     expect(typeof parsed.records).toBe("object");
-    expect(Array.isArray(parsed.seenProofs)).toBe(true);
-    // The proof should appear in seenProofs
-    expect(parsed.seenProofs).toContain("proof-1");
+    expect(Array.isArray(parsed.seenProofHashes)).toBe(true);
+    // Defect 3: the HASH — not the raw proof — appears at rest.
+    expect(parsed.seenProofHashes).toContain(sha256hex("proof-1"));
     // The pair key should appear in records
     const key = proofKey("req-1", "digest-1");
     expect(key in parsed.records).toBe(true);
+  });
+
+  // Defect 3: raw reusable-secret proofs must NEVER be persisted plaintext at rest.
+  it("SECRET-AT-REST: raw proof string never appears anywhere in proof-index.json", () => {
+    const dir = path.join(tmpDir, "ledger-no-raw-proof");
+    const ledger = new FileProofLedger(dir);
+    const rawProof = "S3cr3t-proof-do-not-persist";
+    const r = ledger.consumeOnce(rawProof, "req-1", "digest-1", "allow");
+    expect(r).toEqual({ ok: true });
+
+    const indexPath = path.join(dir, "proof-index.json");
+    const onDisk = fs.readFileSync(indexPath, "utf-8");
+    // The raw proof must NOT appear anywhere in the persisted index (neither in
+    // seenProofHashes nor duplicated into records[key].proof).
+    expect(onDisk).not.toContain(rawProof);
+    // But its hash MUST, so replay membership still works across restart.
+    expect(onDisk).toContain(sha256hex(rawProof));
+
+    // Sanity: the record must carry NO `proof` field at all.
+    const parsed = JSON.parse(onDisk) as { records: Record<string, Record<string, unknown>> };
+    const key = proofKey("req-1", "digest-1");
+    expect(parsed.records[key]).toBeDefined();
+    expect("proof" in (parsed.records[key] as object)).toBe(false);
+
+    // And replay of the raw proof on a NEW instance is still blocked (hash membership).
+    const ledger2 = new FileProofLedger(dir);
+    const replay = ledger2.consumeOnce(rawProof, "req-NEW", "digest-NEW", "allow");
+    expect(replay).toEqual({ ok: false, reason: "replayed" });
   });
 
   // Structural: reject legs do NOT write the index
@@ -248,32 +279,53 @@ describe("FileProofLedger — decision suite + structural assertions", () => {
   // L2.5 — Fail-closed matrix tests
   // ---------------------------------------------------------------------------
 
-  it("CORRUPT INDEX: JSON.parse throws and does not reset-to-empty (no amnesty)", () => {
+  it("CORRUPT/MALFORMED INDEX: every non-throwing amnesty shape THROWS (no reset-to-empty)", () => {
     const dir = path.join(tmpDir, "ledger-corrupt");
     const ledger = new FileProofLedger(dir);
     const indexPath = path.join(dir, "proof-index.json");
 
-    // First consume a valid pair so the index has real state
+    // (a) Consume a real pair so the index carries genuine prior state.
     const r1 = ledger.consumeOnce("proof-corrupt-1", "req-1", "digest-1", "allow");
     expect(r1).toEqual({ ok: true });
 
-    // Capture the valid post-consume index content
+    // Capture the valid post-consume index — restored ONLY for the final durability leg.
     const validContent = fs.readFileSync(indexPath, "utf-8");
 
-    // Corrupt the index
-    fs.writeFileSync(indexPath, "{ not json", "utf-8");
+    // (b) Every valid-JSON-but-wrong-shape input (the amnesty class) — plus parse-garbage
+    //     and a bare `{}` overwritten onto populated state — must make consumeOnce THROW.
+    //     We overwrite the on-disk index and assert the throw WITHOUT restoring good content,
+    //     so the test genuinely proves "malformed index bricks the gate, never amnesties".
+    const amnestyInputs = [
+      "{ not json", // parse-garbage (SyntaxError)
+      '{"v":1}', // missing records + seenProofHashes
+      "[]", // array, not object
+      "123", // scalar number
+      "true", // scalar boolean
+      '"x"', // scalar string
+      '{"v":1,"records":[],"seenProofHashes":[]}', // records-as-array
+      '{"v":2,"records":{},"seenProofHashes":[]}', // wrong version
+      '{"v":1,"records":{},"seenProofHashes":{}}', // seenProofHashes-as-object
+      "{}", // bare {} overwritten onto populated state (indistinguishable-from-fresh amnesty)
+      "", // empty string (JSON.parse throws anyway)
+    ];
 
-    // consumeOnce must THROW — corrupt index must brick the gate, never reset-to-empty
-    expect(() => {
-      ledger.consumeOnce("proof-corrupt-2", "req-2", "digest-2", "allow");
-    }).toThrow();
+    for (const bad of amnestyInputs) {
+      fs.writeFileSync(indexPath, bad, "utf-8");
+      // A DIFFERENT pair each time so a hypothetical amnesty would return {ok:true}
+      // (i.e. the assertion is not accidentally satisfied by already_consumed).
+      expect(
+        () => ledger.consumeOnce("proof-fresh", "req-fresh", "digest-fresh", "allow"),
+        `malformed index ${JSON.stringify(bad)} must throw, never reset-to-empty`,
+      ).toThrow();
+      // NOTE: no restore between iterations — each bad shape is asserted on its own.
+    }
 
-    // Restore the valid index (no amnesty check)
+    // (c) Durability across instances: restore a VALID index that still carries the
+    //     consumed key, open a BRAND-NEW FileProofLedger against the on-disk file, and
+    //     assert the prior pair is STILL rejected already_consumed (state survived).
     fs.writeFileSync(indexPath, validContent, "utf-8");
-
-    // The previously consumed {requestId,paramsDigest} pair must still be rejected.
-    // Use a DIFFERENT proof so we hit already_consumed (step 5), not replayed (step 4).
-    const r3 = ledger.consumeOnce("proof-corrupt-different", "req-1", "digest-1", "allow");
+    const freshInstance = new FileProofLedger(dir);
+    const r3 = freshInstance.consumeOnce("proof-corrupt-different", "req-1", "digest-1", "allow");
     expect(r3).toEqual({ ok: false, reason: "already_consumed" });
   });
 
@@ -300,25 +352,39 @@ describe("FileProofLedger — decision suite + structural assertions", () => {
     }
   });
 
-  it("UNWRITABLE AUDIT LOG: append failure throws and index is NOT mutated", () => {
+  it("UNWRITABLE AUDIT LOG (index-first): a successful pair survives; the audit-failed pair is BURNED (throws + fail-closed)", () => {
     const dir = path.join(tmpDir, "ledger-audit-fail");
     const ledger = new FileProofLedger(dir);
-    const indexPath = path.join(dir, "proof-index.json");
 
-    // Pre-create proof-ledger.jsonl as a directory so appendFileSync throws EISDIR
-    fs.mkdirSync(path.join(dir, "proof-ledger.jsonl"));
+    // (a) Consume pair-1 successfully → non-trivial index (NOT the empty seed).
+    const r1 = ledger.consumeOnce("proof-audit-1", "req-1", "digest-1", "allow");
+    expect(r1).toEqual({ ok: true });
 
-    // Capture initial index state (should be '{}' since no successful consume yet)
-    const before = fs.readFileSync(indexPath, "utf-8");
+    // (b) Now make the JSONL audit append fail: remove the file and put a directory
+    //     in its place so appendFileSync throws EISDIR on the NEXT consume.
+    const jsonlPath = path.join(dir, "proof-ledger.jsonl");
+    fs.rmSync(jsonlPath, { force: true });
+    fs.mkdirSync(jsonlPath);
 
-    // consumeOnce must throw (audit append fails)
+    // (c) Consume pair-2 → index is committed FIRST, then the audit append throws.
+    //     Under index-first ordering the consume is already durable, so the call must
+    //     throw (fail-closed: caller DENIES) even though the index was updated.
     expect(() => {
-      ledger.consumeOnce("proof-audit-1", "req-1", "digest-1", "allow");
+      ledger.consumeOnce("proof-audit-2", "req-2", "digest-2", "allow");
     }).toThrow();
 
-    // Index must NOT have been mutated
-    const after = fs.readFileSync(indexPath, "utf-8");
-    expect(after).toBe(before);
+    // Remove the directory-blocker so subsequent reads/writes work for the assertions.
+    fs.rmSync(jsonlPath, { recursive: true, force: true });
+
+    // (d) pair-1 (the earlier good consume) is still single-shotted — prior state intact.
+    const r1again = ledger.consumeOnce("proof-audit-1b", "req-1", "digest-1", "allow");
+    expect(r1again).toEqual({ ok: false, reason: "already_consumed" });
+
+    // (e) pair-2 is BURNED: the index committed before the audit failed, so a retry of
+    //     the SAME pair is already_consumed. This proves index-first + throw-on-audit-fail
+    //     is genuinely fail-closed (the proof is spent, never replayable).
+    const r2retry = ledger.consumeOnce("proof-audit-2b", "req-2", "digest-2", "allow");
+    expect(r2retry).toEqual({ ok: false, reason: "already_consumed" });
   });
 
   it("ELOCKED: lock contention throws after retries", () => {
@@ -465,11 +531,9 @@ describe("FileProofLedger — decision suite + structural assertions", () => {
     }
   });
 
-  it("JSONL audit: audit line is written BEFORE index mutation (ordering invariant)", () => {
-    // After a successful consume, proof-ledger.jsonl must exist and the index must be updated.
-    // We verify: if we read both files after consumeOnce, both reflect the consume.
-    // This test is a structural ordering check — it doesn't simulate crash-midway,
-    // but verifies the post-condition that the audit line exists alongside the updated index.
+  it("JSONL audit: after a successful consume BOTH the audit line and the index reflect it (index-first post-condition)", () => {
+    // Under index-first ordering the index is written durably FIRST, then the audit line
+    // is appended. This test verifies the success post-condition: both files reflect the consume.
     const dir = path.join(tmpDir, "ledger-audit-order");
     const ledger = new FileProofLedger(dir);
     const indexPath = path.join(dir, "proof-index.json");
@@ -491,5 +555,37 @@ describe("FileProofLedger — decision suite + structural assertions", () => {
       records: Record<string, unknown>;
     };
     expect(Object.keys(index.records)).toHaveLength(1);
+  });
+
+  // Defect 2: crash between index-commit and audit-append (index-first ordering).
+  // Simulate: the index was durably committed (authoritative single-use gate) but the
+  // audit line never landed (crash before append). On restart, a NEW instance reading the
+  // committed index MUST still reject the pair — the consume is durable and never bypassed.
+  it("CRASH (index-first): a committed index rejects the pair on a NEW instance even if the audit line is absent", () => {
+    const dir = path.join(tmpDir, "ledger-crash");
+    const ledger = new FileProofLedger(dir);
+    const indexPath = path.join(dir, "proof-index.json");
+    const jsonlPath = path.join(dir, "proof-ledger.jsonl");
+
+    // Consume a real pair → index committed durably.
+    const r1 = ledger.consumeOnce("proof-crash-1", "req-1", "digest-1", "allow");
+    expect(r1).toEqual({ ok: true });
+
+    // Simulate a crash that lost the audit trail but kept the committed index
+    // (the "audit lags by at most the in-flight line, never leads" direction).
+    fs.rmSync(jsonlPath, { force: true });
+    expect(fs.existsSync(indexPath)).toBe(true);
+
+    // A brand-new instance (fresh process) reads ONLY the on-disk index.
+    const restarted = new FileProofLedger(dir);
+
+    // Single-use MUST hold: the pair is rejected already_consumed (different proof so we
+    // land on step 5, not the replay path).
+    const r2 = restarted.consumeOnce("proof-crash-different", "req-1", "digest-1", "allow");
+    expect(r2).toEqual({ ok: false, reason: "already_consumed" });
+
+    // The original proof is also still replay-blocked from the committed seenProofHashes.
+    const r3 = restarted.consumeOnce("proof-crash-1", "req-2", "digest-2", "allow");
+    expect(r3).toEqual({ ok: false, reason: "replayed" });
   });
 });

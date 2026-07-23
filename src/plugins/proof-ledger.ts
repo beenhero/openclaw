@@ -64,18 +64,37 @@ function ensureJsonlFile(jsonlPath: string): void {
 }
 
 /**
- * Append one audit line to the JSONL file, then fsync for durability.
+ * Append one audit line to the JSONL file, then fsync file + parent dir for durability.
  * Throws on any I/O error — callers must NOT catch (fail-closed invariant).
+ *
+ * DURABILITY / TORN-LINE GUARANTEE (Defect 7): this JSONL is a best-effort,
+ * append-only, tamper-evident supplementary trail — NOT the single-use/replay
+ * authority (the index is). A short-write on ENOSPC/crash-mid-write can leave a
+ * non-newline-terminated partial line; the next append concatenates after it.
+ * Any downstream reader MUST tolerate a trailing partial line (skip/repair it)
+ * — never assume every physical line is a complete JSON object. The gate is
+ * unaffected because no decision path reads this file.
+ *
+ * Defect 6: we fsync `dir` (the parent) as well as the file, so a first-ever-creation
+ * of the JSONL on a REJECT leg (which does NOT write the index and therefore does NOT
+ * otherwise fsync the parent dir) has a durable directory entry too.
  */
-function appendAuditLine(jsonlPath: string, entry: AuditEntry): void {
+function appendAuditLine(dir: string, jsonlPath: string, entry: AuditEntry): void {
   const line = `${JSON.stringify(entry)}\n`;
   appendFileSync(jsonlPath, line, "utf-8");
-  // fsync so the line is on-disk before the lock releases
+  // fsync the file so the line's data/inode is on-disk before the lock releases
   const fd = openSync(jsonlPath, "r");
   try {
     fsyncSync(fd);
   } finally {
     closeSync(fd);
+  }
+  // Defect 6: fsync the parent dir so a first-creation dir entry is durable on reject legs
+  const dirFd = openSync(dir, "r");
+  try {
+    fsyncSync(dirFd);
+  } finally {
+    closeSync(dirFd);
   }
 }
 
@@ -95,10 +114,10 @@ export interface ProofLedger {
    * Decision logic (6 steps):
    *  1. Guard falsy requestId/paramsDigest → invalid_identifier
    *  2. Guard empty-string proof → invalid_identifier
-   *  3. Parse state (empty/undefined → fresh)
-   *  4. Replay check (proof !== undefined && seen → replayed)
+   *  3. Read + parse state (absent file → fresh; present-but-malformed → THROW, no amnesty)
+   *  4. Replay check (proof !== undefined && sha256(proof) seen → replayed)
    *  5. Single-use check (consumed.has(key) → already_consumed)
-   *  6. Success: record + return ok:true
+   *  6. Success: commit index FIRST, then append audit → return ok:true
    *
    * undefined proof is NOT single-shotted (absent-proof providers not penalized).
    */
@@ -118,9 +137,11 @@ type ProofRecord = {
   requestId: string;
   paramsDigest: string;
   outcome: "allow" | "deny";
-  proof?: string;
   consumedAt: number;
 };
+// Defect 3 (secret-at-rest): ProofRecord carries NO raw `proof` field. The raw proof
+// is a reusable secret and is never read by any decision path (single-use is keyed by
+// proofKey; replay is a membership test over sha256(proof)), so it is never persisted.
 
 // ---------------------------------------------------------------------------
 // proofKey — injective encoding, shared between implementations and on-disk format
@@ -148,6 +169,8 @@ export function proofKey(requestId: string, paramsDigest: string): string {
  */
 export class InMemoryProofLedger implements ProofLedger {
   private consumed = new Map<string, ProofRecord>();
+  // Defect 3: membership is keyed by sha256(proof), NEVER the raw proof — decision-parity
+  // with FileProofLedger, which stores only hashes at rest.
   private seen = new Set<string>();
 
   consumeOnce(
@@ -164,8 +187,9 @@ export class InMemoryProofLedger implements ProofLedger {
     if (proof === "") {
       return { ok: false, reason: "invalid_identifier" };
     }
-    // Step 4: Replay check (skip if proof===undefined)
-    if (proof !== undefined && this.seen.has(proof)) {
+    const proofHash = proof !== undefined ? sha256hex(proof) : undefined;
+    // Step 4: Replay check (skip if proof===undefined) — membership over the hash
+    if (proofHash !== undefined && this.seen.has(proofHash)) {
       return { ok: false, reason: "replayed" };
     }
     // Step 5: Single-use check
@@ -174,14 +198,13 @@ export class InMemoryProofLedger implements ProofLedger {
       return { ok: false, reason: "already_consumed" };
     }
     // Step 6: Success
-    if (proof !== undefined) {
-      this.seen.add(proof);
+    if (proofHash !== undefined) {
+      this.seen.add(proofHash);
     }
     this.consumed.set(key, {
       requestId,
       paramsDigest,
       outcome,
-      ...(proof !== undefined ? { proof } : {}),
       consumedAt: Date.now(),
     });
     return { ok: true };
@@ -203,40 +226,75 @@ export class InMemoryProofLedger implements ProofLedger {
  * {
  *   "v": 1,
  *   "records": {
- *     "<proofKey>": { requestId, paramsDigest, outcome, proof?, consumedAt }
+ *     "<proofKey>": { requestId, paramsDigest, outcome, consumedAt }
  *   },
- *   "seenProofs": ["<proof-string>", ...]
+ *   "seenProofHashes": ["<sha256hex(proof)>", ...]
  * }
+ *
+ * Defect 3 (secret-at-rest): the on-disk field is `seenProofHashes` — sha256(proof) hex,
+ * NOT the raw reusable proof secret. records[] carry NO `proof` field either. Neither
+ * decision path needs the raw value (single-use is keyed by proofKey; replay is membership
+ * over the hash), so the raw proof never touches disk (nor the atomic-replace temp file,
+ * nor a JSON.parse-error byte-leak channel).
  */
 type ProofIndex = {
   v: 1;
   records: Record<string, ProofRecord>;
-  seenProofs: string[];
+  seenProofHashes: string[];
 };
 
+/** The canonical fresh/empty index — seeded on file creation and used for absent files. */
 function freshIndex(): ProofIndex {
-  return { v: 1, records: {}, seenProofs: [] };
+  return { v: 1, records: {}, seenProofHashes: [] };
 }
 
-type LockResult<T> = {
-  result: T;
-  next?: string;
-};
+/** Serialized fresh index — written verbatim by ensureIndex so an empty ledger parses valid. */
+const FRESH_INDEX_JSON = JSON.stringify(freshIndex());
+
+/**
+ * Defect 1 (fail-closed shape validation): assert the parsed index is EXACTLY the v1 shape.
+ * Throws (never resets-to-empty) on ANY mismatch — a valid-JSON-but-wrong-shape index
+ * (`{"v":1}`, `[]`, `123`, `true`, `"x"`, records-as-array, wrong `v`, etc.) would otherwise
+ * silently amnesty every prior consumed proof. Called BEFORE any decision is made.
+ */
+function assertProofIndexShape(idx: unknown): asserts idx is ProofIndex {
+  const bad =
+    idx === null ||
+    typeof idx !== "object" ||
+    Array.isArray(idx) ||
+    (idx as ProofIndex).v !== 1 ||
+    typeof (idx as ProofIndex).records !== "object" ||
+    (idx as ProofIndex).records === null ||
+    Array.isArray((idx as ProofIndex).records) ||
+    !Array.isArray((idx as ProofIndex).seenProofHashes);
+  if (bad) {
+    throw new Error("proof-index: malformed/corrupt index — refusing to reset-to-empty");
+  }
+}
 
 /**
  * Durable, cross-process-safe proof ledger.
  *
- * Mirrors FileAuthStorageBackend.withLock (auth-storage.ts:100-115) verbatim:
+ * Mirrors FileAuthStorageBackend.withLock (auth-storage.ts:100-115):
  * - ensureParentDir (mode 0o700)
- * - ensureFileExists (index seeded '{}' mode 0o600)
+ * - ensureFileExists (index seeded with a FULL fresh index JSON, mode 0o600 — Defect 1)
  * - acquireLockSyncWithRetry(indexPath)
  * - readFileSync current content inside lock
- * - fn parses + decides + returns next index JSON
- * - replaceFileAtomicSync ONLY if next is defined
- * - release in finally
+ * - consumeOnce parses + shape-validates + decides
  *
- * consumeOnce runs the same 6-step decision logic as InMemoryProofLedger
- * inside the lock so read+write is one indivisible critical section.
+ * consumeOnce inlines the lock sequence (acquire → read → validate → decide → on success:
+ * write-index-FIRST then append-audit → finally release) so read+write is one indivisible
+ * critical section AND the index-first crash ordering (Defect 2) holds.
+ *
+ * CRASH-CONSISTENCY INVARIANT (Defect 2): index(consumed) ⊇ audit-trail.
+ * The index is the sole single-use/replay authority AND a retained record. On a successful
+ * consume the index is committed durably FIRST (atomic temp+fsync+rename), THEN the JSONL
+ * audit line is appended best-effort. A committed consume is therefore durable and is NEVER
+ * bypassed on crash/restart; its audit line may LAG by at most the in-flight line, never LEAD.
+ * If the post-commit audit append throws, the consume is already committed (single-use holds)
+ * and we re-throw so the caller DENIES — the proof is "burned" (committed but denied). That is
+ * the accepted fail-closed tradeoff: a rare audit-write failure burns a proof rather than risk
+ * a single-use bypass.
  */
 export class FileProofLedger implements ProofLedger {
   private dir: string;
@@ -259,7 +317,10 @@ export class FileProofLedger implements ProofLedger {
 
   private ensureIndex(): void {
     if (!existsSync(this.indexPath)) {
-      writeFileSync(this.indexPath, "{}", "utf-8");
+      // Defect 1: seed a FULL fresh index (not "{}") so a freshly-created empty ledger
+      // parses to the valid v1 shape — "{}" would fail shape-validation (correctly),
+      // so we must not create the file in that degenerate form.
+      writeFileSync(this.indexPath, FRESH_INDEX_JSON, "utf-8");
       chmodSync(this.indexPath, 0o600);
     }
   }
@@ -277,25 +338,12 @@ export class FileProofLedger implements ProofLedger {
     });
   }
 
-  private withLock<T>(fn: (current: string | undefined) => LockResult<T>): T {
-    this.ensureDir();
-    this.ensureIndex();
-
-    const release = acquireLockSyncWithRetry(this.indexPath);
-    try {
-      const current = existsSync(this.indexPath)
-        ? readFileSync(this.indexPath, "utf-8")
-        : undefined;
-      const { result, next } = fn(current);
-      if (next !== undefined) {
-        this.replaceIndexAtomic(next);
-      }
-      return result;
-    } finally {
-      release();
-    }
-  }
-
+  /**
+   * consumeOnce inlines the lock sequence (Defect 2 — index-first crash ordering).
+   * consumeOnce is the ONLY writer, so there is no generic withLock helper: a single
+   * critical section acquires the lock, reads + shape-validates the index, decides, and on
+   * SUCCESS writes the index durably FIRST, THEN appends the audit line — all before release.
+   */
   consumeOnce(
     proof: string | undefined,
     requestId: string,
@@ -303,17 +351,22 @@ export class FileProofLedger implements ProofLedger {
     outcome: "allow" | "deny",
   ): LedgerConsumeResult {
     const jsonlPath = this.jsonlPath;
+    const dir = this.dir;
 
-    return this.withLock<LedgerConsumeResult>((current) => {
+    this.ensureDir();
+    this.ensureIndex();
+
+    const release = acquireLockSyncWithRetry(this.indexPath);
+    try {
       // Ensure JSONL file exists with correct permissions (first-use creation)
       ensureJsonlFile(jsonlPath);
 
       const proofHash = proof !== undefined ? sha256hex(proof) : null;
 
-      // Step 1: Guard falsy identifiers (read-only, no write)
+      // Step 1: Guard falsy identifiers (read-only, no index write). Nothing is consumed,
+      // so a reject-leg audit append failure just throws → caller denies (no burn).
       if (!requestId || !paramsDigest) {
-        // Audit line BEFORE returning (audit even for early-return legs)
-        appendAuditLine(jsonlPath, {
+        appendAuditLine(dir, jsonlPath, {
           ts: Date.now(),
           requestId,
           paramsDigest,
@@ -321,12 +374,11 @@ export class FileProofLedger implements ProofLedger {
           proofHash,
           decision: "invalid_identifier",
         });
-        return { result: { ok: false as const, reason: "invalid_identifier" as const } };
+        return { ok: false, reason: "invalid_identifier" };
       }
-      // Step 2: Guard empty-string proof (read-only, no write)
+      // Step 2: Guard empty-string proof (read-only, no index write)
       if (proof === "") {
-        // Audit line BEFORE returning
-        appendAuditLine(jsonlPath, {
+        appendAuditLine(dir, jsonlPath, {
           ts: Date.now(),
           requestId,
           paramsDigest,
@@ -334,23 +386,32 @@ export class FileProofLedger implements ProofLedger {
           proofHash: null,
           decision: "invalid_identifier",
         });
-        return { result: { ok: false as const, reason: "invalid_identifier" as const } };
+        return { ok: false, reason: "invalid_identifier" };
       }
 
-      // Step 3: Parse index (empty/undefined → fresh empty index)
-      // NOTE: JSON.parse throws on corrupt content — do NOT catch (fail-closed, no amnesty)
-      const index: ProofIndex =
-        current && current.trim() !== "" && current.trim() !== "{}"
-          ? (JSON.parse(current) as ProofIndex)
-          : freshIndex();
+      // Step 3: Read + parse index.
+      // Treat ONLY current===undefined (file genuinely absent) as fresh-empty. A present
+      // index — including "" (JSON.parse throws) and "{}" — must go through shape-validation
+      // and THROW if malformed (Defect 1: no amnesty, no reset-to-empty). JSON.parse throws
+      // on corrupt content — do NOT catch (fail-closed).
+      const current = existsSync(this.indexPath)
+        ? readFileSync(this.indexPath, "utf-8")
+        : undefined;
+      let index: ProofIndex;
+      if (current === undefined) {
+        index = freshIndex();
+      } else {
+        const parsed: unknown = JSON.parse(current);
+        assertProofIndexShape(parsed); // THROWS on any shape/type/version mismatch
+        index = parsed;
+      }
 
-      const consumed = new Map<string, ProofRecord>(Object.entries(index.records ?? {}));
-      const seen = new Set<string>(index.seenProofs ?? []);
+      const consumed = new Map<string, ProofRecord>(Object.entries(index.records));
+      const seen = new Set<string>(index.seenProofHashes);
 
-      // Step 4: Replay check (skip if proof===undefined)
-      if (proof !== undefined && seen.has(proof)) {
-        // Audit BEFORE returning — no index mutation
-        appendAuditLine(jsonlPath, {
+      // Step 4: Replay check (skip if proof===undefined) — membership over the HASH (Defect 3)
+      if (proofHash !== null && seen.has(proofHash)) {
+        appendAuditLine(dir, jsonlPath, {
           ts: Date.now(),
           requestId,
           paramsDigest,
@@ -358,14 +419,13 @@ export class FileProofLedger implements ProofLedger {
           proofHash,
           decision: "replayed",
         });
-        return { result: { ok: false as const, reason: "replayed" as const } };
+        return { ok: false, reason: "replayed" };
       }
 
       // Step 5: Single-use check
       const key = proofKey(requestId, paramsDigest);
       if (consumed.has(key)) {
-        // Audit BEFORE returning — no index mutation
-        appendAuditLine(jsonlPath, {
+        appendAuditLine(dir, jsonlPath, {
           ts: Date.now(),
           requestId,
           paramsDigest,
@@ -373,12 +433,33 @@ export class FileProofLedger implements ProofLedger {
           proofHash,
           decision: "already_consumed",
         });
-        return { result: { ok: false as const, reason: "already_consumed" as const } };
+        return { ok: false, reason: "already_consumed" };
       }
 
-      // Step 6: Success — audit FIRST, then build updated index
-      // Audit append precedes index mutation: if append throws, index is NOT written
-      appendAuditLine(jsonlPath, {
+      // Step 6: Success — INDEX-FIRST ordering (Defect 2).
+      // Build the updated index and COMMIT it durably (atomic temp+fsync+rename) as the
+      // authoritative single-use gate. Store only the proof HASH at rest (Defect 3).
+      if (proofHash !== null) {
+        seen.add(proofHash);
+      }
+      consumed.set(key, {
+        requestId,
+        paramsDigest,
+        outcome,
+        consumedAt: Date.now(),
+      });
+      const updatedIndex: ProofIndex = {
+        v: 1,
+        records: Object.fromEntries(consumed),
+        seenProofHashes: Array.from(seen),
+      };
+      this.replaceIndexAtomic(JSON.stringify(updatedIndex)); // (2) authoritative commit
+
+      // (3) Append the audit line AFTER the index is committed. If this throws, the consume
+      // is already durable (single-use holds) — re-throw so the caller DENIES. The proof is
+      // "burned" (committed but denied): the accepted fail-closed tradeoff. Invariant now
+      // holds: index(consumed) ⊇ audit-trail (audit may lag by the in-flight line, never lead).
+      appendAuditLine(dir, jsonlPath, {
         ts: Date.now(),
         requestId,
         paramsDigest,
@@ -387,28 +468,9 @@ export class FileProofLedger implements ProofLedger {
         decision: "consumed",
       });
 
-      if (proof !== undefined) {
-        seen.add(proof);
-      }
-      const record: ProofRecord = {
-        requestId,
-        paramsDigest,
-        outcome,
-        ...(proof !== undefined ? { proof } : {}),
-        consumedAt: Date.now(),
-      };
-      consumed.set(key, record);
-
-      const updatedIndex: ProofIndex = {
-        v: 1,
-        records: Object.fromEntries(consumed),
-        seenProofs: Array.from(seen),
-      };
-
-      return {
-        result: { ok: true as const },
-        next: JSON.stringify(updatedIndex),
-      };
-    });
+      return { ok: true };
+    } finally {
+      release();
+    }
   }
 }
