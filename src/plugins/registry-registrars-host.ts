@@ -351,6 +351,24 @@ export function createHostRegistrars(state: PluginRegistryState) {
       });
       return;
     }
+    // L3.2 — per-capability owner-conflict guard: one owning resolver per capability.
+    // Reject if any capability this resolver claims is already owned by a DIFFERENT resolver
+    // (different pluginId OR different id). This makes "one resolver per capability" a
+    // registration invariant so dispatch-time pickOwner is always unambiguous.
+    for (const cap of capabilities) {
+      const owner = resolvers.find((entry) =>
+        entry.registration.scope?.capabilities?.includes(cap),
+      );
+      if (owner && !(owner.pluginId === record.id && owner.registration.id === id)) {
+        pushDiagnostic({
+          level: "error",
+          pluginId: record.id,
+          source: record.source,
+          message: `capability ${cap} already owned by ${owner.pluginId}`,
+        });
+        return;
+      }
+    }
     const entry: PluginApprovalResolverRegistryRegistration = {
       pluginId: record.id,
       pluginName: record.name,

@@ -1,5 +1,6 @@
 // Approval-resolver registration gate: soft diagnostics for duplicate/contract/enabled
-// failures, and a HARD throw for any non-process.exec capability (fail-closed, §4.1/§7).
+// failures, and a HARD throw for any capability not in KNOWN_CAPABILITIES (fail-closed, §4.1/§7).
+// L3.1: KNOWN_CAPABILITIES = {"process.exec", "net.egress"}. net.egress tests added below.
 import {
   createPluginRegistryFixture,
   registerTestPlugin,
@@ -10,6 +11,7 @@ import type {
   ApprovalRequest,
   PluginApprovalResolverRegistration,
 } from "./host-hooks.js";
+import { KNOWN_CAPABILITIES } from "./host-hooks.js";
 import { createPluginRecord } from "./status.test-fixtures.js";
 
 const noopResolve = async (_req: ApprovalRequest): Promise<ApprovalDecision> => ({
@@ -77,7 +79,10 @@ describe("registerApprovalResolver host registrar", () => {
     expect(registry.registry.approvalResolvers).toEqual([]);
   });
 
-  it("THROWS (hard fail-closed) when scope.capabilities includes a non-process.exec entry", () => {
+  it("THROWS (hard fail-closed) when scope.capabilities includes a capability NOT in KNOWN_CAPABILITIES", () => {
+    // L3.1: KNOWN_CAPABILITIES = {"process.exec", "net.egress"}. An unknown capability like
+    // "fs.write" must still hard-throw — the guard is now 'not in KNOWN_CAPABILITIES', not
+    // 'not process.exec'.
     const { config, registry } = createPluginRegistryFixture();
     expect(() =>
       registerTestPlugin({
@@ -87,8 +92,8 @@ describe("registerApprovalResolver host registrar", () => {
         register(api) {
           api.registerApprovalResolver(
             execResolver({
-              id: "sigil-net",
-              scope: { capabilities: ["process.exec", "net.egress"] as never },
+              id: "sigil-fs",
+              scope: { capabilities: ["process.exec", "fs.write"] as never },
             }),
           );
         },
@@ -180,10 +185,32 @@ describe("registerApprovalResolver host registrar", () => {
     ]);
   });
 
-  it("THROWS (hard fail-closed) for an unknown capability string (net.egress is not in KNOWN_CAPABILITIES)", () => {
-    // L1.4 contract: KNOWN_CAPABILITIES = {"process.exec"} today.
-    // Any other string — net.egress, fs.write, etc. — must hard-throw so a
-    // plugin cannot silently believe it gates a surface OpenClaw does not enforce.
+  it("L3.1: registers a net.egress resolver cleanly (net.egress is now in KNOWN_CAPABILITIES)", () => {
+    // L3.1: net.egress added to KNOWN_CAPABILITIES. A resolver declaring capabilities:['net.egress']
+    // must now register without throwing.
+    const { config, registry } = createPluginRegistryFixture();
+    registerTestPlugin({
+      registry,
+      config,
+      record: createPluginRecord({ id: "sigil-net-plugin", name: "Sigil Net", origin: "bundled" }),
+      register(api) {
+        api.registerApprovalResolver(
+          execResolver({
+            id: "sigil-net-resolver",
+            scope: { capabilities: ["net.egress"] },
+          }),
+        );
+      },
+    });
+    expect(registry.registry.approvalResolvers).toHaveLength(1);
+    expect(registry.registry.approvalResolvers[0]?.registration.scope.capabilities).toEqual([
+      "net.egress",
+    ]);
+    expect(registry.registry.diagnostics).toEqual([]);
+  });
+
+  it("L3.1: THROWS for a capability NOT in KNOWN_CAPABILITIES (e.g. fs.write)", () => {
+    // KNOWN_CAPABILITIES = {"process.exec", "net.egress"} in L3. Anything else hard-throws.
     const { config, registry } = createPluginRegistryFixture();
     expect(() =>
       registerTestPlugin({
@@ -193,14 +220,21 @@ describe("registerApprovalResolver host registrar", () => {
         register(api) {
           api.registerApprovalResolver(
             execResolver({
-              id: "sigil-net",
-              scope: { capabilities: ["net.egress"] as never },
+              id: "sigil-fs",
+              scope: { capabilities: ["fs.write"] as never },
             }),
           );
         },
       }),
     ).toThrow(/KNOWN_CAPABILITIES/);
     expect(registry.registry.approvalResolvers).toEqual([]);
+  });
+
+  it("L3.1: KNOWN_CAPABILITIES Set membership — process.exec and net.egress are members, fs.write is not", () => {
+    // Asserts the Set directly via the exported constant.
+    expect(KNOWN_CAPABILITIES.has("process.exec")).toBe(true);
+    expect(KNOWN_CAPABILITIES.has("net.egress")).toBe(true);
+    expect(KNOWN_CAPABILITIES.has("fs.write")).toBe(false);
   });
 
   it("STILL registers process.exec after the KNOWN_CAPABILITIES contract reshape (regression)", () => {
@@ -216,5 +250,94 @@ describe("registerApprovalResolver host registrar", () => {
     });
     expect(registry.registry.approvalResolvers).toHaveLength(1);
     expect(registry.registry.diagnostics).toEqual([]);
+  });
+
+  // ---------------------------------------------------------------------------
+  // L3.2 — per-capability owner-conflict guard
+  // ---------------------------------------------------------------------------
+  describe("L3.2 per-capability owner-conflict guard", () => {
+    it("soft-rejects a second resolver from a DIFFERENT plugin claiming the same capability", () => {
+      // Two bundled plugins both claim process.exec → second is rejected with owner-conflict diagnostic.
+      const { config, registry } = createPluginRegistryFixture();
+      registerTestPlugin({
+        registry,
+        config,
+        record: createPluginRecord({ id: "plugin-a", name: "Plugin A", origin: "bundled" }),
+        register(api) {
+          api.registerApprovalResolver(execResolver({ id: "resolver-a" }));
+        },
+      });
+      registerTestPlugin({
+        registry,
+        config,
+        record: createPluginRecord({ id: "plugin-b", name: "Plugin B", origin: "bundled" }),
+        register(api) {
+          api.registerApprovalResolver(execResolver({ id: "resolver-b" }));
+        },
+      });
+
+      // Only the first resolver should be registered.
+      expect(registry.registry.approvalResolvers).toHaveLength(1);
+      expect(registry.registry.approvalResolvers[0]?.pluginId).toBe("plugin-a");
+      expect(registry.registry.diagnostics).toEqual([
+        expect.objectContaining({
+          level: "error",
+          pluginId: "plugin-b",
+          message: expect.stringContaining("capability process.exec already owned by plugin-a"),
+        }),
+      ]);
+    });
+
+    it("allows a resolver claiming a currently-free capability (net.egress) to register fine", () => {
+      // First resolver claims process.exec; second resolver claims net.egress (different capability — no conflict).
+      const { config, registry } = createPluginRegistryFixture();
+      registerTestPlugin({
+        registry,
+        config,
+        record: createPluginRecord({ id: "plugin-exec", name: "Exec Plugin", origin: "bundled" }),
+        register(api) {
+          api.registerApprovalResolver(execResolver({ id: "exec-resolver" }));
+        },
+      });
+      registerTestPlugin({
+        registry,
+        config,
+        record: createPluginRecord({ id: "plugin-net", name: "Net Plugin", origin: "bundled" }),
+        register(api) {
+          api.registerApprovalResolver(
+            execResolver({ id: "net-resolver", scope: { capabilities: ["net.egress"] } }),
+          );
+        },
+      });
+
+      expect(registry.registry.approvalResolvers).toHaveLength(2);
+      expect(registry.registry.diagnostics).toEqual([]);
+    });
+
+    it("same-plugin re-register still hits the existing (pluginId,id) dedup path, not the owner-conflict path", () => {
+      // Same plugin, same id — hits the dedup guard before the owner-conflict guard.
+      const { config, registry } = createPluginRegistryFixture();
+      registerTestPlugin({
+        registry,
+        config,
+        record: createPluginRecord({ id: "sigil", name: "Sigil", origin: "bundled" }),
+        register(api) {
+          api.registerApprovalResolver(execResolver());
+          api.registerApprovalResolver(execResolver({ description: "second attempt" }));
+        },
+      });
+
+      expect(registry.registry.approvalResolvers).toHaveLength(1);
+      // Must match the dedup message, NOT the owner-conflict message.
+      expect(registry.registry.diagnostics).toEqual([
+        expect.objectContaining({
+          level: "error",
+          pluginId: "sigil",
+          message: expect.stringContaining("approval resolver already registered: sigil-exec"),
+        }),
+      ]);
+      // Confirm the owner-conflict diagnostic was NOT emitted.
+      expect(registry.registry.diagnostics[0]?.message).not.toMatch(/already owned by/);
+    });
   });
 });

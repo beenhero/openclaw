@@ -89,11 +89,28 @@ export type PluginTrustedToolPolicyRegistration = {
 export type ApprovalCapability = string;
 
 /**
- * The set of capabilities wired in Layer 1. The registrar hard-throws on any
+ * The set of capabilities wired in Layers 1+3. The registrar hard-throws on any
  * capability NOT in this set, so a plugin cannot silently believe it gates a
  * surface OpenClaw does not yet enforce.
+ *
+ * Wired capabilities:
+ *   "process.exec"  — shell/exec gate (Layer 1). EffectDescriptor shape:
+ *                     { kind: "process.exec", command: string, cwd?: string, argv?: string[] }
+ *
+ *   "net.egress"    — outbound network gate (Layer 3). EffectDescriptor shape:
+ *                     { kind: "net.egress", hosts: string[], ports?: number[], url?: string }
+ *
+ *                   IMPORTANT — hosts: ['*'] means "unknown/any host" and MUST be treated
+ *                   as deny-by-default. A resolver MUST NEVER treat the literal string '*'
+ *                   as an allowlistable host pattern. It is the conservative superset marker
+ *                   emitted when the target host cannot be determined (e.g. unparseable argv,
+ *                   indirect redirect). Deny or prompt the user; do not allow.
+ *
+ *                   Convention: hosts are sorted, lowercased, port-stripped. ports are sorted
+ *                   ascending. url is a human-UX hint only — resolvers decide on hosts/ports,
+ *                   not the raw url string.
  */
-export const KNOWN_CAPABILITIES: ReadonlySet<string> = new Set(["process.exec"]);
+export const KNOWN_CAPABILITIES: ReadonlySet<string> = new Set(["process.exec", "net.egress"]);
 
 /** Static scope declaration for an approval resolver. */
 export type ApprovalScope = {
