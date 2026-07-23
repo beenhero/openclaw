@@ -373,6 +373,12 @@ export type {
   EffectDescriptor,
   PluginApprovalResolverRegistration,
 } from "../plugins/host-hooks.js";
+export {
+  classifyEffects,
+  digestForEffects,
+  sortEffects,
+  SUPERSET_EFFECTS,
+} from "../plugins/effect-classifier.js";
 export type { PluginApprovalResolverRegistryRegistration } from "../plugins/registry-types.js";
 export { isReplaySafeToolCall } from "../agents/tool-mutation.js";
 export {

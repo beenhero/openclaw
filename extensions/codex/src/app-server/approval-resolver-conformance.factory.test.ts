@@ -43,7 +43,7 @@ function createSeamFake() {
             requestId,
             capability: "process.exec",
             toolName: "exec",
-            effect,
+            effects: [effect],
             paramsDigest,
           },
           { signal: controller.signal, deadlineMs },

@@ -129,15 +129,23 @@ export type EffectDescriptor = { kind: ApprovalCapability; [key: string]: Plugin
 
 /**
  * A single approval request handed to a registered resolver. `paramsDigest`
- * is computed gateway-side over `effect` and binds the returned decision to
+ * is computed gateway-side over `effects` and binds the returned decision to
  * this request (replay/substitution guard).
  */
 export type ApprovalRequest = {
   requestId: string;
   capability: ApprovalCapability;
   toolName: string;
-  /** Opaque effect bag — all capability-specific fields live inside `effect`. */
-  effect: EffectDescriptor;
+  /**
+   * The classified effect set for this approval request. Contains one or more
+   * EffectDescriptors — typically one (process.exec) for a plain command, two
+   * (net.egress + process.exec) for a curl command.
+   *
+   * paramsDigest is computed via digestForEffects(effects): for a single-effect
+   * set, digests the lone object (byte-identical to the legacy single-effect path);
+   * for multi-effect sets, digests the sorted array (branch B, fail-closed re-approval).
+   */
+  effects: readonly EffectDescriptor[];
   agentId?: string;
   sessionKey?: string;
   runId?: string;

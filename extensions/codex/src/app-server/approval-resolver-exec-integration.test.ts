@@ -217,7 +217,7 @@ describe("registerApprovalResolver process.exec (mock app-server, structural)", 
     expect(seen).toMatchObject({
       capability: "process.exec",
       toolName: "exec",
-      effect: { kind: "process.exec", command: COMMAND },
+      effects: [{ kind: "process.exec", command: COMMAND }],
       toolCallId: "cmd-1",
     });
     // The opaque requestId is gateway-generated, NOT the codex approvalId (toolCallId).
@@ -256,7 +256,7 @@ describe("registerApprovalResolver process.exec (mock app-server, structural)", 
     expect(seen).toMatchObject({
       capability: "process.exec",
       toolName: "exec",
-      effect: { kind: "process.exec", command: COMMAND },
+      effects: [{ kind: "process.exec", command: COMMAND }],
       toolCallId: "cmd-1",
     });
     expect(seen?.paramsDigest).toMatch(/^sha256:[a-f0-9]{64}$/);

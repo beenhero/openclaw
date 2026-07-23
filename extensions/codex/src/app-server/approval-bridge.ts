@@ -5,12 +5,13 @@ import { randomUUID } from "node:crypto";
  */
 import {
   type AgentApprovalEventData,
+  type ApprovalCapability,
   type ApprovalRequest,
   buildAgentHookContextChannelFields,
   type BeforeToolCallFailureDisposition,
-  computeParamsDigest,
+  classifyEffects,
   decideCapabilityApproval,
-  type EffectDescriptor,
+  digestForEffects,
   formatApprovalDisplayPath,
   hasNativeHookRelayInvocation,
   invokeNativeHookRelay,
@@ -19,6 +20,7 @@ import {
   type NativeHookRelayProcessResponse,
   type NativeHookRelayRegistrationHandle,
   runBeforeToolCallHook,
+  SUPERSET_EFFECTS,
 } from "openclaw/plugin-sdk/agent-harness-runtime";
 import { normalizeTrimmedStringList } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { sliceUtf16Safe, truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
@@ -560,25 +562,49 @@ async function runProcessExecResolverDecision(params: {
   if (params.method !== "item/commandExecution/requestApproval") {
     return undefined;
   }
-  // Build the effect bag — all process.exec-specific fields inside `effect`.
+  // Classify the effect set via 3-tier classifier.
+  // BEHAVIOR-PRESERVATION: a plain (non-curl) command classifies to EXACTLY
+  // [{kind:'process.exec', command, cwd?}] — digestForEffects([e]) is byte-identical
+  // to the old computeParamsDigest(e) via branch-A single-effect digest.
+  // FAIL-CLOSED: if classifyEffects throws, fall back to SUPERSET_EFFECTS (broadest gate).
   const resolverCommand = readPolicyCommand(params.requestParams);
   const cwd = params.cwd;
-  const effect: EffectDescriptor = {
-    kind: "process.exec",
+  const classifyParams = {
     ...(resolverCommand ? { command: resolverCommand } : {}),
     ...(cwd ? { cwd } : {}),
   };
+  const effects = await classifyEffects(
+    null, // harness — reserved, not used by Tier-A/B/C for "exec" tool
+    params.policyRequest.toolName,
+    classifyParams,
+    undefined,
+  ).catch(() => SUPERSET_EFFECTS);
+
+  // Belt-and-suspenders: classifyEffects guarantees non-empty via its floor,
+  // but assert here so a future regression fails closed (blocks the tool call).
+  if (!effects.length) {
+    throw new Error("classifyEffects returned empty effect set — soundness invariant violated");
+  }
+
+  // pickOwner: process.exec owns the decision when present (strictly broader capability:
+  // you cannot egress without first executing the process). A curl command with
+  // [net.egress, process.exec] routes to the process.exec resolver, preserving today's
+  // behavior exactly. A pure net.egress (L4 web_fetch) routes to 'net.egress'.
+  const capability: ApprovalCapability = effects.some((e) => e.kind === "process.exec")
+    ? "process.exec"
+    : (effects[0]?.kind ?? "process.exec");
+
   const requestId = randomUUID();
   const req: ApprovalRequest = {
     requestId,
-    capability: "process.exec",
+    capability,
     toolName: params.policyRequest.toolName,
-    effect,
+    effects,
     ...(params.paramsForRun.agentId ? { agentId: params.paramsForRun.agentId } : {}),
     ...(params.paramsForRun.sessionKey ? { sessionKey: params.paramsForRun.sessionKey } : {}),
     ...(params.paramsForRun.runId ? { runId: params.paramsForRun.runId } : {}),
     ...(params.context.approvalId ? { toolCallId: params.context.approvalId } : {}),
-    paramsDigest: computeParamsDigest(effect),
+    paramsDigest: digestForEffects(effects),
   };
 
   const verdict = await decideCapabilityApproval(req, {

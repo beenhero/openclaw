@@ -26,7 +26,7 @@ function makeRequest(overrides: Partial<ApprovalRequest> = {}): ApprovalRequest 
     requestId: "req-test-1",
     capability: "process.exec",
     toolName: "bash",
-    effect: EFFECT,
+    effects: [EFFECT],
     paramsDigest: PARAMS_DIGEST,
     ...overrides,
   };

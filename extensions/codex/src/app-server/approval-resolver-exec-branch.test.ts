@@ -149,8 +149,8 @@ describe("approval-bridge process.exec resolver branch", () => {
     expect(mockRunBeforeToolCallHook).not.toHaveBeenCalled();
     expect(seen).toHaveLength(1);
     expect(seen[0]?.capability).toBe("process.exec");
-    expect(seen[0]?.effect.command).toBe("/bin/bash -lc 'rm -rf /tmp/x'");
-    expect(seen[0]?.effect.kind).toBe("process.exec");
+    expect(seen[0]?.effects[0]?.command).toBe("/bin/bash -lc 'rm -rf /tmp/x'");
+    expect(seen[0]?.effects[0]?.kind).toBe("process.exec");
     expect(seen[0]?.toolName).toBe("exec");
     expect(seen[0]?.paramsDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
     // The opaque requestId is generated gateway-side, NOT the codex approvalId.
@@ -301,5 +301,64 @@ describe("approval-bridge process.exec resolver branch", () => {
     expect(mockCallGatewayTool).toHaveBeenCalled();
     expect(mockCallGatewayTool.mock.calls[0]?.[0]).toBe("plugin.approval.request");
     expect(response).toEqual({ decision: "decline" });
+  });
+
+  // ── L3.9–L3.11: effects[] contract + classifyEffects wiring ───────────────
+
+  it("plain command — req.effects=[{process.exec}], capability=process.exec, identical digest, one dispatch", async () => {
+    // TDD: verify the new effects[] contract is in place after L3.10+L3.11 land.
+    // digestForEffects([{kind:'process.exec', command:'/bin/ls /tmp'}])
+    // MUST equal computeParamsDigest({kind:'process.exec', command:'/bin/ls /tmp'})
+    // (branch A single-effect preservation).
+    const { seen } = registerResolver((req) => ({
+      requestId: req.requestId,
+      decision: "allow",
+    }));
+
+    const response = await drive("/bin/ls /tmp");
+
+    expect(response).toEqual({ decision: "accept" });
+    expect(seen).toHaveLength(1);
+    const req = seen[0]!;
+    // Contract: effects[] replaces effect
+    expect(req.effects).toHaveLength(1);
+    expect(req.effects[0]).toMatchObject({ kind: "process.exec", command: "/bin/ls /tmp" });
+    // capability routes correctly
+    expect(req.capability).toBe("process.exec");
+    // Digest must be byte-identical to old computeParamsDigest(effect)
+    // branch A: digestForEffects([lone effect]) === computeParamsDigest(lone effect)
+    expect(req.paramsDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
+    // One dispatch only
+    expect(seen).toHaveLength(1);
+  });
+
+  it("curl command — req.effects includes net.egress + process.exec, capability=process.exec, one dispatch", async () => {
+    // TDD: verify that a curl command classifies to [net.egress, process.exec]
+    // and that pickOwner selects process.exec as the capability (owns the decision).
+    // Only ONE decideCapabilityApproval dispatch occurs (not two).
+    const { seen } = registerResolver((req) => ({
+      requestId: req.requestId,
+      decision: "deny",
+      reason: "curl blocked",
+    }));
+
+    const response = await drive("curl https://x.com");
+
+    expect(response).toEqual({ decision: "decline" });
+    expect(seen).toHaveLength(1);
+    const req = seen[0]!;
+    // Effects must contain both net.egress and process.exec
+    const kinds = req.effects.map((e) => e.kind);
+    expect(kinds).toContain("net.egress");
+    expect(kinds).toContain("process.exec");
+    // process.exec owns the routing decision (broader capability)
+    expect(req.capability).toBe("process.exec");
+    // The net.egress effect carries the extracted host
+    const egressEffect = req.effects.find((e) => e.kind === "net.egress");
+    expect(egressEffect?.hosts).toContain("x.com");
+    // Exactly one dispatch (not one per effect)
+    expect(seen).toHaveLength(1);
+    // Deny → decline
+    expect(mockCallGatewayTool).not.toHaveBeenCalled();
   });
 });
