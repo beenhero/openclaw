@@ -452,4 +452,33 @@ describe("registerToolMetadata capabilities validation (L3.6 Tier-B)", () => {
     expect(KNOWN_CAPABILITIES.has("fs.write")).toBe(false);
     expect(KNOWN_CAPABILITIES.has("http.request")).toBe(false);
   });
+
+  // SHRINK-1: duplicate capabilities must be deduped at registration
+  it("SHRINK-1: registering capabilities:['net.egress','net.egress'] stores ['net.egress'] (deduped)", () => {
+    const { config, registry } = createPluginRegistryFixture();
+    registerTestPlugin({
+      registry,
+      config,
+      record: createPluginRecord({
+        id: "my-plugin",
+        name: "My Plugin",
+        origin: "workspace",
+        contracts: { tools: ["my_fetch_tool"] },
+      }),
+      register(api) {
+        api.registerToolMetadata({
+          toolName: "my_fetch_tool",
+          displayName: "My Fetch Tool",
+          // @ts-expect-error testing duplicate valid capabilities (runtime dedupe)
+          capabilities: ["net.egress", "net.egress"],
+        });
+      },
+    });
+
+    expect(registry.registry.toolMetadata).toHaveLength(1);
+    const stored = registry.registry.toolMetadata[0]?.metadata.capabilities;
+    // Must be deduped: only one 'net.egress'
+    expect(stored).toEqual(["net.egress"]);
+    expect(registry.registry.diagnostics).toHaveLength(0);
+  });
 });

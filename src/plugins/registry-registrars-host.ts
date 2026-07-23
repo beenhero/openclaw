@@ -447,6 +447,7 @@ export function createHostRegistrars(state: PluginRegistryState) {
     // Fail-closed: reject any capability not wired in core so a plugin cannot silently believe it
     // gates a surface OpenClaw does not enforce. This is a hard throw (not pushDiagnostic) to
     // match the resolver registrar's behavior and surface the error immediately at registration.
+    let deduplicatedCapabilities: string[] | undefined;
     if (metadata.capabilities !== undefined) {
       if (
         !Array.isArray(metadata.capabilities) ||
@@ -456,6 +457,11 @@ export function createHostRegistrars(state: PluginRegistryState) {
           `tool metadata "${toolName}" declares a capability not in KNOWN_CAPABILITIES (${record.id}): ${JSON.stringify(metadata.capabilities)}`,
         );
       }
+      // SHRINK-1: dedupe capabilities at the source so stored metadata never carries duplicates.
+      // dedupeByKind (the future L3.12 ACP caller) throws on duplicate effect kinds, which would
+      // happen if a plugin registered ['net.egress','net.egress'] and classifyTierB emitted two
+      // net.egress descriptors. Dedupe here before storing, after all validation has passed.
+      deduplicatedCapabilities = [...new Set(metadata.capabilities)];
     }
     registry.toolMetadata.push({
       pluginId: record.id,
@@ -466,6 +472,9 @@ export function createHostRegistrars(state: PluginRegistryState) {
         ...(displayName !== undefined ? { displayName } : {}),
         ...(description !== undefined ? { description } : {}),
         ...(tags !== undefined ? { tags } : {}),
+        ...(deduplicatedCapabilities !== undefined
+          ? { capabilities: deduplicatedCapabilities }
+          : {}),
       },
       source: record.source,
       rootDir: record.rootDir,

@@ -299,6 +299,10 @@ export function classifyTierB(toolName: unknown): EffectDescriptor[] {
   } catch {
     return [];
   }
+  // EMPTY-2/B1: guard against malformed registry shape (toolMetadata absent or not an array).
+  // The TypeScript cast above does not guarantee runtime type — defensive check so any unexpected
+  // registry shape returns [] gracefully (fail-closed: orchestrator superset floor covers it).
+  if (!Array.isArray(toolMetadata)) return [];
 
   const entry = toolMetadata.find((e) => {
     try {

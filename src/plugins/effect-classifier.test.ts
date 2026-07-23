@@ -1,7 +1,7 @@
 // Effect-set canonicalization primitives — L3.3 (sortEffects + dedupeByKind) and
 // L3.4 (digestForEffects behavior-preservation golden, branch A).
 // 3-tier classifier — L3.5 (Tier-A), L3.6 (Tier-B), L3.7 (Tier-C), L3.8 (orchestrator + floor).
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { computeParamsDigest } from "./capability-approval.js";
 import {
   EXEC_CAPABLE_TOOL_NAMES,
@@ -17,6 +17,8 @@ import {
   sortEffects,
 } from "./effect-classifier.js";
 import type { EffectDescriptor } from "./host-hooks.js";
+import { createEmptyPluginRegistry } from "./registry-empty.js";
+import { setActivePluginRegistry } from "./runtime.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -271,6 +273,11 @@ describe("classifyTierA", () => {
 // ---------------------------------------------------------------------------
 
 describe("classifyTierB", () => {
+  afterEach(() => {
+    // Reset to clean state so injected malformed registries don't bleed into other tests.
+    setActivePluginRegistry(createEmptyPluginRegistry());
+  });
+
   it("no registry → [] (graceful — no crash)", () => {
     // With no active registry, classifyTierB returns []
     const result = classifyTierB("my_custom_tool");
@@ -292,6 +299,34 @@ describe("classifyTierB", () => {
     // classifyEffects must still return process.exec (Tier-A wins, Tier-B is additive).
     const result = await classifyEffects(null, "bash", { command: "ls" });
     expect(result.some((e) => e.kind === "process.exec")).toBe(true);
+  });
+
+  // EMPTY-2/B1: guard Tier-B registry reads — malformed toolMetadata must not throw
+  it("EMPTY-2: malformed registry (toolMetadata absent/not-array) → [] without throwing", () => {
+    // Inject a registry whose toolMetadata is undefined (simulates unexpected registry shape).
+    const malformed = {
+      ...createEmptyPluginRegistry(),
+      toolMetadata: undefined as unknown as [],
+    };
+    setActivePluginRegistry(malformed);
+
+    // Must return [] and NEVER throw — so classifyEffects floor can apply superset.
+    expect(() => classifyTierB("some_tool")).not.toThrow();
+    expect(classifyTierB("some_tool")).toEqual([]);
+  });
+
+  it("EMPTY-2: classifyEffects still yields superset for unknown tool with malformed registry", async () => {
+    // Even with malformed toolMetadata, orchestrator floor must yield SUPERSET (non-empty, fail-closed).
+    const malformed = {
+      ...createEmptyPluginRegistry(),
+      toolMetadata: undefined as unknown as [],
+    };
+    setActivePluginRegistry(malformed);
+
+    const result = await classifyEffects(null, "totally-unknown-xyz", null);
+    // Floor applied: must have both effects
+    expect(result.some((e) => e.kind === "process.exec")).toBe(true);
+    expect(result.some((e) => e.kind === "net.egress")).toBe(true);
   });
 });
 
