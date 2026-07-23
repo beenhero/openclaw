@@ -734,4 +734,20 @@ describe("getDefaultProofLedger — lazy durable singleton", () => {
     __resetDefaultProofLedgerForTest(path.join(tmpDir, "proof-ledger-3"));
     expect(getDefaultProofLedger()).not.toBe(first);
   });
+
+  it("no-arg reset yields a FRESH isolated ledger — same proof is allowed again (no cross-run bleed)", () => {
+    // Regression: a no-arg reset that merely nulled the singleton let the default rebuild
+    // a File ledger over the same on-disk getAgentDir() dir, so a proof consumed in an
+    // earlier run stayed 'seen' and poisoned a later run's allow leg (the codex replay
+    // tests failed on this). No-arg reset must give clean, non-persistent state.
+    __resetDefaultProofLedgerForTest();
+    const r1 = getDefaultProofLedger().consumeOnce("iso-proof", "iso-req", "iso-digest", "allow");
+    expect(r1).toEqual({ ok: true });
+    // Same proof + pair, but after a fresh no-arg reset → must be allowed again (not replayed).
+    __resetDefaultProofLedgerForTest();
+    const r2 = getDefaultProofLedger().consumeOnce("iso-proof", "iso-req", "iso-digest", "allow");
+    expect(r2).toEqual({ ok: true });
+    // And it must NOT be a File ledger touching the real agent dir (no disk artifacts here).
+    expect(getDefaultProofLedger().constructor.name).toBe("InMemoryProofLedger");
+  });
 });

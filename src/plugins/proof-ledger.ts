@@ -506,7 +506,7 @@ export class FileProofLedger implements ProofLedger {
 
 import { getAgentDir } from "../agents/config.js";
 
-let _defaultLedger: FileProofLedger | undefined;
+let _defaultLedger: ProofLedger | undefined;
 
 /**
  * Returns the process-wide default FileProofLedger, lazily constructed on
@@ -525,15 +525,21 @@ export function getDefaultProofLedger(): ProofLedger {
 }
 
 /**
- * Test-only. Re-points (or clears) the default ledger singleton so tests
- * can use a temp directory instead of the real agent dir.
+ * Test-only. Re-points the default ledger singleton so tests get isolated
+ * single-use state instead of the real agent dir.
  *
- * Called by __resetProofRegistryForTest so existing test teardown keeps
- * working without changes.
+ * - `overridePath` given → a durable File ledger at that dir (e.g. a live drill
+ *   that inspects the on-disk index + audit trail).
+ * - NO argument → a FRESH in-memory ledger. This is the isolation default:
+ *   tests get clean, non-persistent single-use state that never touches (or
+ *   accumulates in) the real agent dir. A no-op reset that merely nulled the
+ *   singleton would let getDefaultProofLedger() rebuild a File ledger over the
+ *   SAME on-disk `getAgentDir()/proof-ledger` — bleeding consumed-proof state
+ *   ACROSS test runs (the codex integration replay-guard tests caught exactly
+ *   this: a proof consumed in an earlier run poisoned a later run's allow leg).
+ *
+ * Called by __resetProofRegistryForTest so existing test teardown keeps working.
  */
 export function __resetDefaultProofLedgerForTest(overridePath?: string): void {
-  _defaultLedger = undefined;
-  if (overridePath) {
-    _defaultLedger = new FileProofLedger(overridePath);
-  }
+  _defaultLedger = overridePath ? new FileProofLedger(overridePath) : new InMemoryProofLedger();
 }
