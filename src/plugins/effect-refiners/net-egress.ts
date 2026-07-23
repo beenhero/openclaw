@@ -17,8 +17,41 @@
 
 import { splitShellArgs } from "../../utils/shell-argv.js";
 
-/** Head tokens that identify fetch-capable commands. */
+/** Tokens (by basename) that identify fetch-capable commands. */
 const FETCH_HEAD_TOKENS = new Set(["curl", "wget", "http", "https"]);
+
+/** Shell interpreters that run a command string passed via a `-c`-family flag. */
+const SHELL_WRAPPER_TOKENS = new Set(["bash", "sh", "zsh", "dash", "ash", "ksh"]);
+
+/** Basename of a token: `/bin/bash` → `bash`, `curl` → `curl` (lowercased). */
+function basename(token: string): string {
+  const slash = token.lastIndexOf("/");
+  return (slash >= 0 ? token.slice(slash + 1) : token).toLowerCase();
+}
+
+/**
+ * Unwrap shell wrappers so the fetch tool is visible. Real agents (codex included)
+ * dispatch commands as `/bin/bash -lc '<actual command>'`, which hides `curl` behind
+ * the `bash` head token. This recursively descends into the `-c`/`-lc`/`-ic` command
+ * string (depth-limited) so the inner fetch is reachable.
+ */
+function unwrapShell(argv: string[], depth: number): string[] {
+  if (depth <= 0 || argv.length === 0) return argv;
+  if (!SHELL_WRAPPER_TOKENS.has(basename(argv[0] ?? ""))) return argv;
+  for (let i = 1; i < argv.length; i += 1) {
+    const tok = argv[i] ?? "";
+    // A `-c`-family flag (`-c`, `-lc`, `-ic`, `-lic`, …) takes the command string next.
+    if (tok.startsWith("-") && tok.slice(1).includes("c")) {
+      const inner = argv[i + 1];
+      if (inner) {
+        const innerArgv = tokenize(inner);
+        if (innerArgv && innerArgv.length > 0) return unwrapShell(innerArgv, depth - 1);
+      }
+      return argv;
+    }
+  }
+  return argv;
+}
 
 /** Parsed net.egress target info from a curl/wget/http command. */
 export type NetEgressTarget = {
@@ -112,21 +145,27 @@ function extractUrlsFromArgv(argv: string[]): { host: string; port: number; url:
  * REFINE-ONLY: never throws, never returns an empty result for a fetch command.
  */
 export function refineCurlNetEgress(command: string | string[]): NetEgressTarget | undefined {
-  const argv = tokenize(command);
-  if (!argv || argv.length === 0) {
+  const rawArgv = tokenize(command);
+  if (!rawArgv || rawArgv.length === 0) {
     // Untokenizable or empty — not identified as a fetch tool, return undefined.
     // The process.exec floor already covers this.
     return undefined;
   }
 
-  // Check head token (argv[0]) — is this a fetch-capable command?
-  const head = argv[0]?.toLowerCase();
-  if (!head || !FETCH_HEAD_TOKENS.has(head)) {
+  // Unwrap `bash -lc '...'` / `sh -c '...'` so a fetch tool hidden behind a shell
+  // interpreter (the shape real agents emit) is visible.
+  const argv = unwrapShell(rawArgv, 3);
+
+  // Is this a fetch command? A fetch token may be the head OR appear later (e.g. after
+  // a `cd x &&` prefix), so scan every token by basename. Over-labeling a command that
+  // merely mentions `curl` as net.egress is conservative (deny-by-default), never unsound.
+  const isFetch = argv.some((t) => FETCH_HEAD_TOKENS.has(basename(t)));
+  if (!isFetch) {
     return undefined;
   }
 
-  // It IS a fetch tool. Extract URLs from the argv.
-  const targets = extractUrlsFromArgv(argv.slice(1));
+  // It IS a fetch tool. Extract URLs from the whole (unwrapped) argv.
+  const targets = extractUrlsFromArgv(argv);
 
   if (targets.length === 0) {
     // Fetch tool but no parseable URL → conservative superset for this fetch.

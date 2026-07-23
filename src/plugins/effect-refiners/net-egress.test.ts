@@ -15,6 +15,33 @@ describe("refineCurlNetEgress", () => {
     expect(result?.url).toBe("https://x.com");
   });
 
+  // Shell-wrapped shapes — the form REAL agents (codex) emit. A live drill caught that
+  // a head-token-only check missed `curl` behind `/bin/bash -lc '...'`.
+  it("bash -lc wrapped curl → unwrapped, hosts extracted", () => {
+    const result = refineCurlNetEgress(`/bin/bash -lc 'curl -s -o /tmp/x https://example.com'`);
+    expect(result?.hosts).toEqual(["example.com"]);
+    expect(result?.ports).toEqual([443]);
+  });
+
+  it("sh -c wrapped curl → unwrapped", () => {
+    const result = refineCurlNetEgress(`sh -c "curl https://api.example.com/v1"`);
+    expect(result?.hosts).toEqual(["api.example.com"]);
+  });
+
+  it("fetch tool after a cd prefix (any-token scan) → detected", () => {
+    const result = refineCurlNetEgress(`bash -lc 'cd /tmp && curl https://x.com'`);
+    expect(result?.hosts).toEqual(["x.com"]);
+  });
+
+  it("absolute path to curl (/usr/bin/curl) → basename recognized", () => {
+    const result = refineCurlNetEgress("/usr/bin/curl https://x.com");
+    expect(result?.hosts).toEqual(["x.com"]);
+  });
+
+  it("non-fetch wrapped command (bash -lc 'ls') → undefined (no net.egress)", () => {
+    expect(refineCurlNetEgress(`bash -lc 'ls -la /tmp'`)).toBeUndefined();
+  });
+
   it("curl http://example.com → hosts:['example.com'], ports:[80]", () => {
     const result = refineCurlNetEgress("curl http://example.com");
     expect(result?.hosts).toEqual(["example.com"]);
