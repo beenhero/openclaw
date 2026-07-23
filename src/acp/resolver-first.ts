@@ -12,6 +12,60 @@
  *  - decideCapabilityApproval deny (graceful or failureDisposition) → 'deny'
  *  - allow → 'allow-once' (conservative single-use, mirrors codex adapter)
  *  - decideCapabilityApproval throw → log + fallthrough to human (NOT deny)
+ *
+ * ---------------------------------------------------------------------------
+ * L5.6 surface-#1 residual — resolver exclusivity is ORDERING-BASED, not
+ * create-site-suppressed (documented tap-race).
+ * ---------------------------------------------------------------------------
+ * L5.A (this module + translator.ts:1031-1064) closes surface #2: on a resolver
+ * decision the translator resolves the gateway approval and SKIPS the ACP client
+ * tap (this.connection.requestPermission). That is fully closed and tested.
+ *
+ * Surface #1 is the operator APPROVALS_SCOPE broadcast. The gateway mints the
+ * exec approval record and broadcasts `exec.approval.requested` to APPROVALS_SCOPE
+ * at the CREATE site (src/gateway/server-methods/exec-approval.ts:399-411 →
+ * approval-shared.ts:454-478). That single broadcast is consumed by BOTH:
+ *   (a) operator taps (Telegram /approve, iOS) — which CAN authorize via
+ *       exec.approval.resolve, so surface #1 IS an authorization surface; and
+ *   (b) the ACP translator relay itself, which connects as an APPROVALS_SCOPE
+ *       client (src/acp/server.ts:143-165) and is TRIGGERED by that same
+ *       `exec.approval.requested` event (translator.ts:342-354 →
+ *       handleExecApprovalRequestEvent → startApprovalRelay).
+ *
+ * THE RESIDUAL: there is a window between the create-broadcast and the
+ * translator's resolver decision (which runs later, after a
+ * getGatewayApprovalDetails round-trip). If an operator tap calls
+ * exec.approval.resolve('allow') inside that window, it wins — the gateway
+ * manager.resolve is single-shot / first-resolve-wins (approval-shared.ts:686-708),
+ * so a non-resolver surface could authorize an in-scope request before the
+ * resolver decides. In PRACTICE the resolver's own resolveGatewayApproval nearly
+ * always lands first (it fires without human latency), so the race is narrow —
+ * but it is NOT byte-suppressed and is therefore a real exclusivity residual.
+ *
+ * WHY NOT create-site suppression (Approach A) here: setting suppressDelivery=true
+ * at the create site would suppress the ENTIRE `exec.approval.requested`
+ * broadcast — which is ALSO the ACP relay's trigger (b). That would starve the
+ * resolver of its own event and BREAK L5.A (the resolver would never decide).
+ * A correct fix must be SELECTIVE: deliver the event to the ACP relay (so the
+ * resolver runs) while excluding operator taps. That requires a NEW discriminator
+ * on the ACP relay connection (today it connects with the generic
+ * GATEWAY_CLIENT_NAMES.CLI, indistinguishable from an operator tap at the create
+ * site) on the HOT shared APPROVALS_SCOPE path — a high-regression-risk change
+ * across every approval consumer.
+ *
+ * NOTE (follow-up seam): the ACP relay also has a SECOND, session-scoped trigger
+ * — the `agent` event with stream:"approval" (translator.ts:830-844,850-856;
+ * emitted at embedded-agent-subscribe.handlers.tools.ts:1692-1700), which is
+ * broadcast on READ_SCOPE via SESSION_SUBSCRIPTION_EVENTS, independent of the
+ * APPROVALS_SCOPE `exec.approval.requested` broadcast. If a live drill CONFIRMS
+ * that this session-stream trigger reliably reaches the ACP relay in every
+ * production ACP host config, then a targeted create-site suppression of ONLY
+ * the operator `exec.approval.requested` broadcast (gated on
+ * hasApprovalResolverForScope) becomes viable WITHOUT starving the resolver.
+ * That dual-trigger invariant is UNVERIFIED here and must not be assumed — a
+ * wrong assumption would fail OPEN on the security gate (resolver never runs).
+ * Hence L5.6 ships the ordering-based exclusivity + this residual note, and
+ * defers full surface-#1 closure to that verified follow-up.
  */
 import { randomUUID } from "node:crypto";
 import { hasApprovalResolverForScope } from "../plugins/approval-resolver.js";

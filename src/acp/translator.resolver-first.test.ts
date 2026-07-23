@@ -315,6 +315,38 @@ describe("ACP translator — resolver-first branch (L5.2 server-mode)", () => {
 
     await cleanupHarness(harness);
   });
+
+  // -------------------------------------------------------------------------
+  // L5.6 — surface-#1 exclusivity: the resolver decision IS delivered.
+  //
+  // This grades the resolver's exclusivity as ORDERING-BASED with a documented
+  // tap-race residual (see src/acp/resolver-first.ts "L5.6 surface-#1 residual"
+  // note). It asserts the leg L5.6 CAN establish today: when a resolver owns the
+  // scope, the resolver's decision reaches the gateway via exec.approval.resolve
+  // (surface #2's replacement runs and is authoritative). It does NOT assert that
+  // a competing operator APPROVALS_SCOPE tap is byte-suppressed at the create
+  // site — that is the documented residual (full closure = selective create-site
+  // suppression that keeps the ACP relay's own trigger alive).
+  // -------------------------------------------------------------------------
+  it("resolver-owned scope → resolver's exec.approval.resolve IS delivered (ordering-based exclusivity leg)", async () => {
+    registerExecResolver(() => ({ requestId: "x", decision: "deny", reason: "resolver-owns" }));
+
+    const harness = await createHarness();
+    await harness.agent.handleGatewayEvent(createApprovalEvent({ runId: harness.runId }));
+
+    // The resolver's decision must reach the gateway (single-shot resolve; the
+    // gateway's manager.resolve is first-resolve-wins, so a resolver decision
+    // that lands first wins the record).
+    await vi.waitFor(() => {
+      expect(approvalResolveCalls(harness.request)).toHaveLength(1);
+    });
+    const [[, resolveParams]] = approvalResolveCalls(harness.request);
+    expect((resolveParams as { decision?: string }).decision).toBe("deny");
+    // Surface #2 (the ACP client tap) is suppressed on the resolver path.
+    expect(harness.requestPermission).not.toHaveBeenCalled();
+
+    await cleanupHarness(harness);
+  });
 });
 
 // ---------------------------------------------------------------------------
