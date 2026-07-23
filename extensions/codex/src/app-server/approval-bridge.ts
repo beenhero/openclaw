@@ -547,9 +547,10 @@ async function runOpenClawToolPolicyForApprovalRequest(params: {
 //
 // THIN ADAPTER: all decision-loop logic (deadline race, allow-list, proof
 // single-use/replay, fail-closed matrix) lives in the core primitive
-// `decideCapabilityApproval`. This function only classifies the Codex method,
-// builds the `effect` bag, mints an `ApprovalRequest`, calls the core, and maps
-// the neutral verdict back to the caller's `ApprovalPolicyOutcome`.
+// `decideCapabilityApproval`. This function classifies the Codex method via
+// `classifyEffects` (3-tier classifier → effect set), mints an `ApprovalRequest`
+// carrying the full `effects[]`, and maps the neutral verdict back to the caller's
+// `ApprovalPolicyOutcome`. ONE command = ONE requestId + ONE digest + ONE dispatch.
 async function runProcessExecResolverDecision(params: {
   method: string;
   requestParams: JsonObject | undefined;
