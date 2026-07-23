@@ -499,3 +499,41 @@ export class FileProofLedger implements ProofLedger {
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Default durable ledger singleton (L2.6)
+// ---------------------------------------------------------------------------
+
+import { getAgentDir } from "../agents/config.js";
+
+let _defaultLedger: FileProofLedger | undefined;
+
+/**
+ * Returns the process-wide default FileProofLedger, lazily constructed on
+ * first call. The ledger directory is co-located with auth.json under
+ * getAgentDir() — same root, same ownership model.
+ *
+ * LAZY: never constructed at import time so tests that never call
+ * decideCapabilityApproval do not create the agent-dir on disk.
+ * Inject opts.ledger in tests to avoid touching the real agent dir.
+ */
+export function getDefaultProofLedger(): ProofLedger {
+  if (!_defaultLedger) {
+    _defaultLedger = new FileProofLedger(join(getAgentDir(), "proof-ledger"));
+  }
+  return _defaultLedger;
+}
+
+/**
+ * Test-only. Re-points (or clears) the default ledger singleton so tests
+ * can use a temp directory instead of the real agent dir.
+ *
+ * Called by __resetProofRegistryForTest so existing test teardown keeps
+ * working without changes.
+ */
+export function __resetDefaultProofLedgerForTest(overridePath?: string): void {
+  _defaultLedger = undefined;
+  if (overridePath) {
+    _defaultLedger = new FileProofLedger(overridePath);
+  }
+}

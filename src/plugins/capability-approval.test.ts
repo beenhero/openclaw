@@ -10,6 +10,7 @@ import {
 } from "./capability-approval.js";
 import type { PluginJsonValue } from "./host-hook-json.js";
 import type { ApprovalDecision, ApprovalRequest } from "./host-hooks.js";
+import { InMemoryProofLedger, type ProofLedger } from "./proof-ledger.js";
 import { createEmptyPluginRegistry } from "./registry-empty.js";
 import { setActivePluginRegistry } from "./runtime.js";
 
@@ -86,7 +87,10 @@ describe("decideCapabilityApproval", () => {
         decision: "allow",
       })),
     );
-    const verdict = await decideCapabilityApproval(req, { deadlineMs: 5000 });
+    const verdict = await decideCapabilityApproval(req, {
+      deadlineMs: 5000,
+      ledger: new InMemoryProofLedger(),
+    });
     expect(verdict).toEqual({ kind: "allow", requestId: req.requestId });
   });
 
@@ -195,8 +199,9 @@ describe("decideCapabilityApproval", () => {
 
   it("deny — replayed/consumed proof → {kind:'deny',failureDisposition:'failed'}", async () => {
     const proof = "proof-unique-abc";
-    // Pre-consume the proof so it appears replayed.
-    assertProofFresh(proof); // first sight → ok, now seenProofs has it
+    // Pre-consume the proof in the injected ledger so the second attempt is replayed.
+    const ledger = new InMemoryProofLedger();
+    ledger.consumeOnce(proof, "req-pre-seed", "sha256:aabbcc", "allow"); // first sight → consumed
 
     setActivePluginRegistry(
       makeRegistryWithResolver(async (r) => ({
@@ -205,7 +210,11 @@ describe("decideCapabilityApproval", () => {
         proof,
       })),
     );
-    const verdict = await decideCapabilityApproval(makeRequest(), { deadlineMs: 5000 });
+    // Use a DIFFERENT requestId so it isn't already_consumed — it must be denied as replayed.
+    const verdict = await decideCapabilityApproval(makeRequest({ requestId: "req-replay-check" }), {
+      deadlineMs: 5000,
+      ledger,
+    });
     expect(verdict.kind).toBe("deny");
     expect((verdict as { kind: "deny"; failureDisposition?: string }).failureDisposition).toBe(
       "failed",
@@ -214,6 +223,8 @@ describe("decideCapabilityApproval", () => {
 
   it("deny — single-use: same requestId+paramsDigest consumed twice → second call denied", async () => {
     const req = makeRequest();
+    // Share ONE ledger across both calls — state persists between calls.
+    const ledger = new InMemoryProofLedger();
     setActivePluginRegistry(
       makeRegistryWithResolver(async (r) => ({
         requestId: r.requestId,
@@ -221,13 +232,13 @@ describe("decideCapabilityApproval", () => {
       })),
     );
     // First call consumes the {requestId, paramsDigest} pair.
-    const first = await decideCapabilityApproval(req, { deadlineMs: 5000 });
+    const first = await decideCapabilityApproval(req, { deadlineMs: 5000, ledger });
     expect(first.kind).toBe("allow");
 
     // Second call with the SAME requestId must be denied (pair already consumed).
     // We need to rebuild the registry since the active one still has the resolver,
     // but the proof registry is the blocker.
-    const second = await decideCapabilityApproval(req, { deadlineMs: 5000 });
+    const second = await decideCapabilityApproval(req, { deadlineMs: 5000, ledger });
     expect(second.kind).toBe("deny");
   });
 
@@ -246,6 +257,32 @@ describe("decideCapabilityApproval", () => {
     setActivePluginRegistry(registry);
     const verdict = await decideCapabilityApproval(makeRequest(), { deadlineMs: 5000 });
     expect(verdict.kind).toBe("deny");
+  });
+
+  it("deny(failed) when ledger.consumeOnce throws", async () => {
+    const throwingLedger: ProofLedger = {
+      consumeOnce: () => {
+        throw new Error("disk full");
+      },
+    };
+    const req = makeRequest();
+    setActivePluginRegistry(
+      makeRegistryWithResolver(async (r) => ({
+        requestId: r.requestId,
+        decision: "allow",
+      })),
+    );
+    const result = await decideCapabilityApproval(req, {
+      deadlineMs: 5000,
+      ledger: throwingLedger,
+    });
+    expect(result.kind).toBe("deny");
+    expect((result as { kind: "deny"; reason?: string }).reason).toBe(
+      "approval proof ledger unavailable",
+    );
+    expect((result as { kind: "deny"; failureDisposition?: string }).failureDisposition).toBe(
+      "failed",
+    );
   });
 });
 

@@ -10,7 +10,12 @@ import crypto from "node:crypto";
 import { getApprovalResolverForScope, hasApprovalResolverForScope } from "./approval-resolver.js";
 import type { PluginJsonValue } from "./host-hook-json.js";
 import type { ApprovalRequest } from "./host-hooks.js";
-import { proofKey } from "./proof-ledger.js";
+import {
+  __resetDefaultProofLedgerForTest,
+  getDefaultProofLedger,
+  proofKey,
+  type ProofLedger,
+} from "./proof-ledger.js";
 
 export function fingerprintJson(value: PluginJsonValue): string {
   return crypto.createHash("sha256").update(stableStringify(value)).digest("hex");
@@ -116,10 +121,11 @@ export function assertProofFresh(
   return { ok: true };
 }
 
-/** Clears both structures. Test-only. */
+/** Clears both structures. Test-only. Also resets the default ledger singleton. */
 export function __resetProofRegistryForTest(): void {
   consumedRecords.clear();
   seenProofs.clear();
+  __resetDefaultProofLedgerForTest();
 }
 
 // ---------------------------------------------------------------------------
@@ -165,7 +171,7 @@ export type CapabilityApprovalVerdict =
  */
 export async function decideCapabilityApproval(
   req: ApprovalRequest,
-  opts: { deadlineMs: number; signal?: AbortSignal },
+  opts: { deadlineMs: number; signal?: AbortSignal; ledger?: ProofLedger },
 ): Promise<CapabilityApprovalVerdict> {
   // Step 1: check whether the scope is owned by any resolver.
   // hasApprovalResolverForScope is fail-closed: a poisoned entry returns true
@@ -282,15 +288,23 @@ export async function decideCapabilityApproval(
     };
   }
 
-  // Structural single-use + cross-request replay rejection.
-  const fresh = assertProofFresh(verdict.proof);
-  const consumed = recordAndConsumeProof({
-    requestId: req.requestId,
-    paramsDigest: req.paramsDigest,
-    outcome: "allow",
-    ...(verdict.proof !== undefined ? { proof: verdict.proof } : {}),
-  });
-  if (!fresh.ok || !consumed.ok) {
+  // Structural single-use + cross-request replay rejection via durable ledger.
+  // One atomic consumeOnce under a proper-lockfile advisory lock replaces the
+  // old two-op (assertProofFresh + recordAndConsumeProof) TOCTOU window.
+  const ledger = opts.ledger ?? getDefaultProofLedger();
+  let ledgerResult: import("./proof-ledger.js").LedgerConsumeResult;
+  try {
+    ledgerResult = ledger.consumeOnce(verdict.proof, req.requestId, req.paramsDigest, "allow");
+  } catch {
+    // Ledger unavailable / corrupt / locked / audit-unwritable — FAIL CLOSED.
+    return {
+      kind: "deny",
+      requestId: req.requestId,
+      reason: "approval proof ledger unavailable",
+      failureDisposition: "failed",
+    };
+  }
+  if (!ledgerResult.ok) {
     return {
       kind: "deny",
       requestId: req.requestId,
