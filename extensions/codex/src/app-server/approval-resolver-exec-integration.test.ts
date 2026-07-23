@@ -43,13 +43,13 @@ import type {
   PluginApprovalResolverRegistryRegistration,
 } from "openclaw/plugin-sdk/agent-harness-runtime";
 import { hasNativeHookRelayInvocation } from "openclaw/plugin-sdk/agent-harness-runtime";
+import { __resetProofRegistryForTest } from "openclaw/plugin-sdk/agent-harness-runtime";
 import {
   createEmptyPluginRegistry,
   setActivePluginRegistry,
 } from "openclaw/plugin-sdk/plugin-test-runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { handleCodexAppServerApprovalRequest } from "./approval-bridge.js";
-import { __resetProofRegistryForTest } from "./approval-proof-registry.js";
 import { runApprovalResolverConformance } from "./approval-resolver-conformance.js";
 import * as roundtrip from "./plugin-approval-roundtrip.js";
 import {
@@ -217,7 +217,7 @@ describe("registerApprovalResolver process.exec (mock app-server, structural)", 
     expect(seen).toMatchObject({
       capability: "process.exec",
       toolName: "exec",
-      command: COMMAND,
+      effect: { kind: "process.exec", command: COMMAND },
       toolCallId: "cmd-1",
     });
     // The opaque requestId is gateway-generated, NOT the codex approvalId (toolCallId).
@@ -256,7 +256,7 @@ describe("registerApprovalResolver process.exec (mock app-server, structural)", 
     expect(seen).toMatchObject({
       capability: "process.exec",
       toolName: "exec",
-      command: COMMAND,
+      effect: { kind: "process.exec", command: COMMAND },
       toolCallId: "cmd-1",
     });
     expect(seen?.paramsDigest).toMatch(/^sha256:[a-f0-9]{64}$/);

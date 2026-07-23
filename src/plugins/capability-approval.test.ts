@@ -17,15 +17,15 @@ import { setActivePluginRegistry } from "./runtime.js";
 // Helpers
 // ---------------------------------------------------------------------------
 
-const PARAMS_DIGEST = computeParamsDigest({ command: "/bin/echo hello", cwd: "/tmp" });
+const EFFECT = { kind: "process.exec" as const, command: "/bin/echo hello", cwd: "/tmp" };
+const PARAMS_DIGEST = computeParamsDigest(EFFECT);
 
 function makeRequest(overrides: Partial<ApprovalRequest> = {}): ApprovalRequest {
   return {
     requestId: "req-test-1",
     capability: "process.exec",
     toolName: "bash",
-    command: "/bin/echo hello",
-    cwd: "/tmp",
+    effect: EFFECT,
     paramsDigest: PARAMS_DIGEST,
     ...overrides,
   };

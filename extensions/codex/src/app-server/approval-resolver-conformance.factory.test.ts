@@ -27,6 +27,11 @@ function createSeamFake() {
       // and (in this fake) the command is NOT auto-run (fail-closed default posture).
       if (!active) return { response: { decision: "fell-through" }, ran: false };
       const requestId = `req-${Math.random().toString(36).slice(2)}`;
+      const effect = {
+        kind: "process.exec" as const,
+        command: input.command,
+        ...(input.cwd ? { cwd: input.cwd } : {}),
+      };
       const paramsDigest = `sha256:${input.command}::${input.cwd ?? ""}`;
       const controller = new AbortController();
       const deadlineMs = 50;
@@ -38,8 +43,7 @@ function createSeamFake() {
             requestId,
             capability: "process.exec",
             toolName: "exec",
-            command: input.command,
-            cwd: input.cwd,
+            effect,
             paramsDigest,
           },
           { signal: controller.signal, deadlineMs },

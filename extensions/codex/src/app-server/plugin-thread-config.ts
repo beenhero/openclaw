@@ -3,6 +3,7 @@
  * for native Codex turns.
  */
 import { embeddedAgentLog } from "openclaw/plugin-sdk/agent-harness-runtime";
+import { fingerprintJson } from "openclaw/plugin-sdk/agent-harness-runtime";
 import {
   defaultCodexAppInventoryCache,
   serializeCodexAppInventoryError,
@@ -16,7 +17,6 @@ import {
   type ResolvedCodexPluginPolicy,
   type ResolvedCodexPluginsPolicy,
 } from "./config.js";
-import { fingerprintJson } from "./params-digest.js";
 import {
   ensureCodexPluginActivation,
   type CodexPluginActivationResult,

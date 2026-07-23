@@ -5,6 +5,7 @@ import {
 } from "./host-hook-runtime.js";
 import {
   isPluginJsonValue,
+  KNOWN_CAPABILITIES,
   normalizePluginHostHookId,
   type PluginAgentEventSubscriptionRegistration,
   type PluginApprovalResolverRegistration,
@@ -305,17 +306,18 @@ export function createHostRegistrars(state: PluginRegistryState) {
       });
       return;
     }
-    // Fail-closed: the gateway seam wires ONLY process.exec today. Any other capability is a
-    // hard rejection so a plugin cannot silently believe it gates a surface OpenClaw does not
-    // enforce (design §4.1/§7). This is the single deliberate throw in this file's register path.
+    // Fail-closed: the gateway seam wires only the capabilities in KNOWN_CAPABILITIES today.
+    // Any other capability is a hard rejection so a plugin cannot silently believe it gates a
+    // surface OpenClaw does not enforce (design §4.1/§7). This is the single deliberate throw
+    // in this file's register path.
     const capabilities = registration.scope?.capabilities ?? [];
     if (
       !Array.isArray(capabilities) ||
       capabilities.length === 0 ||
-      capabilities.some((cap) => cap !== "process.exec")
+      capabilities.some((cap) => !KNOWN_CAPABILITIES.has(cap))
     ) {
       throw new Error(
-        `approval resolver "${id}" only supports the process.exec capability (${record.id})`,
+        `approval resolver "${id}" declares a capability not in KNOWN_CAPABILITIES (${record.id}): ${JSON.stringify(capabilities)}`,
       );
     }
     if (record.origin !== "bundled" && !(record.contracts?.approvalResolvers ?? []).includes(id)) {

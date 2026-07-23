@@ -1,12 +1,11 @@
 // Codex tests cover the exclusive process.exec approval-resolver decision branch.
 import {
   callGatewayTool,
-  getApprovalResolverForScope,
-  hasApprovalResolverForScope,
   hasNativeHookRelayInvocation,
   invokeNativeHookRelay,
   resolveNativeHookRelayDeferredToolApproval,
   runBeforeToolCallHook,
+  __resetProofRegistryForTest,
   type EmbeddedRunAttemptParams,
 } from "openclaw/plugin-sdk/agent-harness-runtime";
 import type {
@@ -20,15 +19,14 @@ import {
 } from "openclaw/plugin-sdk/plugin-test-runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handleCodexAppServerApprovalRequest } from "./approval-bridge.js";
-import { __resetProofRegistryForTest } from "./approval-proof-registry.js";
 import type { JsonObject } from "./protocol.js";
 
-// Keep the real approval-resolver retrieval helpers (they read the active plugin
-// registry we set below) while neutralizing the gateway + trusted-tool hook +
-// native-relay so the only decision surface under test is the resolver branch.
-// hasApprovalResolverForScope / getApprovalResolverForScope default to the real
-// implementations (they read the active registry) but are wrapped as spies so a
-// single test can force the has*=true / get*=undefined registry-swap TOCTOU.
+// Neutralize the gateway + trusted-tool hook + native-relay so the only decision
+// surface under test is the resolver branch. The approval-resolver retrieval helpers
+// (hasApprovalResolverForScope / getApprovalResolverForScope) are NOT mocked here:
+// decideCapabilityApproval (the core primitive) imports them directly from
+// approval-resolver.ts, bypassing the barrel, so barrel mocks do not intercept
+// those calls. The TOCTOU case uses a poisoned registry entry instead.
 vi.mock("openclaw/plugin-sdk/agent-harness-runtime", async (importOriginal) => {
   const actual = await importOriginal<typeof import("openclaw/plugin-sdk/agent-harness-runtime")>();
   return {
@@ -41,8 +39,6 @@ vi.mock("openclaw/plugin-sdk/agent-harness-runtime", async (importOriginal) => {
       blocked: false,
       params,
     })),
-    hasApprovalResolverForScope: vi.fn(actual.hasApprovalResolverForScope),
-    getApprovalResolverForScope: vi.fn(actual.getApprovalResolverForScope),
   };
 });
 
@@ -53,19 +49,9 @@ vi.mock("openclaw/plugin-sdk/agent-harness-exec-review-runtime", async (importOr
   reviewExecRequestWithConfiguredModel: vi.fn(),
 }));
 
-// The real (unmocked) registry-reading implementations, captured once so
-// beforeEach can restore the spies' default behavior after any per-test override.
-const actualRuntime = await vi.importActual<
-  typeof import("openclaw/plugin-sdk/agent-harness-runtime")
->("openclaw/plugin-sdk/agent-harness-runtime");
-
 const mockCallGatewayTool = vi.mocked(callGatewayTool);
 const mockHasNativeHookRelayInvocation = vi.mocked(hasNativeHookRelayInvocation);
 const mockRunBeforeToolCallHook = vi.mocked(runBeforeToolCallHook);
-// These two default to the real registry-reading impl; a single test overrides
-// them to force the has*=true / get*=undefined registry-swap TOCTOU (Fix 4).
-const mockHasApprovalResolverForScope = vi.mocked(hasApprovalResolverForScope);
-const mockGetApprovalResolverForScope = vi.mocked(getApprovalResolverForScope);
 
 const WORKSPACE_DIR = "/tmp/resolver-exec-workspace";
 
@@ -138,12 +124,6 @@ describe("approval-bridge process.exec resolver branch", () => {
       blocked: false,
       params,
     }));
-    // Restore the resolver-retrieval spies to the real registry-reading impls so
-    // every test but the TOCTOU one exercises the true has*/get* agreement.
-    mockHasApprovalResolverForScope.mockReset();
-    mockHasApprovalResolverForScope.mockImplementation(actualRuntime.hasApprovalResolverForScope);
-    mockGetApprovalResolverForScope.mockReset();
-    mockGetApprovalResolverForScope.mockImplementation(actualRuntime.getApprovalResolverForScope);
     __resetProofRegistryForTest();
     setActivePluginRegistry(createEmptyPluginRegistry());
   });
@@ -169,7 +149,8 @@ describe("approval-bridge process.exec resolver branch", () => {
     expect(mockRunBeforeToolCallHook).not.toHaveBeenCalled();
     expect(seen).toHaveLength(1);
     expect(seen[0]?.capability).toBe("process.exec");
-    expect(seen[0]?.command).toBe("/bin/bash -lc 'rm -rf /tmp/x'");
+    expect(seen[0]?.effect.command).toBe("/bin/bash -lc 'rm -rf /tmp/x'");
+    expect(seen[0]?.effect.kind).toBe("process.exec");
     expect(seen[0]?.toolName).toBe("exec");
     expect(seen[0]?.paramsDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
     // The opaque requestId is generated gateway-side, NOT the codex approvalId.
@@ -249,11 +230,21 @@ describe("approval-bridge process.exec resolver branch", () => {
     expect(mockRunBeforeToolCallHook).not.toHaveBeenCalled();
   });
 
-  it("registry-swap TOCTOU (has* true, get* undefined) → decline, never falls through to the tap", async () => {
-    // Force the total-exclusivity guard: the scope is claimed (has*=true) but no
-    // usable resolver can be read (get*=undefined). Must deny, NOT fall through.
-    mockHasApprovalResolverForScope.mockReturnValue(true);
-    mockGetApprovalResolverForScope.mockReturnValue(undefined);
+  it("poisoned resolver entry (TOCTOU guard) → decline, never falls through to the tap", async () => {
+    // Simulate the registry-swap TOCTOU at the registry level: a resolver entry
+    // whose registration getter throws. decideCapabilityApproval (the core primitive
+    // that now owns this guard) reads the registry directly, so the fail-closed path
+    // is reached via a poisoned entry — not via barrel-mock overrides.
+    const registry = createEmptyPluginRegistry();
+    registry.approvalResolvers.push({
+      pluginId: "poison-plugin",
+      pluginName: "Poison",
+      source: "test",
+      get registration(): never {
+        throw new Error("TOCTOU: registration unreadable");
+      },
+    } as unknown as (typeof registry.approvalResolvers)[0]);
+    setActivePluginRegistry(registry);
 
     const response = await drive();
 

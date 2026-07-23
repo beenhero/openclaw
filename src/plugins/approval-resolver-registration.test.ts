@@ -73,7 +73,7 @@ describe("registerApprovalResolver host registrar", () => {
           );
         },
       }),
-    ).toThrow(/only supports the process\.exec capability/);
+    ).toThrow(/KNOWN_CAPABILITIES/);
     expect(registry.registry.approvalResolvers).toEqual([]);
   });
 
@@ -93,7 +93,7 @@ describe("registerApprovalResolver host registrar", () => {
           );
         },
       }),
-    ).toThrow(/only supports the process\.exec capability/);
+    ).toThrow(/KNOWN_CAPABILITIES/);
     expect(registry.registry.approvalResolvers).toEqual([]);
   });
 
@@ -178,5 +178,43 @@ describe("registerApprovalResolver host registrar", () => {
         ),
       }),
     ]);
+  });
+
+  it("THROWS (hard fail-closed) for an unknown capability string (net.egress is not in KNOWN_CAPABILITIES)", () => {
+    // L1.4 contract: KNOWN_CAPABILITIES = {"process.exec"} today.
+    // Any other string — net.egress, fs.write, etc. — must hard-throw so a
+    // plugin cannot silently believe it gates a surface OpenClaw does not enforce.
+    const { config, registry } = createPluginRegistryFixture();
+    expect(() =>
+      registerTestPlugin({
+        registry,
+        config,
+        record: createPluginRecord({ id: "sigil", name: "Sigil", origin: "bundled" }),
+        register(api) {
+          api.registerApprovalResolver(
+            execResolver({
+              id: "sigil-net",
+              scope: { capabilities: ["net.egress"] as never },
+            }),
+          );
+        },
+      }),
+    ).toThrow(/KNOWN_CAPABILITIES/);
+    expect(registry.registry.approvalResolvers).toEqual([]);
+  });
+
+  it("STILL registers process.exec after the KNOWN_CAPABILITIES contract reshape (regression)", () => {
+    // process.exec is in KNOWN_CAPABILITIES and must still register cleanly.
+    const { config, registry } = createPluginRegistryFixture();
+    registerTestPlugin({
+      registry,
+      config,
+      record: createPluginRecord({ id: "sigil", name: "Sigil", origin: "bundled" }),
+      register(api) {
+        api.registerApprovalResolver(execResolver());
+      },
+    });
+    expect(registry.registry.approvalResolvers).toHaveLength(1);
+    expect(registry.registry.diagnostics).toEqual([]);
   });
 });

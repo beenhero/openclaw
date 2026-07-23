@@ -5,12 +5,13 @@ import { randomUUID } from "node:crypto";
  */
 import {
   type AgentApprovalEventData,
-  type ApprovalDecision,
+  type ApprovalRequest,
   buildAgentHookContextChannelFields,
   type BeforeToolCallFailureDisposition,
+  computeParamsDigest,
+  decideCapabilityApproval,
+  type EffectDescriptor,
   formatApprovalDisplayPath,
-  getApprovalResolverForScope,
-  hasApprovalResolverForScope,
   hasNativeHookRelayInvocation,
   invokeNativeHookRelay,
   resolveNativeHookRelayDeferredToolApproval,
@@ -22,9 +23,7 @@ import {
 import { normalizeTrimmedStringList } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { sliceUtf16Safe, truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
 import { formatCodexDisplayText } from "../command-formatters.js";
-import { assertProofFresh, recordAndConsumeProof } from "./approval-proof-registry.js";
 import { resolveCodexToolAbortTerminalReason } from "./dynamic-tool-execution.js";
-import { computeParamsDigest } from "./params-digest.js";
 import {
   approvalRequestExplicitlyUnavailable,
   DEFAULT_CODEX_APPROVAL_TIMEOUT_MS,
@@ -543,6 +542,12 @@ async function runOpenClawToolPolicyForApprovalRequest(params: {
 // MIN_CODEX_APP_SERVER_VERSION (0.143.0) hard-throws at initialize via
 // assertSupportedCodexAppServerVersion (client.ts) before any approval reaches here,
 // so no in-branch version check is needed (regression-tested).
+//
+// THIN ADAPTER: all decision-loop logic (deadline race, allow-list, proof
+// single-use/replay, fail-closed matrix) lives in the core primitive
+// `decideCapabilityApproval`. This function only classifies the Codex method,
+// builds the `effect` bag, mints an `ApprovalRequest`, calls the core, and maps
+// the neutral verdict back to the caller's `ApprovalPolicyOutcome`.
 async function runProcessExecResolverDecision(params: {
   method: string;
   requestParams: JsonObject | undefined;
@@ -552,129 +557,50 @@ async function runProcessExecResolverDecision(params: {
   cwd?: string;
   signal?: AbortSignal;
 }): Promise<ApprovalPolicyOutcome | undefined> {
-  if (
-    params.method !== "item/commandExecution/requestApproval" ||
-    !hasApprovalResolverForScope("process.exec")
-  ) {
+  if (params.method !== "item/commandExecution/requestApproval") {
     return undefined;
   }
-  const resolverEntry = getApprovalResolverForScope("process.exec");
-  // Total exclusivity: a registry-swap TOCTOU (has* true, get* now undefined)
-  // must NOT fall through to the human tap / trusted-tool hook. Deny instead —
-  // the scope is owned by a resolver even though we cannot read one right now.
-  if (!resolverEntry) {
-    return {
-      outcome: "denied",
-      reason: "approval resolver unavailable",
-      failureDisposition: "failed",
-    };
-  }
-  const cwd = params.cwd;
-  const paramsDigest = computeParamsDigest(params.policyRequest.params);
-  const requestId = randomUUID();
+  // Build the effect bag — all process.exec-specific fields inside `effect`.
   const resolverCommand = readPolicyCommand(params.requestParams);
-  // Abort the resolver on the run signal OR on the deadline so a well-behaved
-  // resolver can stop waiting; the bridge itself also enforces the deadline
-  // (below) so a resolver that ignores the signal cannot park codex forever.
-  const resolverAbort = new AbortController();
-  const onRunAbort = () => resolverAbort.abort();
-  if (params.signal) {
-    if (params.signal.aborted) {
-      resolverAbort.abort();
-    } else {
-      params.signal.addEventListener("abort", onRunAbort, { once: true });
-    }
-  }
-  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
-  let verdict: ApprovalDecision | undefined;
-  let timedOut = false;
-  try {
-    const resolvePromise = resolverEntry.registration.resolve(
-      {
-        requestId,
-        capability: "process.exec",
-        toolName: params.policyRequest.toolName,
-        ...(resolverCommand ? { command: resolverCommand } : {}),
-        ...(cwd ? { cwd } : {}),
-        ...(params.paramsForRun.agentId ? { agentId: params.paramsForRun.agentId } : {}),
-        ...(params.paramsForRun.sessionKey ? { sessionKey: params.paramsForRun.sessionKey } : {}),
-        ...(params.paramsForRun.runId ? { runId: params.paramsForRun.runId } : {}),
-        ...(params.context.approvalId ? { toolCallId: params.context.approvalId } : {}),
-        paramsDigest,
-      },
-      {
-        signal: resolverAbort.signal,
-        deadlineMs: DEFAULT_CODEX_APPROVAL_TIMEOUT_MS,
-      },
-    );
-    // Bridge-enforced deadline: race the resolver hold against a timer so a
-    // resolver that never resolves cannot park the codex approval forever. The
-    // timeout rejects; the catch below maps it to denied/timed_out. Aborting
-    // the resolver signal lets a cooperative resolver stop waiting too.
-    const deadlinePromise = new Promise<never>((_, reject) => {
-      deadlineTimer = setTimeout(() => {
-        timedOut = true;
-        resolverAbort.abort();
-        reject(new Error("approval resolver timed out"));
-      }, DEFAULT_CODEX_APPROVAL_TIMEOUT_MS);
-    });
-    verdict = await Promise.race([resolvePromise, deadlinePromise]);
-  } catch {
-    verdict = undefined;
-  } finally {
-    // Clear the timer on every exit path (happy path included) — no leaked timers.
-    if (deadlineTimer !== undefined) {
-      clearTimeout(deadlineTimer);
-    }
-    if (params.signal) {
-      params.signal.removeEventListener("abort", onRunAbort);
-    }
-  }
-  // Deadline expiry maps to a timed_out decline (caught above, not propagated).
-  if (timedOut) {
-    return {
-      outcome: "denied",
-      reason: "approval resolver timed out",
-      failureDisposition: "timed_out",
-    };
-  }
-  // Fail-closed: an aborted hold or no verdict declines. `timed_out` disposition
-  // covers the run-abort; other misses report `failed`.
-  if (params.signal?.aborted === true || !verdict) {
-    return {
-      outcome: "denied",
-      reason: verdict?.reason ?? "approval resolver denied",
-      failureDisposition: params.signal?.aborted === true ? "timed_out" : "failed",
-    };
-  }
-  // Allow-LIST the verdict: approve ONLY on an explicit `allow` that echoes the
-  // request's requestId (the request-binding guard). ANY other decision value —
-  // "deny", or a malformed/unexpected string — fails closed to a decline.
-  if (verdict.requestId !== requestId || verdict.decision !== "allow") {
-    return {
-      outcome: "denied",
-      reason: verdict.reason ?? "approval resolver denied",
-      failureDisposition: "failed",
-    };
-  }
-  // Structural single-use + cross-request replay rejection (no crypto here).
-  const fresh = assertProofFresh(verdict.proof);
-  const consumed = recordAndConsumeProof({
+  const cwd = params.cwd;
+  const effect: EffectDescriptor = {
+    kind: "process.exec",
+    ...(resolverCommand ? { command: resolverCommand } : {}),
+    ...(cwd ? { cwd } : {}),
+  };
+  const requestId = randomUUID();
+  const req: ApprovalRequest = {
     requestId,
-    paramsDigest,
-    outcome: "allow",
-    ...(verdict.proof !== undefined ? { proof: verdict.proof } : {}),
+    capability: "process.exec",
+    toolName: params.policyRequest.toolName,
+    effect,
+    ...(params.paramsForRun.agentId ? { agentId: params.paramsForRun.agentId } : {}),
+    ...(params.paramsForRun.sessionKey ? { sessionKey: params.paramsForRun.sessionKey } : {}),
+    ...(params.paramsForRun.runId ? { runId: params.paramsForRun.runId } : {}),
+    ...(params.context.approvalId ? { toolCallId: params.context.approvalId } : {}),
+    paramsDigest: computeParamsDigest(effect),
+  };
+
+  const verdict = await decideCapabilityApproval(req, {
+    deadlineMs: DEFAULT_CODEX_APPROVAL_TIMEOUT_MS,
+    signal: params.signal,
   });
-  if (!fresh.ok || !consumed.ok) {
-    return {
-      outcome: "denied",
-      reason: "approval proof rejected",
-      failureDisposition: "failed",
-    };
+
+  if (verdict.kind === "fallthrough") {
+    // No resolver registered for process.exec — fall through to native relay + hook + tap.
+    return undefined;
   }
-  // allow-always durability is plugin-owned, not Codex session trust; keep
-  // this scoped to the current item (mirrors the generic-approval rationale).
-  return { outcome: "approved-once" };
+  if (verdict.kind === "allow") {
+    // allow-always durability is plugin-owned, not Codex session trust; keep
+    // this scoped to the current item (mirrors the generic-approval rationale).
+    return { outcome: "approved-once" };
+  }
+  // deny — map failureDisposition through.
+  return {
+    outcome: "denied",
+    reason: verdict.reason ?? "approval resolver denied",
+    ...(verdict.failureDisposition ? { failureDisposition: verdict.failureDisposition } : {}),
+  };
 }
 
 async function runNativeRelayToolPolicyForApprovalRequest(params: {

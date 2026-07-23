@@ -82,11 +82,18 @@ export type PluginTrustedToolPolicyRegistration = {
 };
 
 /**
- * Capability namespace a plugin approval resolver can claim. Only
- * `"process.exec"` is wired today; any other capability is rejected at
- * registration time (fail-closed, design §4.1/§7).
+ * Capability namespace a plugin approval resolver can claim. An open validated
+ * string — only `"process.exec"` is wired today; any other capability is
+ * rejected at registration time (fail-closed, design §4.1/§7).
  */
-export type ApprovalCapability = "process.exec";
+export type ApprovalCapability = string;
+
+/**
+ * The set of capabilities wired in Layer 1. The registrar hard-throws on any
+ * capability NOT in this set, so a plugin cannot silently believe it gates a
+ * surface OpenClaw does not yet enforce.
+ */
+export const KNOWN_CAPABILITIES: ReadonlySet<string> = new Set(["process.exec"]);
 
 /** Static scope declaration for an approval resolver. */
 export type ApprovalScope = {
@@ -94,21 +101,37 @@ export type ApprovalScope = {
 };
 
 /**
+ * An opaque effect bag keyed by the open capability string. Carries all
+ * capability-specific fields; providers read these; the core primitive treats
+ * the bag as opaque (other than `kind`). Values are JSON-compatible so the
+ * bag can be fingerprinted by `computeParamsDigest`.
+ *
+ * process.exec effect: `{ kind: "process.exec", command, cwd?, argv? }`
+ */
+export type EffectDescriptor = { kind: ApprovalCapability; [key: string]: PluginJsonValue };
+
+/**
  * A single approval request handed to a registered resolver. `paramsDigest`
- * is computed gateway-side over the exact params the tool will run and binds
- * the returned decision to this request (replay/substitution guard).
+ * is computed gateway-side over `effect` and binds the returned decision to
+ * this request (replay/substitution guard).
  */
 export type ApprovalRequest = {
   requestId: string;
   capability: ApprovalCapability;
   toolName: string;
-  command?: string;
-  cwd?: string;
+  /** Opaque effect bag — all capability-specific fields live inside `effect`. */
+  effect: EffectDescriptor;
   agentId?: string;
   sessionKey?: string;
   runId?: string;
   toolCallId?: string;
   paramsDigest: string;
+  /** Optional human-readable subject hint for the resolver UX. */
+  subject?: string;
+  /** Optional origin context (e.g. agent id, run id label). */
+  origin?: string;
+  /** Optional Unix-ms expiry hint (informational; core ignores it). */
+  expiresAt?: number;
 };
 
 /**
