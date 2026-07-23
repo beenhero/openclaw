@@ -352,6 +352,12 @@ describe("FileProofLedger — decision suite + structural assertions", () => {
     }
   });
 
+  // INDEX-FIRST ORDERING PROOF: this is the definitive proof of Defect 2's ordering
+  // invariant. A committed pair-1 (good audit) and a burned pair-2 (index committed but
+  // audit failed + threw) can only co-exist if the index write precedes the audit append.
+  // If ordering were audit-first, pair-2's index entry would not exist (it would be written
+  // after the audit, which threw) — so the subsequent retry would succeed (not already_consumed).
+  // The fact that pair-2 IS burned (already_consumed on retry) proves index-first is enforced.
   it("UNWRITABLE AUDIT LOG (index-first): a successful pair survives; the audit-failed pair is BURNED (throws + fail-closed)", () => {
     const dir = path.join(tmpDir, "ledger-audit-fail");
     const ledger = new FileProofLedger(dir);
@@ -363,6 +369,10 @@ describe("FileProofLedger — decision suite + structural assertions", () => {
     // (b) Now make the JSONL audit append fail: remove the file and put a directory
     //     in its place so appendFileSync throws EISDIR on the NEXT consume.
     const jsonlPath = path.join(dir, "proof-ledger.jsonl");
+    // pair-1's audit line must exist before we destroy the file
+    expect(fs.existsSync(jsonlPath)).toBe(true);
+    const pair1AuditLine = fs.readFileSync(jsonlPath, "utf-8").trim();
+    expect((JSON.parse(pair1AuditLine) as Record<string, unknown>)["requestId"]).toBe("req-1");
     fs.rmSync(jsonlPath, { force: true });
     fs.mkdirSync(jsonlPath);
 
@@ -383,8 +393,35 @@ describe("FileProofLedger — decision suite + structural assertions", () => {
     // (e) pair-2 is BURNED: the index committed before the audit failed, so a retry of
     //     the SAME pair is already_consumed. This proves index-first + throw-on-audit-fail
     //     is genuinely fail-closed (the proof is spent, never replayable).
+    // pair-2 has NO audit line (the JSONL was blocked when it ran) — only in the index.
     const r2retry = ledger.consumeOnce("proof-audit-2b", "req-2", "digest-2", "allow");
     expect(r2retry).toEqual({ ok: false, reason: "already_consumed" });
+
+    // (f) Explicit audit-line split: pair-2 has NO audit line (the JSONL write was
+    //     blocked), but the index has pair-2 (written first, before the blocked audit).
+    //     The ordering proof is that index ⊇ audit: pair-2 is index-only (burned).
+    // After the dir-blocker is removed, a new consume on pair-3 succeeds to confirm the
+    // ledger is live again, and req-2 must NOT appear in any audit line.
+    const r3 = ledger.consumeOnce("proof-audit-3", "req-3", "digest-3", "allow");
+    expect(r3).toEqual({ ok: true });
+    const recoveredLines = fs
+      .readFileSync(jsonlPath, "utf-8")
+      .split("\n")
+      .filter((l) => l.trim() !== "");
+    const recoveredEntries = recoveredLines.map((l) => JSON.parse(l) as Record<string, unknown>);
+    // pair-2's INITIAL consume audit write was blocked (JSONL was a directory).
+    // Its audit line with decision="consumed" must NOT exist — pair-2 is index-only/burned.
+    // (The already_consumed retry in step (e) may legitimately write an "already_consumed"
+    //  line for req-2 after the blocker is removed — that is expected and is fine.)
+    const pair2ConsumedLine = recoveredEntries.find(
+      (e) => e["requestId"] === "req-2" && e["decision"] === "consumed",
+    );
+    expect(pair2ConsumedLine).toBeUndefined();
+    // pair-3 (req-3) MUST appear as consumed — recovery is complete.
+    const pair3ConsumedLine = recoveredEntries.find(
+      (e) => e["requestId"] === "req-3" && e["decision"] === "consumed",
+    );
+    expect(pair3ConsumedLine).toBeDefined();
   });
 
   it("ELOCKED: lock contention throws after retries", () => {
@@ -557,11 +594,62 @@ describe("FileProofLedger — decision suite + structural assertions", () => {
     expect(Object.keys(index.records)).toHaveLength(1);
   });
 
-  // Defect 2: crash between index-commit and audit-append (index-first ordering).
-  // Simulate: the index was durably committed (authoritative single-use gate) but the
-  // audit line never landed (crash before append). On restart, a NEW instance reading the
-  // committed index MUST still reject the pair — the consume is durable and never bypassed.
-  it("CRASH (index-first): a committed index rejects the pair on a NEW instance even if the audit line is absent", () => {
+  // DEEP INDEX SHAPE VALIDATION: defense-in-depth — a malformed records value or a
+  // non-string seenProofHashes element must throw (not silently amnesty).
+  it("MALFORMED INDEX (deep): consumeOnce throws if records entry is not a well-formed object", () => {
+    const dir = path.join(tmpDir, "ledger-malformed-record");
+    const ledger = new FileProofLedger(dir);
+    // Prime the ledger so the index file exists
+    ledger.consumeOnce("proof-m1", "req-m1", "digest-m1", "allow");
+    const indexPath = path.join(dir, "proof-index.json");
+
+    // Write an index whose records value is a primitive (not a well-formed record object)
+    const corrupt = JSON.stringify({ v: 1, records: { somekey: 123 }, seenProofHashes: [] });
+    fs.writeFileSync(indexPath, corrupt, "utf-8");
+
+    const reloaded = new FileProofLedger(dir);
+    expect(() => {
+      reloaded.consumeOnce("proof-m2", "req-m2", "digest-m2", "allow");
+    }).toThrow("proof-index: malformed/corrupt index — refusing to reset-to-empty");
+  });
+
+  it("MALFORMED INDEX (deep): consumeOnce throws if seenProofHashes contains a non-string", () => {
+    const dir = path.join(tmpDir, "ledger-malformed-hash");
+    const ledger = new FileProofLedger(dir);
+    ledger.consumeOnce("proof-h1", "req-h1", "digest-h1", "allow");
+    const indexPath = path.join(dir, "proof-index.json");
+
+    // Write an index with a non-string element in seenProofHashes
+    const corrupt = JSON.stringify({ v: 1, records: {}, seenProofHashes: [123] });
+    fs.writeFileSync(indexPath, corrupt, "utf-8");
+
+    const reloaded = new FileProofLedger(dir);
+    expect(() => {
+      reloaded.consumeOnce("proof-h2", "req-h2", "digest-h2", "allow");
+    }).toThrow("proof-index: malformed/corrupt index — refusing to reset-to-empty");
+  });
+
+  it("MALFORMED INDEX (deep): a well-formed populated index does NOT throw (no false positive)", () => {
+    // Regression guard: deep validation must not reject a valid populated index.
+    const dir = path.join(tmpDir, "ledger-valid-populated");
+    const ledger = new FileProofLedger(dir);
+    // Consume once to populate
+    const r1 = ledger.consumeOnce("proof-vp1", "req-vp1", "digest-vp1", "allow");
+    expect(r1).toEqual({ ok: true });
+
+    // Fresh instance reads the populated index — must NOT throw
+    const reloaded = new FileProofLedger(dir);
+    const r2 = reloaded.consumeOnce("proof-vp2", "req-vp1", "digest-vp1", "allow");
+    // req-vp1+digest-vp1 was consumed → already_consumed (not a throw)
+    expect(r2).toEqual({ ok: false, reason: "already_consumed" });
+  });
+
+  // Durability: a committed index (persisted during a real successful consume) survives
+  // audit-trail loss and is honoured by a fresh instance. This proves the index is the
+  // authoritative single-use gate — not the audit JSONL. It does NOT prove index-first
+  // ordering; that proof is the "UNWRITABLE AUDIT LOG" test above (a committed pair-1 +
+  // a burned pair-2 can only arise if the index write precedes the audit append).
+  it("a committed index survives a lost audit trail on a fresh instance", () => {
     const dir = path.join(tmpDir, "ledger-crash");
     const ledger = new FileProofLedger(dir);
     const indexPath = path.join(dir, "proof-index.json");

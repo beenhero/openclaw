@@ -256,6 +256,10 @@ const FRESH_INDEX_JSON = JSON.stringify(freshIndex());
  * Throws (never resets-to-empty) on ANY mismatch — a valid-JSON-but-wrong-shape index
  * (`{"v":1}`, `[]`, `123`, `true`, `"x"`, records-as-array, wrong `v`, etc.) would otherwise
  * silently amnesty every prior consumed proof. Called BEFORE any decision is made.
+ *
+ * Per-element deep validation (seenProofHashes elements + records values) is defense-in-depth
+ * given the presence-only decision logic — the gate does not read record field values at
+ * decision time, but rejecting corrupt payloads early is cheaper than chasing subtle bugs.
  */
 function assertProofIndexShape(idx: unknown): asserts idx is ProofIndex {
   const bad =
@@ -269,6 +273,27 @@ function assertProofIndexShape(idx: unknown): asserts idx is ProofIndex {
     !Array.isArray((idx as ProofIndex).seenProofHashes);
   if (bad) {
     throw new Error("proof-index: malformed/corrupt index — refusing to reset-to-empty");
+  }
+  // Deep-validate each seenProofHashes element is a string.
+  const hashes = (idx as ProofIndex).seenProofHashes;
+  for (const h of hashes) {
+    if (typeof h !== "string") {
+      throw new Error("proof-index: malformed/corrupt index — refusing to reset-to-empty");
+    }
+  }
+  // Deep-validate each records value carries the expected core fields with correct types.
+  // Tolerant of extra fields; rejects missing or wrong-typed core fields.
+  const records = (idx as ProofIndex).records;
+  for (const rec of Object.values(records)) {
+    const r = rec as Record<string, unknown>;
+    if (
+      typeof r["requestId"] !== "string" ||
+      typeof r["paramsDigest"] !== "string" ||
+      (r["outcome"] !== "allow" && r["outcome"] !== "deny") ||
+      typeof r["consumedAt"] !== "number"
+    ) {
+      throw new Error("proof-index: malformed/corrupt index — refusing to reset-to-empty");
+    }
   }
 }
 
