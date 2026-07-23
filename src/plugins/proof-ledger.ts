@@ -14,10 +14,70 @@
  * sequences. Any divergence is a bug.
  */
 
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import {
+  appendFileSync,
+  chmodSync,
+  closeSync,
+  existsSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { acquireLockSyncWithRetry } from "../agents/sessions/storage-lock.js";
 import { replaceFileAtomicSync } from "../infra/replace-file.js";
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+function sha256hex(s: string): string {
+  return createHash("sha256").update(s).digest("hex");
+}
+
+type AuditDecision = "consumed" | "replayed" | "already_consumed" | "invalid_identifier";
+
+type AuditEntry = {
+  ts: number;
+  requestId: string;
+  paramsDigest: string;
+  outcome: "allow" | "deny";
+  proofHash: string | null;
+  decision: AuditDecision;
+};
+
+/**
+ * Ensure the JSONL audit file exists with mode 0o600.
+ * Called once at the start of each consumeOnce critical section.
+ */
+function ensureJsonlFile(jsonlPath: string): void {
+  if (!existsSync(jsonlPath)) {
+    // Open with 'a' flag and mode 0o600 — creates the file if absent
+    const fd = openSync(jsonlPath, "a", 0o600);
+    closeSync(fd);
+    chmodSync(jsonlPath, 0o600);
+  }
+}
+
+/**
+ * Append one audit line to the JSONL file, then fsync for durability.
+ * Throws on any I/O error — callers must NOT catch (fail-closed invariant).
+ */
+function appendAuditLine(jsonlPath: string, entry: AuditEntry): void {
+  const line = `${JSON.stringify(entry)}\n`;
+  appendFileSync(jsonlPath, line, "utf-8");
+  // fsync so the line is on-disk before the lock releases
+  const fd = openSync(jsonlPath, "r");
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -181,10 +241,12 @@ type LockResult<T> = {
 export class FileProofLedger implements ProofLedger {
   private dir: string;
   private indexPath: string;
+  private jsonlPath: string;
 
   constructor(dir: string) {
     this.dir = dir;
     this.indexPath = join(dir, "proof-index.json");
+    this.jsonlPath = join(dir, "proof-ledger.jsonl");
     this.ensureDir();
     this.ensureIndex();
   }
@@ -240,13 +302,38 @@ export class FileProofLedger implements ProofLedger {
     paramsDigest: string,
     outcome: "allow" | "deny",
   ): LedgerConsumeResult {
+    const jsonlPath = this.jsonlPath;
+
     return this.withLock<LedgerConsumeResult>((current) => {
+      // Ensure JSONL file exists with correct permissions (first-use creation)
+      ensureJsonlFile(jsonlPath);
+
+      const proofHash = proof !== undefined ? sha256hex(proof) : null;
+
       // Step 1: Guard falsy identifiers (read-only, no write)
       if (!requestId || !paramsDigest) {
+        // Audit line BEFORE returning (audit even for early-return legs)
+        appendAuditLine(jsonlPath, {
+          ts: Date.now(),
+          requestId,
+          paramsDigest,
+          outcome,
+          proofHash,
+          decision: "invalid_identifier",
+        });
         return { result: { ok: false as const, reason: "invalid_identifier" as const } };
       }
       // Step 2: Guard empty-string proof (read-only, no write)
       if (proof === "") {
+        // Audit line BEFORE returning
+        appendAuditLine(jsonlPath, {
+          ts: Date.now(),
+          requestId,
+          paramsDigest,
+          outcome,
+          proofHash: null,
+          decision: "invalid_identifier",
+        });
         return { result: { ok: false as const, reason: "invalid_identifier" as const } };
       }
 
@@ -262,16 +349,44 @@ export class FileProofLedger implements ProofLedger {
 
       // Step 4: Replay check (skip if proof===undefined)
       if (proof !== undefined && seen.has(proof)) {
+        // Audit BEFORE returning — no index mutation
+        appendAuditLine(jsonlPath, {
+          ts: Date.now(),
+          requestId,
+          paramsDigest,
+          outcome,
+          proofHash,
+          decision: "replayed",
+        });
         return { result: { ok: false as const, reason: "replayed" as const } };
       }
 
       // Step 5: Single-use check
       const key = proofKey(requestId, paramsDigest);
       if (consumed.has(key)) {
+        // Audit BEFORE returning — no index mutation
+        appendAuditLine(jsonlPath, {
+          ts: Date.now(),
+          requestId,
+          paramsDigest,
+          outcome,
+          proofHash,
+          decision: "already_consumed",
+        });
         return { result: { ok: false as const, reason: "already_consumed" as const } };
       }
 
-      // Step 6: Success — build updated index and return next
+      // Step 6: Success — audit FIRST, then build updated index
+      // Audit append precedes index mutation: if append throws, index is NOT written
+      appendAuditLine(jsonlPath, {
+        ts: Date.now(),
+        requestId,
+        paramsDigest,
+        outcome,
+        proofHash,
+        decision: "consumed",
+      });
+
       if (proof !== undefined) {
         seen.add(proof);
       }
