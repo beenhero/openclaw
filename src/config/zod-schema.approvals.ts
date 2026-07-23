@@ -28,6 +28,7 @@ export const ApprovalsSchema = z
   .object({
     exec: ExecApprovalForwardingSchema,
     plugin: ExecApprovalForwardingSchema,
+    frontStageResolverTimeoutMs: z.number().int().positive().optional(),
   })
   .strict()
   .optional();

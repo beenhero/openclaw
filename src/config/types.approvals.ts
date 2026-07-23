@@ -30,4 +30,10 @@ export type ExecApprovalForwardingConfig = {
 export type ApprovalsConfig = {
   exec?: ExecApprovalForwardingConfig;
   plugin?: ExecApprovalForwardingConfig;
+  /**
+   * Timeout in milliseconds for the native front-stage capability resolver decision.
+   * If the resolver does not respond within this window the tool call is denied with
+   * disposition 'timed_out' (fail-closed). Default: 500.
+   */
+  frontStageResolverTimeoutMs?: number;
 };

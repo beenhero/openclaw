@@ -182,7 +182,11 @@ export type HookContext = {
   };
 };
 
-type HookBlockedReason = "plugin-before-tool-call" | "plugin-approval" | "tool-loop";
+type HookBlockedReason =
+  | "plugin-before-tool-call"
+  | "plugin-approval"
+  | "tool-loop"
+  | "capability-resolver";
 export type BeforeToolCallFailureDisposition = "blocked" | DiagnosticToolTerminalReason;
 type HookBlockedOutcome = {
   blocked: true;
