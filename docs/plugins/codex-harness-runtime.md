@@ -211,14 +211,21 @@ Not supported in Codex runtime v1:
 | Compaction intervention                             | OpenClaw does not let plugins or context engines veto, rewrite, or replace native Codex compaction.                                             | Add Codex pre/post compaction hooks if plugins need to veto or rewrite native compaction. |
 | Byte-for-byte model API request capture             | OpenClaw can capture app-server requests and notifications, but Codex core builds the final OpenAI API request internally.                      | Needs a Codex model-request tracing event or debug API.                                   |
 
-## Approval resolver seam (process.exec)
+## Approval resolver seam
 
 `api.registerApprovalResolver(...)` lets a bundled or explicitly-enabled
-plugin become the authoritative decision owner for a scoped native
-capability. The v1 contract wires exactly one capability, `process.exec`,
-onto Codex app-server `commandExecution` approval escalations. The registrar
-is additive and parallel to `registerTrustedToolPolicy`; the trusted-policy
-path is byte-unchanged when no resolver is registered.
+plugin become the authoritative, exclusive decision owner for a scoped native
+capability. The registrar is additive and parallel to
+`registerTrustedToolPolicy`; the trusted-policy path is byte-unchanged when no
+resolver is registered, and is bypassed entirely for in-scope capabilities when
+a resolver is present.
+
+For the full cross-harness seam contract, fail-closed matrix, per-leg grade
+table, deliberate divergences from #97152, and honest coverage grades, see
+[Capability approval-resolver seam](/plugins/capability-approval-seam).
+This section covers the Codex-specific wiring only.
+
+### process.exec and net.egress (Codex)
 
 ### Registration shape
 
@@ -226,15 +233,14 @@ path is byte-unchanged when no resolver is registered.
 api.registerApprovalResolver({
   id: string;
   description: string;
-  scope: { capabilities: ["process.exec"] };
+  scope: { capabilities: ("process.exec" | "net.egress" | "fs.write")[] };
   exclusive: true;
   resolve: (
     req: {
       requestId: string;
-      capability: "process.exec";
+      capability: string;
       toolName: string;
-      command?: string;
-      cwd?: string;
+      effects: readonly { kind: string; [key: string]: unknown }[];
       agentId?: string;
       sessionKey?: string;
       runId?: string;
@@ -251,76 +257,89 @@ api.registerApprovalResolver({
 }): { dispose(): void };
 ```
 
-`ApprovalCapability` is `"process.exec"` only in v1. Registering a
-resolver whose `scope.capabilities` names any other capability (for example
-`net.egress` or `fs.write`) is rejected at registration with a hard throw:
-those capabilities are named-but-unwired, and a fail-closed rejection is
-preferred over silently accepting a resolver that would never be consulted.
-Installed (non-bundled) plugins must be explicitly enabled and must declare
-every resolver id in `contracts.approvalResolvers`; undeclared ids are
-rejected before registration, and a second registration of the same
-`(pluginId, id)` is refused as a diagnostic error.
+Registering a resolver whose `scope.capabilities` names any capability not in
+`KNOWN_CAPABILITIES` (`"process.exec"`, `"net.egress"`, `"fs.write"`) is
+rejected at registration with a hard throw — fail-closed rather than silently
+accepting a resolver that would never be consulted. Installed (non-bundled)
+plugins must be explicitly enabled and must declare every resolver id in
+`contracts.approvalResolvers`; undeclared ids are rejected before registration,
+and a second registration of the same `(pluginId, id)` is refused as a
+diagnostic error.
 
-### process.exec wiring
+### process.exec and net.egress Codex wiring
 
 For a native `item/commandExecution/requestApproval` escalation, OpenClaw
-computes a `paramsDigest` gateway-side — `"sha256:" + fingerprintJson(params)`
-over the exact exec params Codex will run (`{ command?, cwd?, approval }`),
-not the display-preview command — and hands the resolver an `ApprovalRequest`
-carrying that digest plus a fresh opaque `requestId`. The resolver's returned
-`ApprovalDecision` is bound back to the parked request by `requestId` echo,
-and the digest keys the recorded-proof registry (below). This decision is
-taken on the direct authoritative path, so both `allow` and `deny` are
-honored by Codex: `allow` maps to `approved-once`, `deny` maps to a decline.
+classifies the command using the 3-tier effect classifier
+(`classifyEffects(harness, toolName, params)`) to build an `effects[]` array,
+computes `paramsDigest = digestForEffects(effects)` gateway-side, and hands the
+resolver an `ApprovalRequest` carrying the effects, the digest, and a fresh
+opaque `requestId`. The resolver's returned `ApprovalDecision` is bound back to
+the parked request by `requestId` echo. This decision is taken on the direct
+authoritative path, so both `allow` and `deny` are honored by Codex: `allow`
+maps to `approved-once`, `deny` maps to a decline.
+
+A curl command produces `effects: [{kind:"process.exec",...}, {kind:"net.egress",hosts:[...]}]`
+with ONE `requestId` and ONE dispatch to the owning resolver — no double-prompt.
 
 ### Exclusive-over-scope structural suppression
 
-A registered `process.exec` resolver is the **sole** decision owner for
-in-scope `commandExecution` escalations (exclusive-over-scope). OpenClaw
-resolves the decision before the human `/approve` tap surface is ever
-dispatched and before the `before_tool_call` / trusted-tool-policy branch
-runs, so exclusivity is structural — there is no first-to-resolve race and no
-suppression flag on the parallel tap. When a `process.exec` resolver is present it takes exclusive
-ownership of `commandExecution` and the trusted-tool-policy branch is bypassed
-for that capability (resolver-wins precedence). Resolver presence also
-promotes a `never` Codex approval posture to `untrusted` so the escalation
-actually reaches the seam; an explicit operator approval policy or mode still
-wins over that promotion.
+A registered resolver for a capability is the **sole** decision owner for
+in-scope `commandExecution` escalations. OpenClaw resolves the decision before
+the human `/approve` tap surface is ever dispatched and before the
+`before_tool_call` / trusted-tool-policy branch runs, so exclusivity is
+structural — there is no first-to-resolve race and no suppression flag on the
+parallel tap. When a resolver is present it takes exclusive ownership of its
+capability and the trusted-tool-policy branch is bypassed (resolver-wins
+precedence). Resolver presence also promotes a `never` Codex approval posture
+to `untrusted` so the escalation actually reaches the seam; an explicit
+operator approval policy or mode still wins over that promotion.
 
-This seam covers `process.exec` command-execution approvals only. Other
-approval kinds — file changes, native `PermissionRequest`, and MCP
-elicitations — keep their existing behavior and are never routed through the
-resolver.
+This seam covers `commandExecution` approvals that classify to a wired
+capability. Other approval kinds — file changes (non-exec), native
+`PermissionRequest`, and MCP elicitations — keep their existing behavior and
+are never routed through the resolver.
 
 ### Fail-closed matrix
 
-| Resolver outcome                                                | Codex disposition                     |
-| --------------------------------------------------------------- | ------------------------------------- |
-| `{ decision: "allow" }` with matching `requestId` + fresh proof | `approved-once` → accept              |
-| `{ decision: "deny" }`                                          | `denied` → decline                    |
-| resolver throws                                                 | `unavailable` → decline (fail-closed) |
-| resolver Promise never resolves within `deadlineMs`             | `unavailable` → decline (fail-closed) |
-| returned `requestId` does not echo the parked request           | `unavailable` → decline (fail-closed) |
-| proof already consumed / replayed onto a second request         | `denied` → decline (fail-closed)      |
-| `opts.signal` aborted                                           | `cancelled` → decline                 |
+| Resolver outcome                                                | Codex disposition                                                      |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `{ decision: "allow" }` with matching `requestId` + fresh proof | `approved-once` → accept                                               |
+| `{ decision: "deny" }` with matching `requestId`                | **clean policy deny** → `denied` → decline (no failureDisposition)     |
+| resolver throws                                                 | `unavailable` → decline (fail-closed, failureDisposition: "failed")    |
+| resolver Promise never resolves within `deadlineMs`             | `unavailable` → decline (fail-closed, failureDisposition: "timed_out") |
+| returned `requestId` does not echo the parked request           | `unavailable` → decline (fail-closed, failureDisposition: "failed")    |
+| proof already consumed / replayed onto a second request         | `denied` → decline (fail-closed)                                       |
+| `opts.signal` aborted                                           | `cancelled` → decline                                                  |
 
 Every non-`allow` path — including no-decision, timeout, mismatch, throw, and
 replay — declines the command. There is no "no decision means allow" branch.
+A **clean policy deny** (resolver returned `"deny"` with matching requestId)
+carries no `failureDisposition` and surfaces as a graceful block, mirroring a
+codex curl-deny. Failure denies (timeout/mismatch/throw) carry `failureDisposition`
+so callers surface the right error UX. The conformance suite asserts both.
 
-### Recorded-proof registry (structural)
+### Proof ledger
 
-The resolver's optional `proof` string is passed through a recorded-proof
-registry that enforces two structural invariants: **single-use** (a
-`(requestId, paramsDigest)` decision cannot be consumed twice) and
-**replay-rejection** (a `proof` already seen cannot be re-presented against a
-different parked request). These checks are STRUCTURAL only — the registry
-does not parse, verify, or trust the `proof` bytes. Cryptographic validation
-of the proof (signature verification, revocation, provider identity) is
-**provider-internal and out of gateway scope**: the resolver plugin performs
-it before returning `allow`, and OpenClaw treats an accepted decision as
-authoritative. The registry is in-memory only; single-use and replay
-enforcement do not survive a gateway restart, matching the known plugin
-file-store / nonce cross-process caveat.
+The resolver's optional `proof` string is passed through a durable, flock'd
+proof ledger that enforces two structural invariants:
+
+- **Single-use** — a `{requestId, paramsDigest}` pair can be consumed at most
+  once; a second consume returns `already_consumed` → deny.
+- **Replay-rejection** — a `proof` string already seen on any prior request is
+  rejected; the ledger stores only `sha256(proof)` at rest (never the raw proof).
+
+These checks are STRUCTURAL only — the ledger does not parse, verify, or trust
+the `proof` bytes. Cryptographic validation (signature verification, revocation,
+provider identity) is **provider-internal and out of gateway scope**: the
+resolver plugin performs it before returning `allow`, and OpenClaw treats an
+accepted decision as authoritative.
+
+The ledger is **durable** (`FileProofLedger`, flock'd via
+`acquireLockSyncWithRetry`): single-use and replay enforcement survive process
+restarts. Consumed decisions are retained as non-repudiable audit records
+retrievable via `getAuditRecord(requestId)` — the audit record carries
+`{requestId, paramsDigest, outcome, consumedAt}` and intentionally omits the
+raw proof (secret-at-rest invariant).
 
 ### Version floor
 
@@ -333,19 +352,21 @@ promoted-then-hoped. Do not confuse this with the lower `0.142.0` MCP-payload
 relay figure in the V1 support contract; that is a different, lower floor for
 MCP payload blocking, not the app-server attach floor the resolver depends on.
 
-### Capability coverage (honest scope)
+### Capability coverage (Codex harness, honest scope)
 
-The v1 resolver seam **opens the approval path, it does not close it**: it
-makes a scoped, authoritative, fail-closed decision available for
-`process.exec` command execution, but it does not guarantee that every
-command-running surface flows through it. `net.egress` and `fs.write` are
-named in the capability vocabulary but are **not wired** in v1 — a resolver
-scoped to them is rejected at registration. The single wired, live-confirmed
-capability is `process.exec` over Codex `commandExecution`; treat the rest as
-reserved names, not enforcement points. `net.egress` (the live-confirmed
-web_fetch-vs-curl asymmetry), sub-agent spawn, MCP, and cross-harness surfaces
-(ACP `onPermissionRequest`, native) remain open extension points not closed by
-this PR.
+The Codex harness wires `process.exec` and `net.egress` onto
+`commandExecution` escalations via the 3-tier effect classifier. `fs.write`
+is classified by Tier-C (e.g. `touch /f`, `tee`, `>` redirection) and
+travels in `effects[]` alongside `process.exec` for write commands — the
+gate fires on the exec seam; the `fs.write` label is not separately
+live-drilled for the Codex harness.
+
+For complete cross-harness coverage grades (native, ACP, durable ledger,
+classifier soundness, audit retrieval), see the
+[Capability approval-resolver seam](/plugins/capability-approval-seam) per-leg
+grade table. The codex-executed harness-shell boundary (a Codex-native bash
+command that bypasses the app-server bridge) is documented there as an open
+enforcement gap — this seam does not close it.
 
 ## Native permissions and MCP elicitations
 

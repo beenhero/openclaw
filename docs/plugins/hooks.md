@@ -281,6 +281,30 @@ Guard behavior for typed lifecycle hooks:
 - `onResolution` receives the resolved decision: `allow-once`, `allow-always`,
   `deny`, `timeout`, or `cancelled`.
 
+### Relationship to the capability approval-resolver seam
+
+For plugins that register an **approval resolver** via
+`api.registerApprovalResolver(...)`, the resolver runs as a **front-stage**
+upstream of `before_tool_call` for native OpenClaw-owned tools. When a resolver
+owns the capability for a tool call, the resolver's decision is taken first:
+
+- `allow` → the tool executes; `before_tool_call` hooks still fire for
+  observation, but cannot re-block an already-allowed resolver decision.
+- `deny` (clean policy) → the tool is blocked before `before_tool_call` runs;
+  the block surfaces as a graceful veto (no `failureDisposition`).
+- `deny` (failure: timeout/throw/mismatch) → fail-closed block with
+  `failureDisposition` set; `before_tool_call` does not run.
+- `fallthrough` (no resolver owns the capability) → the existing
+  `before_tool_call` / trusted-tool-policy chain runs unchanged.
+
+This means a `before_tool_call` hook cannot override a resolver's `deny`
+verdict for in-scope capabilities. Plugins that need to gate native capabilities
+by effect should use `registerApprovalResolver`; plugins that need to observe
+or rewrite params after a resolver allow can still use `before_tool_call`.
+
+For the full seam contract and per-leg grade table, see
+[Capability approval-resolver seam](/plugins/capability-approval-seam).
+
 ### Sender-aware policy in one file
 
 A standalone plugin file can keep deployment-specific policy in code instead
