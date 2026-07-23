@@ -341,3 +341,115 @@ describe("registerApprovalResolver host registrar", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// L3.6 — Tier-B: registerToolMetadata capabilities validation
+// ---------------------------------------------------------------------------
+
+describe("registerToolMetadata capabilities validation (L3.6 Tier-B)", () => {
+  it("registers tool metadata with valid capabilities:['net.egress']", () => {
+    const { config, registry } = createPluginRegistryFixture();
+    registerTestPlugin({
+      registry,
+      config,
+      record: createPluginRecord({
+        id: "my-plugin",
+        name: "My Plugin",
+        origin: "workspace",
+        contracts: { tools: ["my_fetch_tool"] },
+      }),
+      register(api) {
+        api.registerToolMetadata({
+          toolName: "my_fetch_tool",
+          displayName: "My Fetch Tool",
+          capabilities: ["net.egress"],
+        });
+      },
+    });
+
+    expect(registry.registry.toolMetadata).toHaveLength(1);
+    const meta = registry.registry.toolMetadata[0]?.metadata;
+    expect(meta?.toolName).toBe("my_fetch_tool");
+    expect(meta?.capabilities).toEqual(["net.egress"]);
+    expect(registry.registry.diagnostics).toHaveLength(0);
+  });
+
+  it("registers tool metadata with valid capabilities:['process.exec']", () => {
+    const { config, registry } = createPluginRegistryFixture();
+    registerTestPlugin({
+      registry,
+      config,
+      record: createPluginRecord({
+        id: "my-plugin",
+        name: "My Plugin",
+        origin: "workspace",
+        contracts: { tools: ["my_exec_tool"] },
+      }),
+      register(api) {
+        api.registerToolMetadata({
+          toolName: "my_exec_tool",
+          capabilities: ["process.exec"],
+        });
+      },
+    });
+
+    expect(registry.registry.toolMetadata).toHaveLength(1);
+    expect(registry.registry.toolMetadata[0]?.metadata.capabilities).toEqual(["process.exec"]);
+    expect(registry.registry.diagnostics).toHaveLength(0);
+  });
+
+  it("THROWS (fail-closed) when capabilities includes 'fs.write' (not in KNOWN_CAPABILITIES)", () => {
+    const { config, registry } = createPluginRegistryFixture();
+    expect(() =>
+      registerTestPlugin({
+        registry,
+        config,
+        record: createPluginRecord({
+          id: "my-plugin",
+          name: "My Plugin",
+          origin: "workspace",
+          contracts: { tools: ["my_tool"] },
+        }),
+        register(api) {
+          api.registerToolMetadata({
+            toolName: "my_tool",
+            // @ts-expect-error testing invalid capability
+            capabilities: ["fs.write"],
+          });
+        },
+      }),
+    ).toThrow(/KNOWN_CAPABILITIES/);
+  });
+
+  it("registers tool metadata without capabilities (undefined → no Tier-B effects)", () => {
+    const { config, registry } = createPluginRegistryFixture();
+    registerTestPlugin({
+      registry,
+      config,
+      record: createPluginRecord({
+        id: "my-plugin",
+        name: "My Plugin",
+        origin: "workspace",
+        contracts: { tools: ["my_tool"] },
+      }),
+      register(api) {
+        api.registerToolMetadata({
+          toolName: "my_tool",
+          displayName: "My Tool",
+          // No capabilities — fine
+        });
+      },
+    });
+
+    expect(registry.registry.toolMetadata).toHaveLength(1);
+    expect(registry.registry.toolMetadata[0]?.metadata.capabilities).toBeUndefined();
+    expect(registry.registry.diagnostics).toHaveLength(0);
+  });
+
+  it("KNOWN_CAPABILITIES contains both process.exec and net.egress", () => {
+    expect(KNOWN_CAPABILITIES.has("process.exec")).toBe(true);
+    expect(KNOWN_CAPABILITIES.has("net.egress")).toBe(true);
+    expect(KNOWN_CAPABILITIES.has("fs.write")).toBe(false);
+    expect(KNOWN_CAPABILITIES.has("http.request")).toBe(false);
+  });
+});

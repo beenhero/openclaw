@@ -193,6 +193,19 @@ export type PluginToolMetadataRegistration = {
   description?: string;
   risk?: "low" | "medium" | "high";
   tags?: string[];
+  /**
+   * Optional capability declarations for this tool (L3.6 — Tier-B classifier).
+   *
+   * A plugin owning a custom net-touching tool can declare `capabilities:['net.egress']`
+   * here so core classifies it WITHOUT Tier-A hardcoding. Declarations are ADDITIVE to
+   * Tier-A (a plugin cannot drop a Tier-A effect by declaring fewer capabilities).
+   *
+   * Validation at registration (registry-registrars-host.ts) rejects any capability
+   * not in KNOWN_CAPABILITIES — fail-closed, same guard as the resolver registrar.
+   *
+   * Wired capabilities: "process.exec", "net.egress" (see KNOWN_CAPABILITIES).
+   */
+  capabilities?: ApprovalCapability[];
 };
 
 type PluginControlUiTabGroup = "control" | "agent";

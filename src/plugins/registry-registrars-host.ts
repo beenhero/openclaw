@@ -443,6 +443,20 @@ export function createHostRegistrars(state: PluginRegistryState) {
       });
       return;
     }
+    // L3.6 — validate capabilities ⊆ KNOWN_CAPABILITIES (same guard as resolver registrar:313-320).
+    // Fail-closed: reject any capability not wired in core so a plugin cannot silently believe it
+    // gates a surface OpenClaw does not enforce. This is a hard throw (not pushDiagnostic) to
+    // match the resolver registrar's behavior and surface the error immediately at registration.
+    if (metadata.capabilities !== undefined) {
+      if (
+        !Array.isArray(metadata.capabilities) ||
+        metadata.capabilities.some((cap) => !KNOWN_CAPABILITIES.has(cap))
+      ) {
+        throw new Error(
+          `tool metadata "${toolName}" declares a capability not in KNOWN_CAPABILITIES (${record.id}): ${JSON.stringify(metadata.capabilities)}`,
+        );
+      }
+    }
     registry.toolMetadata.push({
       pluginId: record.id,
       pluginName: record.name,
