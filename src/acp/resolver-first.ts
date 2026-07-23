@@ -55,8 +55,11 @@ function resolveCommandText(
  * effect's kind is used.
  *
  * Mirrors the rule in approval-bridge.ts ~:590 and front-stage-resolver.ts:80.
+ *
+ * Exported so client-helpers.ts can reuse the identical logic on the client
+ * path (L5.4) without duplicating the rule.
  */
-function pickOwner(effects: readonly { kind: string }[]): string {
+export function pickOwner(effects: readonly { kind: string }[]): string {
   if (effects.some((e) => e.kind === "process.exec")) {
     return "process.exec";
   }
