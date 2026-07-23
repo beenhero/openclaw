@@ -136,6 +136,18 @@ allowlistable pattern. Deny or prompt the user.
 The seam mints ONE `requestId` and ONE `paramsDigest` over the **whole effect
 set**, and dispatches a SINGLE resolver call — no double-prompt.
 
+## Async hold (human / wallet decision) — live-confirmed
+
+A resolver's `resolve()` is awaited within the approval window, so a decision may
+be held **asynchronously** — e.g. until a human approves at a terminal or a wallet
+signature returns. This was live-drilled with a human in the loop: a real Codex
+0.145.0 session tried a shell command (`rm -f <file>`, wrapped by the shell as
+`/bin/zsh -lc '…'`); the resolver **parked** it — showing the classified effect
+set `process.exec + fs.write` — and the command did not run until the operator
+answered at the terminal. Approve released it (the file was deleted); deny blocked
+it (the file survived). The command's execution genuinely waited on the human
+decision — the wallet-signature property, end-to-end.
+
 ## Proof ledger — single-use + audit retention
 
 The proof ledger (`ProofLedger`) has two responsibilities that are explicitly
