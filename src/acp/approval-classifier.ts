@@ -1,4 +1,21 @@
-/** Classifies ACP tool permission requests into auto-approved and prompt-required risk buckets. */
+/**
+ * Classifies ACP tool permission requests into auto-approved and prompt-required risk buckets.
+ *
+ * EXEC/NET CAPABILITY SOURCE (L3.12):
+ *   The exec/net capability decision is now DERIVED from the shared core
+ *   classifyEffectsSync (Tier-A + Tier-B) in src/plugins/effect-classifier.ts.
+ *   The local EXEC_CAPABLE_TOOL_IDS duplicate has been removed; the single
+ *   source of truth is EXEC_CAPABLE_TOOL_NAMES in the core classifier.
+ *
+ *   ACP-SPECIFIC LOGIC (not subsumable by the core classifier) is PRESERVED:
+ *     - CWD-scoped auto-approve for reads/search (isToolPathScopedToCwd)
+ *     - SAFE_SEARCH_TOOL_IDS / CONTROL_PLANE_TOOL_IDS checks
+ *     - The interactive class, fail-closed 'other'/'unknown'
+ *     - resolveToolNameForPermission spoof handling
+ *
+ *   FAIL-CLOSED GUARANTEE: if classifyEffectsSync throws, the caller treats the
+ *   tool as exec_capable (most restrictive), never auto-approves.
+ */
 import { homedir } from "node:os";
 import path from "node:path";
 import { asRecord } from "@openclaw/acp-core/record-shared";
@@ -9,19 +26,15 @@ import {
 import { isKnownCoreToolId } from "../agents/tool-catalog.js";
 import { isMutatingToolCall } from "../agents/tool-mutation.js";
 import { isPathInside } from "../infra/path-guards.js";
+import { classifyEffectsSync } from "../plugins/effect-classifier.js";
 import { readTrimmedStringAlias } from "../utils/string-readers.js";
 
+// ACP-local sets: these have no capability analog in the core effect table.
+// SAFE_SEARCH_TOOL_IDS / CONTROL_PLANE_TOOL_IDS are ACP routing concerns.
+// The exec-capable discriminator (formerly EXEC_CAPABLE_TOOL_IDS) is now
+// derived from classifyEffectsSync → EXEC_CAPABLE_TOOL_NAMES in effect-classifier.ts.
 const SAFE_SEARCH_TOOL_IDS = new Set(["search", "web_search", "memory_search"]);
 const TRUSTED_SAFE_TOOL_ALIASES = new Set(["search"]);
-const EXEC_CAPABLE_TOOL_IDS = new Set([
-  "exec",
-  "spawn",
-  "shell",
-  "bash",
-  "process",
-  "code_execution",
-  "nodes",
-]);
 const CONTROL_PLANE_TOOL_IDS = new Set([
   "cron",
   "gateway",
@@ -232,9 +245,48 @@ export function classifyAcpToolApproval(params: {
     }
     return { toolName, approvalClass: "readonly_search", autoApprove: true };
   }
-  if (EXEC_CAPABLE_TOOL_IDS.has(toolName)) {
+  // --- Derive exec/net capability from the shared core table (L3.12) ---
+  //
+  // classifyEffectsSync (Tier-A + Tier-B sync slice) is the single source of
+  // truth for exec/net capability identity. It replaces the former local
+  // EXEC_CAPABLE_TOOL_IDS set, which duplicated the core table.
+  //
+  // SUPERSET FLOOR DETECTION: when both Tier-A and Tier-B return [] (tool
+  // identity unknown), classifyEffectsSync returns the conservative superset
+  // [{kind:'process.exec', unparseable:true}, {kind:'net.egress', hosts:['*']}].
+  // We detect the floor by the presence of unparseable:true and skip the exec/
+  // net check, falling through to CONTROL_PLANE / mutating / other below.
+  // This ensures control_plane tools (cron, gateway, etc.) are NOT incorrectly
+  // elevated to exec_capable by the superset floor.
+  //
+  // FAIL-CLOSED ON THROW: if classifyEffectsSync throws for any reason, treat
+  // the tool as exec_capable (most restrictive), never auto-approve.
+  let coreEffects: ReturnType<typeof classifyEffectsSync>;
+  try {
+    coreEffects = classifyEffectsSync(null, toolName, params.toolCall?.rawInput);
+  } catch {
+    // Fail-closed: on any classifier error, treat as exec_capable (prompt-required)
     return { toolName, approvalClass: "exec_capable", autoApprove: false };
   }
+  const isSuperset = coreEffects.some((e) => e["unparseable"] === true);
+  if (!isSuperset) {
+    // Legitimate capability match from the core table (Tier-A or Tier-B).
+    const hasExec = coreEffects.some((e) => e.kind === "process.exec");
+    const hasNet = coreEffects.some((e) => e.kind === "net.egress");
+    if (hasExec) {
+      // Exec-capable: any process.exec in effects → exec_capable (prompt-required)
+      return { toolName, approvalClass: "exec_capable", autoApprove: false };
+    }
+    if (hasNet) {
+      // Net-egress (Tier-B declared, e.g. plugin custom tool with capabilities:['net.egress']).
+      // net.egress is NEVER auto-approved. Route to exec_capable (prompt-required).
+      // This is net-new behavior (L3.12): previously fell to heuristic 'other'.
+      // 'other' is also autoApprove:false, but routing to exec_capable makes the
+      // net.egress identity explicit in the ACP approval class.
+      return { toolName, approvalClass: "exec_capable", autoApprove: false };
+    }
+  }
+  // --- ACP-local: control_plane (cron, gateway, sessions_*, session_status) ---
   if (CONTROL_PLANE_TOOL_IDS.has(toolName)) {
     return { toolName, approvalClass: "control_plane", autoApprove: false };
   }
