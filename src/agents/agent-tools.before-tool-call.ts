@@ -90,6 +90,7 @@ import {
   structuredReplaySafeToolCallIds,
 } from "./agent-tools.before-tool-call.state.js";
 import { normalizeFileToolPathParam } from "./agent-tools.params.js";
+import { runFrontStageResolver } from "./front-stage-resolver.js";
 import { resolveAgentRunAbortLifecycleFields } from "./run-termination.js";
 import { buildToolMutationState } from "./tool-mutation.js";
 export {
@@ -1536,6 +1537,25 @@ export async function runBeforeToolCallHook(args: {
           loopScope,
         );
       }
+    }
+
+    // Native capability-resolver front-stage (Layer 4): resolver-FIRST so it pre-empts the
+    // trusted-policy (:1637) and plugin-hook (:1720) veto points. With no resolver registered
+    // this is a cheap no-op (runFrontStageResolver returns undefined) → chain byte-unchanged.
+    if (args.ctx?.sessionKey) {
+      const frontStageOutcome = await runFrontStageResolver({
+        toolName,
+        params,
+        ctx: {
+          agentId: args.ctx.agentId,
+          config: args.ctx.config,
+          sessionKey: args.ctx.sessionKey,
+          runId: args.ctx.runId,
+        },
+        signal: args.signal,
+        toolCallId: args.toolCallId,
+      });
+      if (frontStageOutcome?.blocked) return frontStageOutcome;
     }
 
     const hookRunner = getGlobalHookRunner();
