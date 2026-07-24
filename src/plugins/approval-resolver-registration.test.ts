@@ -460,7 +460,8 @@ describe("registerToolMetadata capabilities validation (L3.6 Tier-B)", () => {
         register(api) {
           api.registerToolMetadata({
             toolName: "my_tool",
-            // @ts-expect-error testing invalid capability
+            // "mcp.invoke" is a valid string (ApprovalCapability is an open string);
+            // rejection is a RUNTIME KNOWN_CAPABILITIES check, asserted below.
             capabilities: ["mcp.invoke"],
           });
         },
@@ -519,7 +520,7 @@ describe("registerToolMetadata capabilities validation (L3.6 Tier-B)", () => {
         api.registerToolMetadata({
           toolName: "my_fetch_tool",
           displayName: "My Fetch Tool",
-          // @ts-expect-error testing duplicate valid capabilities (runtime dedupe)
+          // duplicate valid capabilities — deduped at registration (runtime), asserted below.
           capabilities: ["net.egress", "net.egress"],
         });
       },

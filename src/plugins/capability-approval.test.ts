@@ -181,7 +181,7 @@ describe("decideCapabilityApproval", () => {
 
   it("deny — caller aborts signal mid-hold → {kind:'deny'}", async () => {
     const ac = new AbortController();
-    let resolverResolve!: (d: ApprovalDecision) => void;
+    let resolverResolve!: () => void;
     setActivePluginRegistry(
       makeRegistryWithResolver(
         (r) =>
@@ -268,6 +268,7 @@ describe("decideCapabilityApproval", () => {
       consumeOnce: () => {
         throw new Error("disk full");
       },
+      getAuditRecord: () => [],
     };
     const req = makeRequest();
     setActivePluginRegistry(

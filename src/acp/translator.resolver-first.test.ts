@@ -129,7 +129,9 @@ async function createHarness(
   const promptPromise = promptAgent(agent, SESSION_ID);
 
   await vi.waitFor(() => {
-    if (!runId) throw new Error("expected ACP permission relay run id");
+    if (!runId) {
+      throw new Error("expected ACP permission relay run id");
+    }
   });
 
   return {
@@ -149,8 +151,10 @@ async function cleanupHarness(harness: Harness): Promise<void> {
   harness.sessionStore.clearAllSessionsForTest();
 }
 
-function approvalResolveCalls(request: ReturnType<typeof vi.fn>) {
-  return request.mock.calls.filter(([method]) => method === "exec.approval.resolve");
+function approvalResolveCalls(request: ReturnType<typeof vi.fn>): unknown[][] {
+  // vitest's mock.calls element type is now `any[] | undefined` under the
+  // upstream vitest bump; narrow to non-optional call tuples for destructuring.
+  return (request.mock.calls as unknown[][]).filter((call) => call[0] === "exec.approval.resolve");
 }
 
 // ---------------------------------------------------------------------------
@@ -210,7 +214,7 @@ describe("ACP translator — resolver-first branch (L5.2 server-mode)", () => {
     // The ACP client tap must NEVER be called — this is the #97152 bypass closure.
     expect(harness.requestPermission).not.toHaveBeenCalled();
 
-    const [[, resolveParams]] = approvalResolveCalls(harness.request);
+    const resolveParams = approvalResolveCalls(harness.request)[0]?.[1];
     expect((resolveParams as { decision?: string }).decision).toBe("deny");
 
     await cleanupHarness(harness);
@@ -232,7 +236,7 @@ describe("ACP translator — resolver-first branch (L5.2 server-mode)", () => {
     // The ACP client tap must NEVER be called.
     expect(harness.requestPermission).not.toHaveBeenCalled();
 
-    const [[, resolveParams]] = approvalResolveCalls(harness.request);
+    const resolveParams = approvalResolveCalls(harness.request)[0]?.[1];
     // allow maps conservatively to 'allow-once' (mirrors codex adapter behavior).
     expect((resolveParams as { decision?: string }).decision).toBe("allow-once");
 
@@ -287,7 +291,7 @@ describe("ACP translator — resolver-first branch (L5.2 server-mode)", () => {
     });
 
     // The existing relay outcome is echoed through.
-    const [[, resolveParams]] = approvalResolveCalls(harness.request);
+    const resolveParams = approvalResolveCalls(harness.request)[0]?.[1];
     expect((resolveParams as { decision?: string }).decision).toBe("allow-once");
 
     await cleanupHarness(harness);
@@ -310,7 +314,7 @@ describe("ACP translator — resolver-first branch (L5.2 server-mode)", () => {
       expect(approvalResolveCalls(harness.request)).toHaveLength(1);
     });
 
-    const [[, resolveParams]] = approvalResolveCalls(harness.request);
+    const resolveParams = approvalResolveCalls(harness.request)[0]?.[1];
     expect((resolveParams as { decision?: string }).decision).toBe("deny");
 
     await cleanupHarness(harness);
@@ -340,7 +344,7 @@ describe("ACP translator — resolver-first branch (L5.2 server-mode)", () => {
     await vi.waitFor(() => {
       expect(approvalResolveCalls(harness.request)).toHaveLength(1);
     });
-    const [[, resolveParams]] = approvalResolveCalls(harness.request);
+    const resolveParams = approvalResolveCalls(harness.request)[0]?.[1];
     expect((resolveParams as { decision?: string }).decision).toBe("deny");
     // Surface #2 (the ACP client tap) is suppressed on the resolver path.
     expect(harness.requestPermission).not.toHaveBeenCalled();

@@ -26,7 +26,8 @@ import type { ApprovalDecision, ApprovalRequest } from "../plugins/host-hooks.js
 import { createEmptyPluginRegistry } from "../plugins/registry-empty.js";
 import type { PluginApprovalResolverRegistryRegistration } from "../plugins/registry-types.js";
 import { wrapToolWithBeforeToolCallHook } from "./agent-tools.before-tool-call.js";
-import type { AnyAgentTool } from "./agent-tools.js";
+import { createStubTool } from "./test-helpers/agent-tool-stubs.js";
+import type { AnyAgentTool } from "./tools/common.js";
 
 // ---------------------------------------------------------------------------
 // Registry helper — register a process.exec resolver on the active registry
@@ -67,10 +68,11 @@ const TEST_COMMAND = "/bin/ls /tmp";
 
 function createFakeExecTool(): { tool: AnyAgentTool; executeSpy: ReturnType<typeof vi.fn> } {
   const executeSpy = vi.fn().mockResolvedValue({ output: "fake output" });
+  // Base on the canonical stub (name/label/description/parameters) and override
+  // execute with the spy — robust to AgentTool shape changes.
   const tool: AnyAgentTool = {
-    name: "command",
+    ...createStubTool("command"),
     description: "fake exec tool for testing",
-    inputSchema: { type: "object" as const, properties: {}, required: [] },
     execute: executeSpy,
   };
   return { tool, executeSpy };

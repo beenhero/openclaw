@@ -65,7 +65,7 @@ function setMockFetch(
 const lookupMock = vi.fn().mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
 
 function createWebFetchToolForTest() {
-  return createWebFetchTool({
+  const tool = createWebFetchTool({
     config: {
       tools: {
         web: {
@@ -77,6 +77,12 @@ function createWebFetchToolForTest() {
     },
     lookupFn: lookupMock,
   });
+  // createWebFetchTool now returns AnyAgentTool | null (config-gated upstream).
+  // In this fixture the tool is always enabled; a null would be a real failure.
+  if (!tool) {
+    throw new Error("createWebFetchTool returned null (web_fetch unavailable in test)");
+  }
+  return tool;
 }
 
 // ---------------------------------------------------------------------------
