@@ -30,6 +30,10 @@
  *   - Safe to import from any harness (codex adapter, native L4, tests)
  */
 
+import {
+  CORE_TOOL_FACTORY_FAMILIES,
+  resolveCoreToolFactoryFamily,
+} from "../agents/core-tool-factory-descriptors.js";
 import { computeParamsDigest } from "./capability-approval.js";
 import { refineWriteFsPaths } from "./effect-refiners/fs-write.js";
 import { extractWebFetchEgress, refineCurlNetEgress } from "./effect-refiners/net-egress.js";
@@ -214,9 +218,37 @@ export const SUPERSET_EFFECTS: readonly EffectDescriptor[] = Object.freeze([
 // ---------------------------------------------------------------------------
 
 /**
- * Normalize a tool name for classification: lowercase, trim, reject if invalid.
- * Mirrors resolveToolNameForPermission's fail-closed-on-spoof logic from
- * approval-classifier.ts:99-111.
+ * If `name` is a codex-flattened `${family}${descriptorName}` (e.g.
+ * `openclawweb_fetch` for `{name:"web_fetch",family:"openclaw"}`), return
+ * the descriptor name so the Tier-A tables (keyed on unprefixed names) match.
+ *
+ * Guarded on `resolveCoreToolFactoryFamily(rest) === fam` — i.e. the suffix
+ * must be a REAL descriptor of that family — so a legitimate third-party tool
+ * literally named `openclawfoo` (not in the descriptor table) is NEVER
+ * silently rewritten to `foo`. Falls through Tier-A as before if the guard
+ * doesn't hold.
+ *
+ * This closes a live-drilled gap where codex's `web_fetch` reached the
+ * classifier as `openclawweb_fetch`, missed NET_EGRESS_TOOL_NAMES (`web_fetch`
+ * unprefixed), and fell through to SUPERSET_EFFECTS — leaving the Sigil
+ * `process.exec` resolver with an opaque `command:"<unparsed>"` to deny.
+ * See docs/plugins/capability-approval-seam.md.
+ */
+function stripKnownFamilyPrefix(name: string): string {
+  for (const fam of CORE_TOOL_FACTORY_FAMILIES) {
+    if (name.length > fam.length && name.startsWith(fam)) {
+      const rest = name.slice(fam.length);
+      if (resolveCoreToolFactoryFamily(rest) === fam) return rest;
+    }
+  }
+  return name;
+}
+
+/**
+ * Normalize a tool name for classification: lowercase, trim, reject if invalid,
+ * then strip a codex-flattened family prefix (guarded — see
+ * stripKnownFamilyPrefix). Mirrors resolveToolNameForPermission's
+ * fail-closed-on-spoof logic from approval-classifier.ts:99-111.
  */
 function normalizeToolNameForClassification(toolName: unknown): string | undefined {
   if (typeof toolName !== "string") return undefined;
@@ -224,7 +256,7 @@ function normalizeToolNameForClassification(toolName: unknown): string | undefin
   // Reject empty, too long, or containing non-tool characters
   if (!normalized || normalized.length > 128) return undefined;
   if (!/^[a-z0-9._\-/]+$/.test(normalized)) return undefined;
-  return normalized;
+  return stripKnownFamilyPrefix(normalized);
 }
 
 /**

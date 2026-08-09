@@ -826,3 +826,70 @@ describe("L6.1 fs.write — SUPERSET floor does NOT include fs.write", () => {
     expect(result.some((e) => e.kind === "net.egress")).toBe(true);
   });
 });
+
+// L3.5 — codex-flattened `${family}${name}` tool names must classify like the
+// unprefixed name. Live-drilled 2026-08-09: codex's `web_fetch` reached the
+// classifier as `openclawweb_fetch`, missed NET_EGRESS_TOOL_NAMES (which keys
+// on the descriptor name `web_fetch`), fell through Tier-A → SUPERSET_EFFECTS
+// floor emitted `{process.exec, command:"<unparsed>", unparseable:true}`, and
+// Sigil's `process.exec` resolver correctly fail-closed-denied the blind sign.
+// This block pins the fix so that regression can't return silently.
+describe("codex family-flattened tool names — normalize by stripping known family prefix", () => {
+  it("openclawweb_fetch classifies as net.egress (same as bare web_fetch)", () => {
+    const flat = classifyTierA(undefined, "openclawweb_fetch", { url: "https://x" });
+    const bare = classifyTierA(undefined, "web_fetch", { url: "https://x" });
+    expect(flat).toEqual(bare);
+    expect(flat).toEqual([{ kind: "net.egress", hosts: ["*"] }]);
+  });
+
+  it("shellexec classifies as process.exec (same as bare exec)", () => {
+    const flat = classifyTierA(undefined, "shellexec", { command: "ls" });
+    const bare = classifyTierA(undefined, "exec", { command: "ls" });
+    expect(flat).toEqual(bare);
+    expect(flat[0]?.kind).toBe("process.exec");
+    expect(flat[0]?.["command"]).toBe("ls");
+  });
+
+  it("base-codingwrite classifies identically to bare write (behavior mirrors — both empty here because FS_WRITE_TOOL_NAMES is currently empty for OpenClaw)", () => {
+    // Regression pin: the strip fires (`base-codingwrite` → `write`). Both
+    // arrive at the classifier's tables as `write`, and both return [] because
+    // FS_WRITE_TOOL_NAMES is intentionally empty (file writes flow through
+    // exec + Tier-C refineWriteFsPaths). If a future OpenClaw integrator adds
+    // "write" to FS_WRITE_TOOL_NAMES, both cases will start returning fs.write
+    // together — the equality check keeps the strip in sync automatically.
+    const flat = classifyTierA(undefined, "base-codingwrite", {});
+    const bare = classifyTierA(undefined, "write", {});
+    expect(flat).toEqual(bare);
+  });
+
+  it("full pipeline: openclawweb_fetch + params.url refines to a specific host (not SUPERSET floor)", async () => {
+    const result = await classifyEffects(null, "openclawweb_fetch", {
+      url: "https://example.com/x",
+    });
+    // Fix works ⇒ Tier-A base + Tier-C refinement, NOT SUPERSET.
+    expect(result.some((e) => e.kind === "process.exec" && e["unparseable"] === true)).toBe(false);
+    const egress = result.find((e) => e.kind === "net.egress") as
+      | { kind: "net.egress"; hosts?: string[] }
+      | undefined;
+    expect(egress).toBeDefined();
+    expect(egress?.hosts).toContain("example.com");
+    expect(egress?.hosts).not.toEqual(["*"]);
+  });
+
+  it("does NOT strip when the suffix is not a real descriptor of that family (guards a lookalike third-party name)", () => {
+    // "openclawfoo" is NOT a real descriptor. The prefix must be preserved so
+    // the classifier's own tables can miss cleanly → Tier-A returns [], as before.
+    // A silent strip here would rewrite a legitimate 3rd-party tool.
+    const result = classifyTierA(undefined, "openclawfoo", {});
+    expect(result).toEqual([]);
+  });
+
+  it("does NOT strip when the family prefix equals the whole name (name === family)", () => {
+    // The descriptor `{name:"openclaw", family:"openclaw"}` exists. `"openclaw"`
+    // alone is not `${family}${something}`, so no strip; it classifies via the
+    // usual tables (which don't include "openclaw" → empty ⇒ SUPERSET floor by
+    // orchestrator, but at the Tier-A layer we return []).
+    const result = classifyTierA(undefined, "openclaw", {});
+    expect(result).toEqual([]);
+  });
+});
