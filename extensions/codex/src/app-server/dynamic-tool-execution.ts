@@ -34,8 +34,21 @@ import {
   type JsonValue,
 } from "./protocol.js";
 
-/** Default timeout for Codex dynamic tool calls. */
-const CODEX_DYNAMIC_TOOL_TIMEOUT_MS = 90_000;
+/**
+ * Default timeout for Codex dynamic tool calls.
+ *
+ * Sized to accommodate a human-in-the-loop approval on a plugin-gated tool
+ * (e.g. Sigil's wallet-signed `web_fetch` gate) without codex's watchdog
+ * firing before the user can tap. Sigil's default approval window is 300s
+ * (clamped [30, 300]); matching that here removes the mismatch where the
+ * approval SUCCEEDS but the agent's tool call already timed out at 90s and
+ * reported "blocked" back to the model. Fast tools return well before this
+ * ceiling; the hard cap (`CODEX_DYNAMIC_TOOL_MAX_TIMEOUT_MS = 600_000`) is
+ * unchanged. Tools with their own defaults (message, image, agents_wait,
+ * computer, image_generate) are unaffected — they short-circuit in
+ * `resolveDynamicToolCallTimeoutMs` before this default is used.
+ */
+const CODEX_DYNAMIC_TOOL_TIMEOUT_MS = 300_000;
 /** Hard cap for per-call Codex dynamic tool timeout overrides. */
 const CODEX_DYNAMIC_TOOL_MAX_TIMEOUT_MS = 600_000;
 // timeoutSeconds is an inner tool budget. Keep enough outer-watchdog headroom

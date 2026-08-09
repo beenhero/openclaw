@@ -15,7 +15,7 @@ import {
 } from "./dynamic-tool-execution.js";
 import type { CodexDynamicToolCallResponse } from "./protocol.js";
 
-const CODEX_DYNAMIC_TOOL_TIMEOUT_MS = 90_000;
+const CODEX_DYNAMIC_TOOL_TIMEOUT_MS = 300_000;
 const CODEX_DYNAMIC_TOOL_MAX_TIMEOUT_MS = 600_000;
 const CODEX_DYNAMIC_IMAGE_TOOL_TIMEOUT_MS = 60_000;
 const CODEX_DYNAMIC_MESSAGE_TOOL_TIMEOUT_MS = CODEX_DYNAMIC_TOOL_MAX_TIMEOUT_MS;
@@ -340,7 +340,7 @@ describe("dynamic tool execution helpers", () => {
         },
         config: undefined,
       }),
-    ).toBe(90_000);
+    ).toBe(CODEX_DYNAMIC_TOOL_TIMEOUT_MS);
   });
 
   it("gives agents_wait the long-running cap while preserving its inner timeout budget", () => {
