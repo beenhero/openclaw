@@ -273,7 +273,7 @@ describe("dynamic tool execution helpers", () => {
         },
         config: undefined,
       }),
-    ).toBe(90_000);
+    ).toBe(CODEX_DYNAMIC_TOOL_TIMEOUT_MS);
   });
 
   it("gives agents_wait the long-running cap while preserving its inner timeout budget", () => {

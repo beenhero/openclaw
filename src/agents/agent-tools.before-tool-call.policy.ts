@@ -6,6 +6,7 @@
  * remain in this sequence.
  */
 import { freezeDiagnosticTraceContext } from "../infra/diagnostic-trace-context.js";
+import { hasApprovalResolverForScope } from "../plugins/approval-resolver.js";
 import { getGlobalHookRunnerRegistry } from "../plugins/hook-runner-global-state.js";
 import { getGlobalHookRunner } from "../plugins/hook-runner-global.js";
 import { deriveToolParams } from "../plugins/host-tool-param-parsers.js";
@@ -50,6 +51,7 @@ import {
   getCodeModeExecBeforeHookMetadataForToolKind,
   reconcileCodeModeExecBeforeHookParams,
 } from "./code-mode-control-tools.js";
+import { runFrontStageResolver } from "./front-stage-resolver.js";
 import { admitSingleToolCallLoop } from "./tool-loop-admission.js";
 import { normalizeToolPolicyName } from "./tool-policy.js";
 import { getGatewayToolCallerIdentity } from "./tools/gateway-caller-context.js";
@@ -70,13 +72,18 @@ export function getBeforeToolCallPolicyDiagnosticState(): BeforeToolCallPolicyDi
   return {
     hasBeforeToolCallHook: getGlobalHookRunner()?.hasHooks("before_tool_call") === true,
     trustedToolPolicies: getTrustedToolPolicyDiagnosticEntries(policyRegistry),
+    hasApprovalResolverForScope: hasApprovalResolverForScope("process.exec"),
   };
 }
 
-/** Return true when any before_tool_call policy could affect tool execution. */
+/** Return true when any before_tool_call policy, trusted policy, or approval resolver could affect tool execution. */
 export function hasBeforeToolCallPolicy(): boolean {
   const state = getBeforeToolCallPolicyDiagnosticState();
-  return state.hasBeforeToolCallHook || state.trustedToolPolicies.length > 0;
+  return (
+    state.hasBeforeToolCallHook ||
+    state.trustedToolPolicies.length > 0 ||
+    state.hasApprovalResolverForScope
+  );
 }
 
 /** Consume voice approval only after tool-owned finalization produces execution params. */
@@ -152,6 +159,29 @@ export async function runBeforeToolCallHook(args: {
           markPrivateDecision(outcome, "genericDecision");
           return outcome;
         }
+      }
+    }
+
+    // Native capability-resolver front-stage: resolver-FIRST so it pre-empts the
+    // trusted-policy and plugin-hook veto points below (and the no-policy early
+    // return — a registered resolver must gate even with no hooks installed).
+    // With no resolver registered this is a cheap no-op (runFrontStageResolver
+    // returns undefined) → chain byte-unchanged.
+    if (args.ctx?.sessionKey) {
+      const frontStageOutcome = await runFrontStageResolver({
+        toolName,
+        params,
+        ctx: {
+          agentId: args.ctx.agentId,
+          config: args.ctx.config,
+          sessionKey: args.ctx.sessionKey,
+          runId: args.ctx.runId,
+        },
+        signal: args.signal,
+        toolCallId: args.toolCallId,
+      });
+      if (frontStageOutcome?.blocked) {
+        return frontStageOutcome;
       }
     }
 

@@ -98,3 +98,15 @@ export function isCoreCodingSurfaceToolName(name: string): boolean {
   const family = CORE_TOOL_FACTORY_FAMILY_BY_NAME.get(name);
   return family === "base-coding" || family === "shell";
 }
+
+/**
+ * The set of tool-factory families as literal strings, derived from the
+ * descriptor table. Consumers that need to match on a family prefix (e.g. the
+ * effect-classifier, which sees codex-flattened `${family}${name}` tool names
+ * like `openclawweb_fetch` and must strip the family to reach the descriptor
+ * name) can iterate this set. Auto-updates when a new family is added to the
+ * `CoreToolFactoryFamily` union + used in a descriptor.
+ */
+export const CORE_TOOL_FACTORY_FAMILIES: ReadonlySet<CoreToolFactoryFamily> = new Set(
+  CORE_TOOL_FACTORY_DESCRIPTORS.map(({ family }) => family),
+);
