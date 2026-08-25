@@ -50,7 +50,7 @@ import {
 } from "openclaw/plugin-sdk/plugin-test-runtime";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { handleCodexAppServerApprovalRequest } from "./approval-bridge.js";
-import { runApprovalResolverConformance } from "./approval-resolver-conformance.js";
+import { runApprovalResolverConformance } from "./approval-resolver-conformance.test-support.js";
 import * as roundtrip from "./plugin-approval-roundtrip.js";
 import {
   createParams,
