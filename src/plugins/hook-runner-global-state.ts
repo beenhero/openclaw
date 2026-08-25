@@ -4,6 +4,7 @@ import type { GlobalHookRunnerRegistry } from "./hook-registry.types.js";
 import type { HookRunner } from "./hooks.js";
 import { isPluginRegistryRetired } from "./registry-lifecycle.js";
 import type {
+  PluginApprovalResolverRegistryRegistration,
   PluginRegistry,
   PluginTrustedToolPolicyRegistryRegistration,
 } from "./registry-types.js";
@@ -13,6 +14,7 @@ import { getPluginRuntimeGenerationRegistry } from "./runtime/generation-scope.j
 
 type TrustedPolicyHookRunnerRegistry = GlobalHookRunnerRegistry & {
   trustedToolPolicies?: PluginTrustedToolPolicyRegistryRegistration[];
+  approvalResolvers?: PluginApprovalResolverRegistryRegistration[];
 };
 
 type HookRunnerGlobalState = {
@@ -95,6 +97,23 @@ function overlayHookRegistries(
     const rightRank = right.origin === "bundled" ? 0 : 1;
     return leftRank - rightRank;
   });
+  // Approval resolvers overlay per PLUGIN: a plugin's resolver registrations are
+  // an exclusive set (one authority per plugin), so an overlay source carrying
+  // ANY registrations for a plugin replaces that plugin's base registrations
+  // wholesale. Same bundled-first tier contract as trustedToolPolicies.
+  const overlayApprovalResolverPluginIds = new Set(
+    (overlayRegistry.approvalResolvers ?? []).map((entry) => entry.pluginId),
+  );
+  const approvalResolvers = [
+    ...(baseRegistry.approvalResolvers ?? []).filter(
+      (entry) => !overlayApprovalResolverPluginIds.has(entry.pluginId),
+    ),
+    ...(overlayRegistry.approvalResolvers ?? []),
+  ].toSorted((left, right) => {
+    const leftRank = left.origin === "bundled" ? 0 : 1;
+    const rightRank = right.origin === "bundled" ? 0 : 1;
+    return leftRank - rightRank;
+  });
   return {
     hooks: [
       ...baseRegistry.hooks.flatMap((hook) => {
@@ -118,6 +137,7 @@ function overlayHookRegistries(
       ...overlayRegistry.plugins,
     ],
     trustedToolPolicies,
+    approvalResolvers,
   };
 }
 
@@ -149,6 +169,9 @@ export function createLiveHookRegistryFacade(
     },
     get trustedToolPolicies() {
       return resolveHookRegistry(state)?.trustedToolPolicies ?? [];
+    },
+    get approvalResolvers() {
+      return resolveHookRegistry(state)?.approvalResolvers ?? [];
     },
   };
 }

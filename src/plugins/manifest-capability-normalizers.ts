@@ -354,6 +354,7 @@ const MANIFEST_CONTRACT_KEYS = [
   "embeddedExtensionFactories",
   "agentToolResultMiddleware",
   "trustedToolPolicies",
+  "approvalResolvers",
   "externalAuthProviders",
   "embeddingProviders",
   "speechProviders",

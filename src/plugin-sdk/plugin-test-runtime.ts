@@ -95,6 +95,10 @@ export {
 } from "../plugins/provider-wizard.js";
 export { resolveProviderPluginChoice } from "../plugins/provider-auth-choice.runtime.js";
 export {
+  __resetDefaultProofLedgerForTest,
+  getDefaultProofLedger,
+} from "../plugins/proof-ledger.js";
+export {
   clearEmbeddingProviders,
   getRegisteredEmbeddingProvider,
   listRegisteredEmbeddingProviders,

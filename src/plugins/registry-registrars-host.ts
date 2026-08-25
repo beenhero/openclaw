@@ -6,8 +6,10 @@ import {
 } from "./host-hook-runtime.js";
 import {
   isPluginJsonValue,
+  KNOWN_CAPABILITIES,
   normalizePluginHostHookId,
   type PluginAgentEventSubscriptionRegistration,
+  type PluginApprovalResolverRegistration,
   type PluginControlUiDescriptor,
   type PluginRuntimeLifecycleRegistration,
   type PluginSessionActionRegistration,
@@ -19,6 +21,7 @@ import {
 import { validateControlUiNativeRoutePlacement } from "./registry-control-ui-policy.js";
 import type { PluginRegistryState } from "./registry-state.js";
 import type {
+  PluginApprovalResolverRegistryRegistration,
   PluginRecord,
   PluginSessionActionRegistryRegistration,
   PluginTrustedToolPolicyRegistryRegistration,
@@ -252,6 +255,113 @@ export function createHostRegistrars(state: PluginRegistryState) {
     policies.push(registration);
   };
 
+  const registerApprovalResolver = (
+    record: PluginRecord,
+    registration: PluginApprovalResolverRegistration,
+  ) => {
+    if (!registration || typeof registration !== "object") {
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: "approval resolver registration requires id, description, and resolve()",
+      });
+      return;
+    }
+    const id = normalizeHostHookString(registration.id);
+    const description = normalizeHostHookString(registration.description);
+    if (!id || !description || typeof registration.resolve !== "function") {
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: "approval resolver registration requires id, description, and resolve()",
+      });
+      return;
+    }
+    // Fail-closed: the gateway seam wires only the capabilities in KNOWN_CAPABILITIES today.
+    // Any other capability is a hard rejection so a plugin cannot silently believe it gates a
+    // surface OpenClaw does not enforce (design §4.1/§7). This is the single deliberate throw
+    // in this file's register path.
+    const capabilities = registration.scope?.capabilities ?? [];
+    if (
+      !Array.isArray(capabilities) ||
+      capabilities.length === 0 ||
+      capabilities.some((cap) => !KNOWN_CAPABILITIES.has(cap))
+    ) {
+      throw new Error(
+        `approval resolver "${id}" declares a capability not in KNOWN_CAPABILITIES (${record.id}): ${JSON.stringify(capabilities)}`,
+      );
+    }
+    if (record.origin !== "bundled" && !(record.contracts?.approvalResolvers ?? []).includes(id)) {
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: `plugin must declare contracts.approvalResolvers for: ${id}`,
+      });
+      return;
+    }
+    if (record.origin !== "bundled" && !(record.enabled && record.explicitlyEnabled === true)) {
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: `plugin must be explicitly enabled to register approval resolver: ${id}`,
+      });
+      return;
+    }
+    const resolvers = registry.approvalResolvers;
+    const existing = resolvers.find(
+      (entry) => entry.pluginId === record.id && entry.registration.id === id,
+    );
+    if (existing) {
+      pushDiagnostic({
+        level: "error",
+        pluginId: record.id,
+        source: record.source,
+        message: `approval resolver already registered: ${id} (${existing.pluginId})`,
+      });
+      return;
+    }
+    // L3.2 — per-capability owner-conflict guard: one owning resolver per capability.
+    // Reject if any capability this resolver claims is already owned by a DIFFERENT resolver
+    // (different pluginId OR different id). This makes "one resolver per capability" a
+    // registration invariant so dispatch-time pickOwner is always unambiguous.
+    for (const cap of capabilities) {
+      const owner = resolvers.find((entry) =>
+        entry.registration.scope?.capabilities?.includes(cap),
+      );
+      if (owner && !(owner.pluginId === record.id && owner.registration.id === id)) {
+        pushDiagnostic({
+          level: "error",
+          pluginId: record.id,
+          source: record.source,
+          message: `capability ${cap} already owned by ${owner.pluginId}`,
+        });
+        return;
+      }
+    }
+    const entry: PluginApprovalResolverRegistryRegistration = {
+      pluginId: record.id,
+      pluginName: record.name,
+      registration: { ...registration, id, description },
+      origin: record.origin,
+      source: record.source,
+      rootDir: record.rootDir,
+    };
+    if (record.origin === "bundled") {
+      const firstInstalledIndex = resolvers.findIndex((item) => item.origin !== "bundled");
+      if (firstInstalledIndex === -1) {
+        resolvers.push(entry);
+      } else {
+        resolvers.splice(firstInstalledIndex, 0, entry);
+      }
+      return;
+    }
+    resolvers.push(entry);
+  };
+
   const registerToolMetadata = (record: PluginRecord, metadata: PluginToolMetadataRegistration) => {
     const toolName = normalizeHostHookString(metadata.toolName);
     if (!toolName) {
@@ -295,6 +405,26 @@ export function createHostRegistrars(state: PluginRegistryState) {
       );
       return;
     }
+    // L3.6 — validate capabilities ⊆ KNOWN_CAPABILITIES (same guard as resolver registrar:313-320).
+    // Fail-closed: reject any capability not wired in core so a plugin cannot silently believe it
+    // gates a surface OpenClaw does not enforce. This is a hard throw (not pushDiagnostic) to
+    // match the resolver registrar's behavior and surface the error immediately at registration.
+    let deduplicatedCapabilities: string[] | undefined;
+    if (metadata.capabilities !== undefined) {
+      if (
+        !Array.isArray(metadata.capabilities) ||
+        metadata.capabilities.some((cap) => !KNOWN_CAPABILITIES.has(cap))
+      ) {
+        throw new Error(
+          `tool metadata "${toolName}" declares a capability not in KNOWN_CAPABILITIES (${record.id}): ${JSON.stringify(metadata.capabilities)}`,
+        );
+      }
+      // SHRINK-1: dedupe capabilities at the source so stored metadata never carries duplicates.
+      // dedupeByKind (the future L3.12 ACP caller) throws on duplicate effect kinds, which would
+      // happen if a plugin registered ['net.egress','net.egress'] and classifyTierB emitted two
+      // net.egress descriptors. Dedupe here before storing, after all validation has passed.
+      deduplicatedCapabilities = [...new Set(metadata.capabilities)];
+    }
     registry.toolMetadata.push({
       pluginId: record.id,
       pluginName: record.name,
@@ -304,6 +434,9 @@ export function createHostRegistrars(state: PluginRegistryState) {
         ...(displayName !== undefined ? { displayName } : {}),
         ...(description !== undefined ? { description } : {}),
         ...(tags !== undefined ? { tags } : {}),
+        ...(deduplicatedCapabilities !== undefined
+          ? { capabilities: deduplicatedCapabilities }
+          : {}),
       },
       source: record.source,
       rootDir: record.rootDir,
@@ -604,6 +737,7 @@ export function createHostRegistrars(state: PluginRegistryState) {
   return {
     registerSessionExtension,
     registerTrustedToolPolicy,
+    registerApprovalResolver,
     registerToolMetadata,
     registerControlUiDescriptor,
     registerBoardWidgetContentKind: createPluginBoardWidgetContentKindRegistrar(registry),

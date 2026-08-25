@@ -62,6 +62,7 @@ export function createEmptyPluginRegistry(): PluginRegistry {
     interactiveHandlers: [],
     sessionExtensions: [],
     trustedToolPolicies: [],
+    approvalResolvers: [],
     toolMetadata: [],
     controlUiDescriptors: [],
     runtimeLifecycles: [],

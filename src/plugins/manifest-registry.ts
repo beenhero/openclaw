@@ -282,6 +282,7 @@ function mergeManifestContracts(
     "embeddedExtensionFactories",
     "agentToolResultMiddleware",
     "trustedToolPolicies",
+    "approvalResolvers",
     "externalAuthProviders",
     "embeddingProviders",
     "speechProviders",

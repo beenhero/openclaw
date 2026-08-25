@@ -169,6 +169,104 @@ describe("global hook runner registry selection", () => {
     ).toEqual(["shared-policy"]);
   });
 
+  it("exposes approvalResolvers composed bundled-first (parity with trustedToolPolicies)", async () => {
+    const root = createMockPluginRegistry([
+      { hookName: "before_tool_call", handler: vi.fn(), pluginId: "installed-resolver" },
+    ]);
+    root.approvalResolvers = [
+      {
+        pluginId: "installed-resolver",
+        pluginName: "Installed Resolver",
+        origin: "workspace",
+        source: "test",
+        registration: {
+          id: "installed-second",
+          description: "installed resolver",
+          scope: { capabilities: ["process.exec"] },
+          exclusive: true,
+          resolve: async () => ({ requestId: "r", decision: "deny" }),
+        },
+      },
+    ];
+    const scoped = createMockPluginRegistry([]);
+    scoped.plugins = [createPluginRecord({ id: "bundled-resolver", origin: "bundled" })];
+    scoped.approvalResolvers = [
+      {
+        pluginId: "bundled-resolver",
+        pluginName: "Bundled Resolver",
+        origin: "bundled",
+        source: "test",
+        registration: {
+          id: "bundled-first",
+          description: "bundled resolver",
+          scope: { capabilities: ["process.exec"] },
+          exclusive: true,
+          resolve: async () => ({ requestId: "r", decision: "deny" }),
+        },
+      },
+    ];
+
+    setActivePluginRegistry(root);
+    initializeGlobalHookRunner(root);
+    await withPluginRuntimeRegistryScope(scoped, async () => {
+      // The overlay arrives second, but bundled outranks installed in the
+      // composed view — same tier contract as trustedToolPolicies.
+      expect(
+        getGlobalHookRunnerRegistry()?.approvalResolvers?.map((entry) => [
+          entry.origin,
+          entry.registration.id,
+        ]),
+      ).toEqual([
+        ["bundled", "bundled-first"],
+        ["workspace", "installed-second"],
+      ]);
+    });
+    expect(
+      getGlobalHookRunnerRegistry()?.approvalResolvers?.map((entry) => entry.registration.id),
+    ).toEqual(["installed-second"]);
+  });
+
+  it("lets a request-scope registry replace the same plugin's approvalResolvers", async () => {
+    const root = createMockPluginRegistry([]);
+    root.approvalResolvers = [
+      {
+        pluginId: "shared",
+        pluginName: "Shared",
+        source: "test",
+        registration: {
+          id: "root-resolver",
+          description: "root resolver",
+          scope: { capabilities: ["process.exec"] },
+          exclusive: true,
+          resolve: async () => ({ requestId: "r", decision: "deny" }),
+        },
+      },
+    ];
+    const scoped = createMockPluginRegistry([]);
+    scoped.approvalResolvers = [
+      {
+        pluginId: "shared",
+        pluginName: "Shared",
+        source: "test",
+        registration: {
+          id: "scoped-resolver",
+          description: "scoped resolver",
+          scope: { capabilities: ["process.exec"] },
+          exclusive: true,
+          resolve: async () => ({ requestId: "r", decision: "deny" }),
+        },
+      },
+    ];
+    setActivePluginRegistry(root);
+    initializeGlobalHookRunner(root);
+
+    await withPluginRuntimeRegistryScope(scoped, async () => {
+      expect(
+        getGlobalHookRunnerRegistry()?.approvalResolvers?.map((entry) => entry.registration.id),
+      ).toEqual(["scoped-resolver"]);
+    });
+  });
+
   it("sees hooks added after initialization", () => {
     const registry: PluginRegistry = createMockPluginRegistry([
       { hookName: "message_received", handler: vi.fn(), pluginId: "plugin" },

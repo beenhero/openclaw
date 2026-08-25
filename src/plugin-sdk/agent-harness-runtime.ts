@@ -495,6 +495,36 @@ export {
   type BeforeToolCallFailureDisposition,
   type DeferredPluginToolApproval,
 } from "../agents/agent-tools.before-tool-call.js";
+export {
+  getApprovalResolverForScope,
+  hasApprovalResolverForScope,
+} from "../plugins/approval-resolver.js";
+export {
+  assertProofFresh,
+  computeParamsDigest,
+  decideCapabilityApproval,
+  fingerprintJson,
+  recordAndConsumeProof,
+  __resetProofRegistryForTest,
+} from "../plugins/capability-approval.js";
+export type { CapabilityApprovalVerdict } from "../plugins/capability-approval.js";
+export { KNOWN_CAPABILITIES } from "../plugins/host-hooks.js";
+export type {
+  ApprovalCapability,
+  ApprovalDecision,
+  ApprovalRequest,
+  ApprovalResolver,
+  ApprovalScope,
+  EffectDescriptor,
+  PluginApprovalResolverRegistration,
+} from "../plugins/host-hooks.js";
+export {
+  classifyEffects,
+  digestForEffects,
+  sortEffects,
+  SUPERSET_EFFECTS,
+} from "../plugins/effect-classifier.js";
+export type { PluginApprovalResolverRegistryRegistration } from "../plugins/registry-types.js";
 export { isReplaySafeToolCall } from "../agents/tool-mutation.js";
 export {
   resolveAgentHarnessBeforePromptBuildResult,
