@@ -554,7 +554,7 @@ describe("CodexAppServerClient", () => {
   });
 
   // Approval-resolver spec §7 fail-closed floor: a Codex app-server below
-  // MIN_CODEX_APP_SERVER_VERSION (0.143.0) must hard-throw at initialize, BEFORE
+  // MIN_SUPPORTED_CODEX_APP_SERVER_VERSION must hard-throw at initialize, BEFORE
   // any approval could reach the exclusive process.exec resolver branch. This is
   // the reason no in-branch version check is needed in approval-bridge.ts — the
   // session never reaches that branch on a sub-floor server. Regressing this floor
@@ -562,10 +562,10 @@ describe("CodexAppServerClient", () => {
   // codex, so the throw is asserted here as a CodexAppServerVersionError.
   it("sub-floor Codex app-server (< MIN) throws a version error at initialize, never reaching the resolver branch (§7)", async () => {
     const { harness, initializing, outbound } = startInitialize();
-    // 0.142.9 is one patch below the 0.143.0 floor.
+    // One patch below the supported floor.
     harness.send({
       id: outbound.id,
-      result: { userAgent: "openclaw/0.142.9 (macOS; test)" },
+      result: { userAgent: "openclaw/0.148.9 (macOS; test)" },
     });
 
     const error = await initializing.then(
@@ -577,7 +577,7 @@ describe("CodexAppServerClient", () => {
     expect(isUnsupportedCodexAppServerVersionError(error)).toBe(true);
     expect((error as Error).name).toBe("CodexAppServerVersionError");
     expect((error as Error).message).toContain(
-      `A stable Codex app-server from ${MIN_CODEX_APP_SERVER_VERSION} through ${MAX_CODEX_APP_SERVER_VERSION} is required, but detected 0.142.9`,
+      `Codex app-server ${MIN_SUPPORTED_CODEX_APP_SERVER_VERSION} or newer is required, but detected 0.148.9`,
     );
     // Only the initialize write happened — the session never advanced to a state
     // where an approval (and thus the resolver branch) could be reached.

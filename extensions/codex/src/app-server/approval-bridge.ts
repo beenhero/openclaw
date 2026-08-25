@@ -2,9 +2,15 @@
  * Bridges Codex app-server approval requests into OpenClaw policy hooks and
  * plugin approval UX.
  */
+import { randomUUID } from "node:crypto";
 import {
   type AgentApprovalEventData,
+  type ApprovalCapability,
+  type ApprovalRequest,
   type BeforeToolCallFailureDisposition,
+  classifyEffects,
+  decideCapabilityApproval,
+  digestForEffects,
   formatApprovalDisplayPath,
   hasNativeHookRelayInvocation,
   invokeNativeHookRelay,
@@ -12,6 +18,7 @@ import {
   type EmbeddedRunAttemptParamsV2 as EmbeddedRunAttemptParams,
   type NativeHookRelayProcessResponse,
   type NativeHookRelayRegistrationHandle,
+  SUPERSET_EFFECTS,
 } from "openclaw/plugin-sdk/agent-harness-runtime";
 import { coerceErrorMessage } from "openclaw/plugin-sdk/error-runtime";
 import {
@@ -24,6 +31,7 @@ import { resolveCodexToolAbortTerminalReason } from "./dynamic-tool-execution.js
 import {
   approvalRequestExplicitlyUnavailable,
   codexApprovalTimeoutText,
+  DEFAULT_CODEX_APPROVAL_TIMEOUT_MS,
   mapExecDecisionToOutcome,
   requestPluginApproval,
   sanitizeCodexApprovalVisibleText,
@@ -494,6 +502,32 @@ async function runOpenClawToolPolicyForApprovalRequest(params: {
     return undefined;
   }
   const cwd = readString(params.requestParams, "cwd") ?? params.paramsForRun.workspaceDir;
+  // Exclusive-over-scope, FIRST: a registered process.exec resolver is the sole
+  // decision owner for command-execution escalations, so it must run BEFORE the
+  // native `pre_tool_use` relay stage below. In the default production config that
+  // relay is active (loop-detection defaults ON → `pre_tool_use` is relayed), and
+  // it terminally reports `handled` for EVERY commandExecution — which would make
+  // `runOpenClawToolPolicyForApprovalRequest` return `no-decision` before the
+  // resolver was ever consulted, leaving the whole gate dead. Deciding here first
+  // makes the resolver reachable AND authoritative under the relay: the native
+  // relay, the before-tool-call hook (below), and the human requestPluginApproval
+  // tap are all bypassed — that IS the exclusivity. Because the native relay never
+  // runs on this path, no `pre_tool_use` invocation is recorded and no deferred
+  // approval is created, so there is nothing to leak or clean up. On the
+  // no-resolver path this returns undefined and control falls through to the
+  // native relay + hook + tap exactly as before (byte-unchanged).
+  const resolverOutcome = await runProcessExecResolverDecision({
+    method: params.method,
+    requestParams: params.requestParams,
+    paramsForRun: params.paramsForRun,
+    context: params.context,
+    policyRequest,
+    ...(cwd ? { cwd } : {}),
+    ...(params.signal ? { signal: params.signal } : {}),
+  });
+  if (resolverOutcome) {
+    return resolverOutcome;
+  }
   const nativeRelayOutcome = await runNativeRelayToolPolicyForApprovalRequest({
     method: params.method,
     requestParams: params.requestParams,
@@ -554,6 +588,103 @@ async function runOpenClawToolPolicyForApprovalRequest(params: {
     };
   }
   return { outcome: "allowed" };
+}
+
+// Exclusive-over-scope process.exec resolver decision. Returns a terminal outcome
+// when a registered resolver owns the command-execution escalation, or `undefined`
+// (fall through) when the method is out of scope or no resolver is registered.
+//
+// This runs FIRST — before the native `pre_tool_use` relay, the trusted-tool-policy
+// hook, and the human requestPluginApproval tap — so the resolver is reachable AND
+// authoritative even in the default production config where loop-detection keeps the
+// native relay active (it otherwise terminally reports `handled` for every
+// commandExecution, which would strand the resolver). Because the caller returns
+// this outcome before ever invoking the native relay, no `pre_tool_use` invocation
+// is recorded and no deferred approval is created on this path — nothing to leak.
+//
+// THIN ADAPTER: all decision-loop logic (deadline race, allow-list, proof
+// single-use/replay, fail-closed matrix) lives in the core primitive
+// `decideCapabilityApproval`. This function classifies the Codex method via
+// `classifyEffects` (3-tier classifier → effect set), mints an `ApprovalRequest`
+// carrying the full `effects[]`, and maps the neutral verdict back to the caller's
+// `ApprovalPolicyOutcome`. ONE command = ONE requestId + ONE digest + ONE dispatch.
+async function runProcessExecResolverDecision(params: {
+  method: string;
+  requestParams: JsonObject | undefined;
+  paramsForRun: EmbeddedRunAttemptParams;
+  context: ApprovalContext;
+  policyRequest: { toolName: string; params: JsonObject };
+  cwd?: string;
+  signal?: AbortSignal;
+}): Promise<ApprovalPolicyOutcome | undefined> {
+  if (params.method !== "item/commandExecution/requestApproval") {
+    return undefined;
+  }
+  // Classify the effect set via the 3-tier classifier.
+  // BEHAVIOR-PRESERVATION: a plain (non-curl) command classifies to EXACTLY
+  // [{kind:'process.exec', command, cwd?}] — digestForEffects([e]) is byte-identical
+  // to the single-effect params digest via the branch-A digest.
+  // FAIL-CLOSED: if classifyEffects throws, fall back to SUPERSET_EFFECTS (broadest gate).
+  const resolverCommand = readPolicyCommand(params.requestParams);
+  const cwd = params.cwd;
+  const classifyParams = {
+    ...(resolverCommand ? { command: resolverCommand } : {}),
+    ...(cwd ? { cwd } : {}),
+  };
+  const effects = await classifyEffects(
+    null, // harness — reserved, not used by Tier-A/B/C for the "exec" tool
+    params.policyRequest.toolName,
+    classifyParams,
+    undefined,
+  ).catch(() => SUPERSET_EFFECTS);
+
+  // Belt-and-suspenders: classifyEffects guarantees non-empty via its floor,
+  // but assert here so a future regression fails closed (blocks the tool call).
+  if (!effects.length) {
+    throw new Error("classifyEffects returned empty effect set — soundness invariant violated");
+  }
+
+  // pickOwner: process.exec owns the decision when present (strictly broader capability:
+  // you cannot egress without first executing the process). A curl command with
+  // [net.egress, process.exec] routes to the process.exec resolver, preserving today's
+  // behavior exactly. A pure net.egress (web_fetch) routes to 'net.egress'.
+  const capability: ApprovalCapability = effects.some((e) => e.kind === "process.exec")
+    ? "process.exec"
+    : (effects[0]?.kind ?? "process.exec");
+
+  const requestId = randomUUID();
+  const req: ApprovalRequest = {
+    requestId,
+    capability,
+    toolName: params.policyRequest.toolName,
+    effects,
+    ...(params.paramsForRun.agentId ? { agentId: params.paramsForRun.agentId } : {}),
+    ...(params.paramsForRun.sessionKey ? { sessionKey: params.paramsForRun.sessionKey } : {}),
+    ...(params.paramsForRun.runId ? { runId: params.paramsForRun.runId } : {}),
+    ...(params.context.approvalId ? { toolCallId: params.context.approvalId } : {}),
+    paramsDigest: digestForEffects(effects),
+  };
+
+  const verdict = await decideCapabilityApproval(req, {
+    deadlineMs: DEFAULT_CODEX_APPROVAL_TIMEOUT_MS,
+    ...(params.signal ? { signal: params.signal } : {}),
+  });
+
+  if (verdict.kind === "fallthrough") {
+    // No resolver registered for this capability — fall through to native relay + hook + tap.
+    return undefined;
+  }
+  if (verdict.kind === "allow") {
+    // allow-always durability is plugin-owned, not Codex session trust; keep
+    // this scoped to the current item (mirrors the generic-approval rationale).
+    return { outcome: "approved-once" };
+  }
+  // deny — map failureDisposition through.
+  return {
+    outcome: "denied",
+    reason: verdict.reason ?? "approval resolver denied",
+    ...(verdict.failureDisposition ? { failureDisposition: verdict.failureDisposition } : {}),
+  };
 }
 
 async function runNativeRelayToolPolicyForApprovalRequest(params: {

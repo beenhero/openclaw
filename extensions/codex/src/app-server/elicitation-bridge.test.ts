@@ -7,6 +7,7 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { codexTestTurnIds } from "./codex-app-server.test-fixtures.js";
 import { routeCodexAppServerElicitationRequest } from "./elicitation-bridge.js";
+import { DEFAULT_CODEX_APPROVAL_TIMEOUT_MS } from "./plugin-approval-roundtrip.js";
 import type { JsonObject } from "./protocol.js";
 
 vi.mock("openclaw/plugin-sdk/agent-harness-runtime", async (importOriginal) => ({
@@ -433,7 +434,9 @@ describe("Codex app-server elicitation bridge", () => {
     });
     const approvalRequestCall = gatewayToolCall();
     expect(approvalRequestCall?.[0]).toBe("plugin.approval.request");
-    expect(approvalRequestCall?.[1]).toStrictEqual({ timeoutMs: 130_000 });
+    expect(approvalRequestCall?.[1]).toStrictEqual({
+      timeoutMs: DEFAULT_CODEX_APPROVAL_TIMEOUT_MS + 10_000,
+    });
     expect(approvalRequestCall?.[3]).toStrictEqual({ expectFinal: false });
     const approvalRequest = gatewayToolArg(0, 2) as {
       description: string;
@@ -1703,7 +1706,9 @@ describe("Codex app-server elicitation bridge", () => {
     });
     const approvalRequestCall = gatewayToolCall();
     expect(approvalRequestCall?.[0]).toBe("plugin.approval.request");
-    expect(approvalRequestCall?.[1]).toStrictEqual({ timeoutMs: 130_000 });
+    expect(approvalRequestCall?.[1]).toStrictEqual({
+      timeoutMs: DEFAULT_CODEX_APPROVAL_TIMEOUT_MS + 10_000,
+    });
     expect(approvalRequestCall?.[3]).toStrictEqual({ expectFinal: false });
     const approvalRequest = gatewayToolArg(0, 2) as {
       title: string;

@@ -90,6 +90,14 @@ function createHarnessHostCapabilities(
       }),
     requestApproval: async () => undefined,
     waitForApproval: async () => undefined,
+    // commandExecution approvals snapshot executable file operands BEFORE any
+    // policy runs and hard-deny when this binding is unavailable — stub it as
+    // ok so approval-path tests exercise the policy chain, not the guard.
+    prepareMutableFileApproval: async () => ({
+      ok: true,
+      requiresOneShot: false,
+      revalidate: async () => ({ ok: true }),
+    }),
   });
 }
 

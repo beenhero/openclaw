@@ -9,7 +9,11 @@ import { resolveCodexGatewayTimeoutWithGraceMs } from "./attempt-timeouts.js";
 
 type AgentHarnessHostCapabilities = EmbeddedRunAttemptParams["hostCapabilities"];
 
-const DEFAULT_CODEX_APPROVAL_TIMEOUT_MS = 120_000;
+// Raised 120s → 300s (live-drilled 2026-08-24): human-in-the-loop resolvers
+// (wallet signing) need the same window as the dynamic-tool wait and the
+// resolver's own approval window — a shorter bridge deadline abandons the
+// approval mid-signing and the late human answer resolves an orphan.
+export const DEFAULT_CODEX_APPROVAL_TIMEOUT_MS = 300_000;
 const MAX_PLUGIN_APPROVAL_TITLE_LENGTH = 80;
 const MAX_PLUGIN_APPROVAL_DESCRIPTION_LENGTH = 256;
 const ANSI_OSC_SEQUENCE_RE = new RegExp(

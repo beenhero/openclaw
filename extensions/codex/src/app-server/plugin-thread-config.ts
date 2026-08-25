@@ -2,7 +2,7 @@
  * Builds Codex thread config patches that expose only policy-approved apps
  * for native Codex turns.
  */
-import crypto from "node:crypto";
+import { fingerprintJson } from "openclaw/plugin-sdk/agent-harness-runtime";
 import {
   defaultCodexAppInventoryCache,
   type CodexAppInventoryCache,
@@ -748,21 +748,6 @@ function mergeJsonObjects(left: JsonObject, right: JsonObject): JsonObject {
   return merged;
 }
 
-function fingerprintJson(value: JsonValue): string {
-  return crypto.createHash("sha256").update(stableStringify(value)).digest("hex");
-}
-
-function stableStringify(value: JsonValue | undefined): string {
-  // Fingerprints must be process-stable across object insertion order so prompt
-  // cache and thread-binding comparisons do not churn between runs.
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => stableStringify(item)).join(",")}]`;
-  }
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value)
-      .toSorted(([left], [right]) => left.localeCompare(right))
-      .map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
+// fingerprintJson now comes from the hoisted plugin-sdk params-digest module —
+// ONE stable-stringify + sha256 implementation shared with the approval bridge's
+// effect digests, so the two can never drift (pinned by a golden digest test).

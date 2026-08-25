@@ -105,6 +105,24 @@ function paramsForConformanceRun(): EmbeddedRunAttemptParams {
     runId: "run-1",
     workspaceDir: path.join(tempDir, "workspace"),
     onAgentEvent: vi.fn(),
+    // commandExecution approvals snapshot executable file operands BEFORE any
+    // policy runs (prepareMutableFileApproval) and hard-deny when the binding
+    // is unavailable — stub it as ok so the resolver branch stays reachable.
+    hostCapabilities: {
+      prepareMutableFileApproval: async () => ({
+        ok: true,
+        requiresOneShot: false,
+        revalidate: async () => ({ ok: true }),
+      }),
+      // The fall-through path consults the before-tool-call hook via
+      // hostCapabilities; not-blocked keeps it flowing to the human tap.
+      runBeforeToolCall: async ({ params: hookParams }: { params: unknown }) => ({
+        blocked: false,
+        params: hookParams,
+      }),
+      requestApproval: async () => undefined,
+      waitForApproval: async () => undefined,
+    },
   } as unknown as EmbeddedRunAttemptParams;
 }
 
@@ -315,7 +333,7 @@ describe("registerApprovalResolver process.exec (mock app-server, structural)", 
   });
 
   it("resolver that never resolves within the deadline fails closed (timed_out → decline)", async () => {
-    // The resolver hold never settles; only the bridge's 120s deadline race can end it.
+    // The resolver hold never settles; only the bridge deadline race can end it.
     // The harness's server-request wait uses vi.waitFor (real-time polling) so it cannot
     // coexist with fake timers; the deadline race is a pure bridge concern, so this case
     // drives the real bridge directly under fake timers (T11's fake-timer approach).
@@ -336,8 +354,8 @@ describe("registerApprovalResolver process.exec (mock app-server, structural)", 
       turnId: "turn-1",
       autoApprove: false,
     });
-    // Advance past DEFAULT_CODEX_APPROVAL_TIMEOUT_MS (120s) so the deadline race fires.
-    await vi.advanceTimersByTimeAsync(120_001);
+    // Advance past DEFAULT_CODEX_APPROVAL_TIMEOUT_MS so the deadline race fires.
+    await vi.advanceTimersByTimeAsync(roundtrip.DEFAULT_CODEX_APPROVAL_TIMEOUT_MS + 1);
     const response = await responsePromise;
     expect(response).toEqual({ decision: "decline" });
     expect(tapSpy).not.toHaveBeenCalled();

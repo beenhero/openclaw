@@ -19,6 +19,7 @@ import {
 } from "openclaw/plugin-sdk/plugin-test-runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handleCodexAppServerApprovalRequest } from "./approval-bridge.js";
+import { DEFAULT_CODEX_APPROVAL_TIMEOUT_MS } from "./plugin-approval-roundtrip.js";
 import type { JsonObject } from "./protocol.js";
 
 // Neutralize the gateway + trusted-tool hook + native-relay so the only decision
@@ -55,13 +56,37 @@ const mockRunBeforeToolCallHook = vi.mocked(runBeforeToolCallHook);
 
 const WORKSPACE_DIR = "/tmp/resolver-exec-workspace";
 
-function paramsForRun(): EmbeddedRunAttemptParams {
+function paramsForRun(
+  requestApproval?: (...args: unknown[]) => Promise<unknown>,
+): EmbeddedRunAttemptParams {
   return {
     agentId: "agent-1",
     sessionKey: "session-1",
     runId: "run-1",
     workspaceDir: WORKSPACE_DIR,
     onAgentEvent: vi.fn(),
+    // commandExecution approvals snapshot executable file operands BEFORE any
+    // policy runs (prepareMutableFileApproval) and hard-deny when the binding
+    // is unavailable — stub it as ok so the resolver branch stays reachable.
+    // The human tap route goes through hostCapabilities.requestApproval; the
+    // default stub reports it unavailable (undefined) so resolver tests fail
+    // closed if they ever fall through.
+    hostCapabilities: {
+      prepareMutableFileApproval: async () => ({
+        ok: true,
+        requiresOneShot: false,
+        revalidate: async () => ({ ok: true }),
+      }),
+      requestApproval: requestApproval ?? (async () => undefined),
+      waitForApproval: async () => undefined,
+      // The before-tool-call hook is consulted via hostCapabilities on the
+      // fall-through (no-resolver) path; not-blocked keeps that path flowing
+      // to the human tap.
+      runBeforeToolCall: async ({ params: hookParams }: { params: unknown }) => ({
+        blocked: false,
+        params: hookParams,
+      }),
+    },
   } as unknown as EmbeddedRunAttemptParams;
 }
 
@@ -104,11 +129,14 @@ function registerResolver(
   return { seen };
 }
 
-async function drive(command?: string): Promise<unknown> {
+async function drive(
+  command?: string,
+  requestApproval?: (...args: unknown[]) => Promise<unknown>,
+): Promise<unknown> {
   return handleCodexAppServerApprovalRequest({
     method: "item/commandExecution/requestApproval",
     requestParams: requestParams(command),
-    paramsForRun: paramsForRun(),
+    paramsForRun: paramsForRun(requestApproval),
     threadId: "thread-1",
     turnId: "turn-1",
   });
@@ -220,8 +248,8 @@ describe("approval-bridge process.exec resolver branch", () => {
     registerResolver(() => new Promise<ApprovalDecision>(() => {}));
 
     const pending = drive();
-    // Advance past DEFAULT_CODEX_APPROVAL_TIMEOUT_MS (120s) so the race deadline fires.
-    await vi.advanceTimersByTimeAsync(120_000);
+    // Advance past DEFAULT_CODEX_APPROVAL_TIMEOUT_MS so the race deadline fires.
+    await vi.advanceTimersByTimeAsync(DEFAULT_CODEX_APPROVAL_TIMEOUT_MS);
 
     // A timed_out disposition maps to a decline (fail-closed), and the codex
     // approval is NOT parked forever waiting on the resolver.
@@ -290,16 +318,17 @@ describe("approval-bridge process.exec resolver branch", () => {
 
   it("no resolver registered → branch is skipped and the human tap route runs (byte-unchanged regression)", async () => {
     setActivePluginRegistry(createEmptyPluginRegistry());
-    // Unavailable tap (no approval id) → decline, exactly the existing behavior.
-    mockCallGatewayTool.mockResolvedValue({ id: undefined } as never);
+    // The human tap in the current bridge = hostCapabilities.requestApproval
+    // (no longer a callGatewayTool round-trip). Unavailable tap (undefined
+    // response) → decline, exactly the existing behavior.
+    const tapSpy = vi.fn(async () => undefined);
 
-    const response = await drive();
+    const response = await drive(undefined, tapSpy);
 
-    // With no resolver, control falls through: the trusted-tool hook AND the
-    // human tap (gateway) MUST be reached.
-    expect(mockRunBeforeToolCallHook).toHaveBeenCalledTimes(1);
-    expect(mockCallGatewayTool).toHaveBeenCalled();
-    expect(mockCallGatewayTool.mock.calls[0]?.[0]).toBe("plugin.approval.request");
+    // With no resolver, control falls through the whole chain (native relay →
+    // hostCapabilities.runBeforeToolCall hook → human tap). The tap being
+    // reached proves the resolver branch was byte-inert.
+    expect(tapSpy).toHaveBeenCalled();
     expect(response).toEqual({ decision: "decline" });
   });
 
