@@ -128,6 +128,7 @@ describe("plugin capability summaries", () => {
       embeddedExtensionFactories: ["embedded"],
       agentToolResultMiddleware: ["middleware"],
       trustedToolPolicies: ["trusted-policy"],
+      approvalResolvers: ["approval-resolver"],
       externalAuthProviders: ["external-auth"],
       embeddingProviders: ["embedding"],
       speechProviders: ["speech"],

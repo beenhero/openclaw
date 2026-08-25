@@ -71,6 +71,7 @@ const noops = {
     sessionKey: injection.sessionKey,
   }),
   registerTrustedToolPolicy: () => {},
+  registerApprovalResolver: () => {},
   registerToolMetadata: () => {},
   registerControlUiDescriptor: () => {},
   registerBoardWidgetContentKind: () => {},
@@ -210,6 +211,7 @@ export function buildPluginApi(params: BuildPluginApiParams): OpenClawPluginApi 
     enqueueNextTurnInjection: handlers.enqueueNextTurnInjection ?? noops.enqueueNextTurnInjection,
     registerTrustedToolPolicy:
       handlers.registerTrustedToolPolicy ?? noops.registerTrustedToolPolicy,
+    registerApprovalResolver: handlers.registerApprovalResolver ?? noops.registerApprovalResolver,
     registerToolMetadata: handlers.registerToolMetadata ?? noops.registerToolMetadata,
     registerControlUiDescriptor:
       handlers.registerControlUiDescriptor ?? noops.registerControlUiDescriptor,
