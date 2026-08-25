@@ -92,6 +92,7 @@ export type BeforeToolCallPolicyDiagnosticState = {
     pluginId: string;
     pluginName?: string;
   }>;
+  hasApprovalResolverForScope: boolean;
 };
 
 export type HookBlockedReason =
@@ -99,7 +100,8 @@ export type HookBlockedReason =
   | "plugin-before-tool-call"
   | "plugin-approval"
   | "plugin-approval-unavailable"
-  | "tool-loop";
+  | "tool-loop"
+  | "capability-resolver";
 
 type HookBlockedOutcome = {
   blocked: true;
