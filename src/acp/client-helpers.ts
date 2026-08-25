@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 /** Permission, environment, and spawn helpers for the standalone ACP client. */
 import * as readline from "node:readline";
 import type { RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
@@ -10,11 +11,20 @@ import {
   materializeWindowsSpawnProgram,
   resolveWindowsSpawnProgram,
 } from "../plugin-sdk/windows-spawn.js";
+import { hasApprovalResolverForScope } from "../plugins/approval-resolver.js";
+import { decideCapabilityApproval } from "../plugins/capability-approval.js";
+import {
+  classifyEffects,
+  digestForEffects,
+  SUPERSET_EFFECTS,
+} from "../plugins/effect-classifier.js";
+import type { ApprovalRequest } from "../plugins/host-hooks.js";
 import {
   listKnownProviderAuthEnvVarNames,
   omitEnvKeysCaseInsensitive,
 } from "../secrets/provider-env-vars.js";
 import { classifyAcpToolApproval, type AcpApprovalClass } from "./approval-classifier.js";
+import { pickOwner } from "./resolver-first.js";
 
 type PermissionOption = RequestPermissionRequest["options"][number];
 
@@ -123,6 +133,89 @@ export async function resolvePermissionRequest(
 
   const allowOption = pickOption(options, ["allow_once", "allow_always"]);
   const rejectOption = pickOption(options, ["reject_once", "reject_always"]);
+
+  // -------------------------------------------------------------------------
+  // L5.4 — Client-mode resolver-first (STRUCTURAL — see note below)
+  //
+  // Insert resolver-first AFTER allowOption/rejectOption are computed so the
+  // same option objects can be returned directly, keeping new code minimal.
+  //
+  // STRUCTURAL GRADE: in the standalone `openclaw acp client` process the
+  // plugin registry is NOT loaded (it lives server-side only), so
+  // hasApprovalResolverForScope() returns false and this block is inert —
+  // the existing classifyAcpToolApproval + prompt logic runs byte-unchanged.
+  //
+  // The resolver-first branch only fires when resolvePermissionRequest runs
+  // IN a process that has loaded the plugin registry (embedded ACP host or
+  // in-process test). It does NOT close the #97152 ACP bypass on its own —
+  // that is done by the server-mode adapter in translator.ts (L5.2, Grade A).
+  //
+  // NO suppressDelivery here — the callback OWNS the response entirely.
+  // -------------------------------------------------------------------------
+  {
+    // Derive the tool name and raw input from the ACP toolCall for classifyEffects.
+    // toolName falls back to 'exec' for the gateway exec surface (rawInput may carry
+    // name:'exec' but toolName might be undefined if identity is ambiguous).
+    const resolverToolName = toolName ?? "exec";
+    const rawInput = params.toolCall?.rawInput;
+
+    // FAIL-CLOSED: classifier throw → SUPERSET_EFFECTS (broadest gate, never empty).
+    const effects = await classifyEffects("acp", resolverToolName, rawInput, undefined).catch(
+      () => SUPERSET_EFFECTS,
+    );
+    const capability = pickOwner(effects);
+
+    if (hasApprovalResolverForScope(capability)) {
+      const req: ApprovalRequest = {
+        requestId: randomUUID(),
+        capability,
+        toolName: resolverToolName,
+        effects,
+        paramsDigest: digestForEffects(effects),
+        ...(params.toolCall?.toolCallId ? { toolCallId: params.toolCall.toolCallId } : {}),
+      };
+
+      let verdict: Awaited<ReturnType<typeof decideCapabilityApproval>> | undefined;
+      try {
+        // Match the promptUserPermission 30 s deadline (client-helpers.ts:90).
+        verdict = await decideCapabilityApproval(req, { deadlineMs: 30_000 });
+      } catch {
+        // Resolver threw unexpectedly — fail-open to existing human prompt.
+        verdict = undefined;
+      }
+
+      if (verdict?.kind === "allow") {
+        // allow → return the allow option (mirrors existing auto-approve path).
+        log(`[permission auto-approved-by-resolver] ${resolverToolName} (${capability})`);
+        if (allowOption) {
+          return selectedPermission(allowOption.optionId);
+        }
+        // Resolver approved but the request has no allow option — cancel (not error).
+        log(`[permission cancelled] ${resolverToolName}: resolver allow but missing allow option`);
+        return cancelledPermission();
+      }
+
+      if (verdict?.kind === "deny") {
+        // deny (clean policy or failure-disposition) → return reject option.
+        // NOTE: deny uses selectedPermission(rejectOption), NOT cancelledPermission.
+        // This is a POLICY decision, not a protocol failure.
+        const reason = "reason" in verdict ? verdict.reason : undefined;
+        log(
+          `[permission denied-by-resolver] ${resolverToolName} (${capability})${reason ? `: ${reason}` : ""}`,
+        );
+        if (rejectOption) {
+          return selectedPermission(rejectOption.optionId);
+        }
+        // Resolver denied but the request has no reject option — cancel.
+        log(`[permission cancelled] ${resolverToolName}: resolver deny but missing reject option`);
+        return cancelledPermission();
+      }
+
+      // verdict?.kind === 'fallthrough', undefined (throw), or resolver didn't own
+      // this scope — fall through to the existing classifyAcpToolApproval logic.
+    }
+  }
+
   const promptRequired = !classification.autoApprove;
 
   if (!promptRequired) {
