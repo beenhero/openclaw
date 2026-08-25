@@ -1,8 +1,8 @@
 // Codex tests cover the provider-neutral approval-resolver conformance factory.
 import type { ApprovalResolver } from "openclaw/plugin-sdk/agent-harness-runtime";
 import { InMemoryProofLedger } from "../../../../src/plugins/proof-ledger.js";
-import type { ConformanceAuditRecord } from "./approval-resolver-conformance.js";
-import { runApprovalResolverConformance } from "./approval-resolver-conformance.js";
+import type { ConformanceAuditRecord } from "./approval-resolver-conformance.test-support.js";
+import { runApprovalResolverConformance } from "./approval-resolver-conformance.test-support.js";
 
 // Minimal in-memory seam fake: a single exclusive resolver + a driver that enforces
 // request-binding, deadline/disconnect fail-closed, and recorded-proof single-use.
