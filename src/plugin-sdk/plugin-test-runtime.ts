@@ -45,6 +45,7 @@ export {
   createEmptyPluginRegistry,
   createPluginRegistry,
   type PluginRecord,
+  type PluginRegistry,
 } from "../plugins/registry.js";
 export {
   providerContractLoadError,

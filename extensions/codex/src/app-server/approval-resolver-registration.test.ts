@@ -1,20 +1,16 @@
 import {
-  createEmptyPluginRegistry,
-  setActivePluginRegistry,
-} from "openclaw/plugin-sdk/plugin-test-runtime";
-import {
+  type ApprovalDecision,
+  type ApprovalRequest,
   getApprovalResolverForScope,
   hasApprovalResolverForScope,
-} from "openclaw/plugins/approval-resolver";
-import type {
-  ApprovalDecision,
-  ApprovalRequest,
-  PluginApprovalResolverRegistration,
-} from "openclaw/plugins/host-hooks";
-import type {
-  PluginApprovalResolverRegistryRegistration,
-  PluginRegistry,
-} from "openclaw/plugins/registry-types";
+  type PluginApprovalResolverRegistration,
+  type PluginApprovalResolverRegistryRegistration,
+} from "openclaw/plugin-sdk/agent-harness-runtime";
+import {
+  createEmptyPluginRegistry,
+  type PluginRegistry,
+  setActivePluginRegistry,
+} from "openclaw/plugin-sdk/plugin-test-runtime";
 import { afterEach, describe, expect, it } from "vitest";
 
 function makeResolverRegistration(
