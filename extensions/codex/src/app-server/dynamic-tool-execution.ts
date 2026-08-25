@@ -561,6 +561,23 @@ export function resolveDynamicToolCallTimeoutMs(params: {
       ),
     );
   }
+  // Exec-capable tools can BLOCK inside the tool call on a human approval
+  // (awaitApprovalInline): the model's timeoutSeconds is the INNER command
+  // budget, so the outer watchdog needs approval headroom ON TOP of it —
+  // otherwise a model-requested 30s kills the hold while the human is still
+  // deciding, and the late approval resolves an orphan. Without a requested
+  // timeout the human-approval default already covers the hold. Names match
+  // the OpenClaw exec dynamic tool and its node-placement rename
+  // (CODEX_NODE_EXEC_DYNAMIC_TOOL_NAME).
+  if (params.call.tool === "exec" || params.call.tool === "node_exec") {
+    const requestedMs = readDynamicToolCallTimeoutMs(params.call.arguments);
+    return clampDynamicToolTimeoutMs(
+      requestedMs === undefined
+        ? (readConfiguredDynamicToolTimeoutMs(params.call.tool, params.config) ??
+            CODEX_DYNAMIC_TOOL_TIMEOUT_MS)
+        : requestedMs + CODEX_DYNAMIC_TOOL_TIMEOUT_MS,
+    );
+  }
   return clampDynamicToolTimeoutMs(
     readDynamicToolCallTimeoutMs(params.call.arguments) ??
       readConfiguredDynamicToolTimeoutMs(params.call.tool, params.config) ??

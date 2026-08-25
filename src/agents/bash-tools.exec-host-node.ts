@@ -206,14 +206,6 @@ export async function executeNodeHostCommand(
     approvalId: string,
     options: { requireDeliveryRoute?: boolean; suppressDelivery?: boolean } = {},
   ) => {
-    // [sigil-trace] spike instrumentation (2026-08-24): map the approval fan-out.
-    try {
-      const { appendFileSync } = await import("node:fs");
-      appendFileSync(
-        "/tmp/sigil-approval-trace.log",
-        `${new Date().toISOString()} [node-phase] registerExecApproval approvalId=${approvalId} toolCallId=${String(params.toolCallId ?? "")} cmd=${JSON.stringify(params.command).slice(0, 90)}\n`,
-      );
-    } catch {}
     return await registerExecApprovalRequestForHostOrThrow({
       approvalId,
       systemRunPlan: prepared.plan,

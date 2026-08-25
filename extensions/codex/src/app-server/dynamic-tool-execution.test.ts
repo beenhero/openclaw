@@ -82,6 +82,55 @@ describe("dynamic tool execution helpers", () => {
     ).toBe(timeoutMs);
   });
 
+  it("gives exec-capable tools approval headroom ON TOP of the model's command timeout", () => {
+    // The model's timeoutSeconds is the INNER command budget; the outer
+    // watchdog must also cover a human approval hold (awaitApprovalInline),
+    // or a requested 30s kills the blocked call while the human decides.
+    expect(
+      resolveDynamicToolCallTimeoutMs({
+        call: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          callId: "call-exec-headroom",
+          namespace: null,
+          tool: "node_exec",
+          arguments: { command: "touch /tmp/x", timeoutSeconds: 30 },
+        },
+        config: undefined,
+      }),
+    ).toBe(30_000 + 30_000 + CODEX_DYNAMIC_TOOL_TIMEOUT_MS);
+  });
+  it("exec tool without a requested timeout keeps the human-approval default", () => {
+    expect(
+      resolveDynamicToolCallTimeoutMs({
+        call: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          callId: "call-exec-default",
+          namespace: null,
+          tool: "exec",
+          arguments: { command: "touch /tmp/x" },
+        },
+        config: undefined,
+      }),
+    ).toBe(CODEX_DYNAMIC_TOOL_TIMEOUT_MS);
+  });
+  it("exec approval headroom stays under the dynamic-tool hard cap", () => {
+    expect(
+      resolveDynamicToolCallTimeoutMs({
+        call: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          callId: "call-exec-cap",
+          namespace: null,
+          tool: "node_exec",
+          arguments: { command: "sleep 500", timeoutSeconds: 580 },
+        },
+        config: undefined,
+      }),
+    ).toBe(600_000);
+  });
+
   it("uses configured image generation timeouts for Codex dynamic tool calls", () => {
     expect(
       resolveDynamicToolCallTimeoutMs({

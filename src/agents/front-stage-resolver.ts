@@ -257,25 +257,9 @@ async function consultResolver(args: {
       : DEFAULT_FRONT_STAGE_RESOLVER_TIMEOUT_MS;
 
   // --- 6. Decide ---
-  // [sigil-trace] spike instrumentation (2026-08-24): map the approval fan-out.
-  const sigilTraceT0 = Date.now();
-  try {
-    const { appendFileSync } = await import("node:fs");
-    appendFileSync(
-      "/tmp/sigil-approval-trace.log",
-      `${new Date().toISOString()} [front-stage] ASK requestId=${req.requestId} tool=${String(toolName)} timeoutMs=${timeoutMs}\n`,
-    );
-  } catch {}
   let verdict: Awaited<ReturnType<typeof decideCapabilityApproval>>;
   try {
     verdict = await decideCapabilityApproval(req, { deadlineMs: timeoutMs, signal });
-    try {
-      const { appendFileSync } = await import("node:fs");
-      appendFileSync(
-        "/tmp/sigil-approval-trace.log",
-        `${new Date().toISOString()} [front-stage] VERDICT requestId=${req.requestId} kind=${verdict.kind} elapsedMs=${Date.now() - sigilTraceT0}\n`,
-      );
-    } catch {}
   } catch (err) {
     // Fail-closed: unexpected throw from decideCapabilityApproval → deny/failed
     return {
