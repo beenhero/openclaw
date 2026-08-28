@@ -3,12 +3,13 @@
  * app-server tool events can still run OpenClaw policy and diagnostics.
  */
 import { createHash } from "node:crypto";
-import type {
-  BeforeToolCallFailureDisposition,
-  EmbeddedRunAttemptParamsV2 as EmbeddedRunAttemptParams,
-  NativeHookRelayEvent,
-  NativeHookRelayRegistrationHandle,
-  registerNativeHookRelay,
+import {
+  type BeforeToolCallFailureDisposition,
+  type EmbeddedRunAttemptParamsV2 as EmbeddedRunAttemptParams,
+  hasApprovalResolverForScope,
+  type NativeHookRelayEvent,
+  type NativeHookRelayRegistrationHandle,
+  type registerNativeHookRelay,
 } from "openclaw/plugin-sdk/agent-harness-runtime";
 import { emitTrustedDiagnosticEvent } from "openclaw/plugin-sdk/diagnostic-runtime";
 import { createDeferred } from "openclaw/plugin-sdk/extension-shared";
@@ -42,6 +43,11 @@ const CODEX_NATIVE_HOOK_RELAY_COMMAND_MAX_PARENT_MARGIN_MS = 1_000;
 // The relay starts a niced Node subprocess, so busy hosts can exceed the former
 // five-second relay timeout before policy and task-mirroring work completes.
 const CODEX_NATIVE_HOOK_RELAY_DEFAULT_TIMEOUT_SEC = 10;
+// pre_tool_use can hold a HUMAN decision when a process.exec approval resolver
+// is registered (e.g. a wallet signature via the before-tool-call front stage);
+// the hook window must cover the resolver's approval window (300s) plus margin,
+// or the hook times out mid-approval and blocks the tool call.
+const CODEX_NATIVE_HOOK_RELAY_APPROVAL_TIMEOUT_SEC = 330;
 const CODEX_NATIVE_HOOK_RELAY_UNREGISTER_GRACE_MS = 10_000;
 const CODEX_NATIVE_HOOK_RELAY_UNREGISTER_EXTRA_GRACE_MS = 5_000;
 const MAX_PENDING_DIRECT_CHILD_ADMISSIONS = 32;
@@ -445,6 +451,15 @@ export function buildCodexNativeHookRelayConfig(params: {
 }): JsonObject {
   const events = params.events?.length ? params.events : CODEX_NATIVE_HOOK_RELAY_EVENTS;
   const selectedEvents = new Set<NativeHookRelayEvent>(events);
+  // Resolver-aware default: a registered process.exec approval resolver means
+  // the pre_tool_use hook can legitimately hold for a human approval — give it
+  // the approval window instead of the 10s liveness default. An explicit
+  // hookTimeoutSec still wins.
+  const effectiveHookTimeoutSec =
+    params.hookTimeoutSec ??
+    (hasApprovalResolverForScope("process.exec")
+      ? CODEX_NATIVE_HOOK_RELAY_APPROVAL_TIMEOUT_SEC
+      : undefined);
   const config: JsonObject = {
     "features.hooks": true,
   };
@@ -466,7 +481,7 @@ export function buildCodexNativeHookRelayConfig(params: {
       }
       continue;
     }
-    const timeout = normalizeHookTimeoutSec(params.hookTimeoutSec);
+    const timeout = normalizeHookTimeoutSec(effectiveHookTimeoutSec);
     const command = params.relay.commandForEvent(event, {
       timeoutMs: resolveCodexNativeHookRelayCommandTimeoutMs(timeout),
     });

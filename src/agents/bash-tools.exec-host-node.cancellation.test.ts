@@ -221,7 +221,9 @@ describe("node-host dispatch cancellation", () => {
     expect(result.content).toEqual([{ type: "text", text: "ok" }]);
     expect(callGatewayToolMock).toHaveBeenCalledWith(
       "node.invoke",
-      { timeoutMs: 40_000 },
+      // Approved dispatches carry the node-invoke-policy approval headroom
+      // (330s) on top of the command budget: a policy may hold for a human.
+      { timeoutMs: 365_000 },
       expect.objectContaining({ command: "system.run" }),
       { scopes: ["operator.write", "operator.approvals"], signal: controller.signal },
     );

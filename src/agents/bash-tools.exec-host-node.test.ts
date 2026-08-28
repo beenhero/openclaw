@@ -1276,8 +1276,10 @@ describe("executeNodeHostCommand", () => {
     });
 
     const call = requireGatewayCommand("system.run");
-    expect(call.options.timeoutMs).toBe(40_000);
-    expect(call.params?.timeoutMs).toBe(35_000);
+    // Approved dispatches carry the node-invoke-policy approval headroom (330s)
+    // on top of the command budget: a policy may hold for a human decision.
+    expect(call.options.timeoutMs).toBe(370_000);
+    expect(call.params?.timeoutMs).toBe(365_000);
     expect(call.callOptions).toEqual({ scopes: ["operator.write", "operator.approvals"] });
     const runParams = requireRunParams(call);
     expect(runParams.approved).toBe(true);

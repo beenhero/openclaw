@@ -18,6 +18,7 @@ import {
   defaultExecAutoReviewer,
   resolveExecAutoReviewDecision,
 } from "../infra/exec-auto-review.js";
+import { addSafeTimeoutDelayGraceMs } from "../utils/timer-delay.js";
 import { formatExecApprovalContinuationSourceOutput } from "./bash-tools.exec-approval-output.js";
 import {
   buildExecApprovalRequesterContext,
@@ -46,6 +47,30 @@ import type { AgentToolResult } from "./runtime/index.js";
 import { callGatewayTool } from "./tools/gateway.js";
 
 const APPROVED_NODE_INVOKE_SCOPES = [WRITE_SCOPE, APPROVALS_SCOPE];
+
+// A node-invoke POLICY (registerNodeInvokePolicy) may lawfully hold an APPROVED
+// dispatch for a human decision — e.g. a wallet-signing gate deciding over the
+// exact bytes being dispatched. The invocation deadline must cover that hold ON
+// TOP of the command budget: the default ~40s invoke deadline killed live
+// wallet waits mid-signature. Applied to approved dispatches only — unapproved
+// paths never reach a policy hold.
+const NODE_INVOKE_POLICY_APPROVAL_HEADROOM_MS = 330_000;
+
+type NodeDispatchTarget = Awaited<ReturnType<typeof resolveNodeExecutionTarget>>;
+
+function withApprovalDispatchHeadroom(target: NodeDispatchTarget): NodeDispatchTarget {
+  return {
+    ...target,
+    invokeDeadlineMs: addSafeTimeoutDelayGraceMs(
+      target.invokeDeadlineMs,
+      NODE_INVOKE_POLICY_APPROVAL_HEADROOM_MS,
+    ),
+    invokeWaitMs: addSafeTimeoutDelayGraceMs(
+      target.invokeWaitMs,
+      NODE_INVOKE_POLICY_APPROVAL_HEADROOM_MS,
+    ),
+  };
+}
 
 type NodeGatewayDispatchAuthority =
   | "current-policy"
@@ -559,10 +584,11 @@ export async function executeNodeHostCommand(
             }
             // Approved follow-up invocations need approval scopes because they mutate remote node state.
             nodeInvocationStarted = true;
+            const followupDispatchTarget = withApprovalDispatchHeadroom(target);
             const invocation = await invokeNodeSystemRun({
-              invokeWaitMs: target.invokeWaitMs,
+              invokeWaitMs: followupDispatchTarget.invokeWaitMs,
               invoke: buildNodeSystemRunInvoke({
-                target,
+                target: followupDispatchTarget,
                 command: prepared.argv,
                 rawCommand: prepared.transportRawCommand,
                 cwd: prepared.cwd,
@@ -664,8 +690,15 @@ export async function executeNodeHostCommand(
   }
 
   params.signal?.throwIfAborted();
+  // Approved dispatches may hold at a node-invoke policy for a human decision;
+  // give them the approval headroom (unapproved dispatches keep the tight
+  // command-budget deadline).
+  const dispatchTarget =
+    (inlineApprovedByAsk || inlineApprovalSource) && inlineApprovalId
+      ? withApprovalDispatchHeadroom(target)
+      : target;
   const invoke = buildNodeSystemRunInvoke({
-    target,
+    target: dispatchTarget,
     command: prepared.argv,
     rawCommand: prepared.transportRawCommand,
     cwd: prepared.cwd,
@@ -703,7 +736,7 @@ export async function executeNodeHostCommand(
   params.signal?.throwIfAborted();
   return dispatchNodeSystemRun({
     request: params,
-    target,
+    target: dispatchTarget,
     invoke,
     ...((inlineApprovedByAsk || inlineApprovalSource) && inlineApprovalId
       ? { scopes: APPROVED_NODE_INVOKE_SCOPES }
