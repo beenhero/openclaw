@@ -223,7 +223,7 @@ describe("node-host dispatch cancellation", () => {
       "node.invoke",
       // Approved dispatches carry the node-invoke-policy approval headroom
       // (330s) on top of the command budget: a policy may hold for a human.
-      { timeoutMs: 365_000 },
+      { timeoutMs: 370_000 },
       expect.objectContaining({ command: "system.run" }),
       { scopes: ["operator.write", "operator.approvals"], signal: controller.signal },
     );

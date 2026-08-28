@@ -84,7 +84,7 @@ describe("dynamic tool execution helpers", () => {
 
   it("gives exec-capable tools approval headroom ON TOP of the model's command timeout", () => {
     // The model's timeoutSeconds is the INNER command budget; the outer
-    // watchdog must also cover a human approval hold (awaitApprovalInline),
+    // watchdog must also cover a human approval hold (inline approval waits),
     // or a requested 30s kills the blocked call while the human decides.
     expect(
       resolveDynamicToolCallTimeoutMs({

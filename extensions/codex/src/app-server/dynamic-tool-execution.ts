@@ -562,7 +562,7 @@ export function resolveDynamicToolCallTimeoutMs(params: {
     );
   }
   // Exec-capable tools can BLOCK inside the tool call on a human approval
-  // (awaitApprovalInline): the model's timeoutSeconds is the INNER command
+  // (inline approval waits): the model's timeoutSeconds is the INNER command
   // budget, so the outer watchdog needs approval headroom ON TOP of it —
   // otherwise a model-requested 30s kills the hold while the human is still
   // deciding, and the late approval resolves an orphan. Without a requested

@@ -633,15 +633,21 @@ export async function handleApprovalResolve<
     params.context.approvalEvents?.publishResolved(params.approvalKind, resolvedEvent as never);
   }
 
+  // Silently-registered approvals (deliverySuppressed) resolve silently on
+  // EVERY operator-facing surface: the channel forwarder and push handlers are
+  // follow-ups for a request the operator never saw. (The forwarder is invoked
+  // DIRECTLY here via forwardResolved — not only via the publishResolved
+  // subscription — so both routes must honor the flag.)
+  const resolvedFollowUpsSuppressed = resolved.snapshot.deliverySuppressed === true;
   const followUps = [
-    params.forwardResolved
+    !resolvedFollowUpsSuppressed && params.forwardResolved
       ? {
           run: params.forwardResolved,
           errorLabel: params.forwardResolvedErrorLabel ?? "approval resolve follow-up failed",
         }
       : null,
-    ...(params.extraResolvedHandlers ?? []),
-    params.context.approvalWebPushDelivery
+    ...(resolvedFollowUpsSuppressed ? [] : (params.extraResolvedHandlers ?? [])),
+    !resolvedFollowUpsSuppressed && params.context.approvalWebPushDelivery
       ? {
           run: params.context.approvalWebPushDelivery.handleResolved,
           errorLabel: `${params.approvalKind} approvals: Web Push resolve failed`,
