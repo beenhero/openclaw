@@ -18,6 +18,7 @@ import {
   defaultExecAutoReviewer,
   resolveExecAutoReviewDecision,
 } from "../infra/exec-auto-review.js";
+import { getActivePluginGatewayNodePolicyRegistry } from "../plugins/runtime.js";
 import { addSafeTimeoutDelayGraceMs } from "../utils/timer-delay.js";
 import { formatExecApprovalContinuationSourceOutput } from "./bash-tools.exec-approval-output.js";
 import {
@@ -76,7 +77,29 @@ type NodeGatewayDispatchAuthority =
   | "current-policy"
   | "human-approval"
   | "auto-review"
-  | "ask-fallback";
+  | "ask-fallback"
+  | "node-invoke-policy";
+
+// A registered node-invoke POLICY for system.run (registerNodeInvokePolicy —
+// e.g. a wallet-signing gate) is itself a fail-closed human decision surface
+// applied by the gateway to every system.run dispatch. When one is registered,
+// the native exec ask card would be a SECOND, redundant human surface for the
+// same command — so the native ask becomes policy-owned: registered silently
+// (audit trail + node approval contract intact) and self-resolved, with the
+// human decision made exactly once, at the policy.
+function hasSystemRunNodeInvokePolicy(): boolean {
+  try {
+    const registry = getActivePluginGatewayNodePolicyRegistry();
+    return (
+      registry?.nodeInvokePolicies?.some((entry) =>
+        entry.policy.commands.includes("system.run"),
+      ) === true
+    );
+  } catch {
+    // Fail toward the native ask (two surfaces are safe; zero are not).
+    return false;
+  }
+}
 
 type NodeGatewayPolicyCheckpoint = {
   hostSecurity: ExecSecurity;
@@ -122,6 +145,17 @@ async function assertCurrentNodeGatewayPolicyAllowsDispatch(params: {
       current.askFallback !== expected.askFallback
     ) {
       throw new Error("exec denied: host=node fallback policy changed before dispatch");
+    }
+    return;
+  }
+  if (params.authority === "node-invoke-policy") {
+    // The dispatch is authorized BY the gateway's node-invoke policy gating it;
+    // if that policy unregistered since the ask was self-resolved, the premise
+    // is gone — fall back to requiring the native ask (deny this dispatch).
+    if (!hasSystemRunNodeInvokePolicy()) {
+      throw new Error(
+        "exec denied: host=node node-invoke policy unregistered before dispatch (native ask required)",
+      );
     }
     return;
   }
@@ -338,7 +372,28 @@ export async function executeNodeHostCommand(
   let inlineApprovalId: string | undefined;
   let inlineDispatchAuthority: NodeGatewayDispatchAuthority = "current-policy";
   let inlineFallbackPolicy: NodeGatewayPolicyCheckpoint | undefined;
-  if (requiresAsk) {
+  if (requiresAsk && hasSystemRunNodeInvokePolicy()) {
+    // Policy-owned native ask: the gateway's node-invoke policy is the human
+    // decision surface for this dispatch — no card, no delivery, no second
+    // prompt. Register silently (audit trail + the node's approval contract
+    // stay intact) and self-resolve; the dispatch assert below re-checks the
+    // policy is still registered, and the policy itself gates fail-closed.
+    const approvalId = randomUUID();
+    await registerNodeApproval(approvalId, {
+      requireDeliveryRoute: false,
+      suppressDelivery: true,
+    });
+    await callGatewayTool(
+      "exec.approval.resolve",
+      { timeoutMs: 15_000 },
+      { id: approvalId, decision: "allow-once" },
+      { scopes: [APPROVALS_SCOPE], requireAgentRuntimeIdentity: true },
+    );
+    inlineApprovedByAsk = true;
+    inlineApprovalDecision = "allow-once";
+    inlineApprovalId = approvalId;
+    inlineDispatchAuthority = "node-invoke-policy";
+  } else if (requiresAsk) {
     const autoReviewHasBoundCommand = analysisOk && autoReviewArgv !== undefined;
     // Remote policy may be stricter; local auto-review cannot bypass that floor.
     const autoReviewBlockedByNodePolicy =

@@ -485,6 +485,11 @@ vi.mock("./tools/nodes-utils.js", () => ({
   resolveNodeIdFromList: resolveNodeIdFromListMock,
 }));
 
+const nodeInvokePolicyRegistryMock = vi.hoisted(() => ({ value: null as unknown }));
+vi.mock("../plugins/runtime.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../plugins/runtime.js")>()),
+  getActivePluginGatewayNodePolicyRegistry: () => nodeInvokePolicyRegistryMock.value,
+}));
 vi.mock("../logger.js", () => ({
   logInfo: vi.fn(),
 }));
@@ -703,6 +708,7 @@ describe("executeNodeHostCommand", () => {
   });
 
   beforeEach(() => {
+    nodeInvokePolicyRegistryMock.value = null;
     callGatewayToolMock.mockReset();
     callGatewayToolMock.mockImplementation(
       createNodeGatewayHandler({
@@ -1292,6 +1298,165 @@ describe("executeNodeHostCommand", () => {
     expect(runParams.turnSourceAccountId).toBe("work");
     expect(runParams.turnSourceThreadId).toBe("42");
     expect(resolveExecHostApprovalContextMock).toHaveBeenCalledTimes(2);
+  });
+
+  // ── policy-owned native ask: a registered system.run node-invoke policy is
+  // the human decision surface — the native card is silenced (no delivery)
+  // and the ask self-resolves; the policy gates the dispatch itself.
+  it("policy-owned ask: no card route, silent register + self-resolve, approved dispatch", async () => {
+    createExecApprovalRequestRouteMock.mockClear();
+    nodeInvokePolicyRegistryMock.value = {
+      nodeInvokePolicies: [{ policy: { commands: ["system.run"] } }],
+    };
+    resolveExecHostApprovalContextMock.mockReturnValue({
+      approvals: { allowlist: [], file: { version: 1, agents: {} } },
+      hostSecurity: "full",
+      hostAsk: "always",
+      askFallback: "deny",
+    });
+
+    const result = await executeNodeHostCommand(
+      createNodeHostRequest({ toolCallId: "tool-node-policy-owned" }),
+    );
+
+    // No approval-request ROUTE (card) was built; the register happened with
+    // delivery suppressed, and the ask was self-resolved allow-once.
+    expect(createExecApprovalRequestRouteMock).not.toHaveBeenCalled();
+    expect(registerExecApprovalRequestForHostOrThrowMock).toHaveBeenCalledWith(
+      expect.objectContaining({ requireDeliveryRoute: false, suppressDelivery: true }),
+    );
+    const resolveCall = callGatewayToolMock.mock.calls.find(
+      (c) => c[0] === "exec.approval.resolve",
+    );
+    expect(resolveCall?.[2]).toMatchObject({ decision: "allow-once" });
+    // The dispatch went out approved (the node-invoke policy gates it).
+    const invokeCall = callGatewayToolMock.mock.calls.find(
+      (c) =>
+        c[0] === "node.invoke" &&
+        (c[2] as { command?: string } | undefined)?.command === "system.run",
+    );
+    expect(invokeCall).toBeDefined();
+    const runParams = requireRunParams({
+      method: "node.invoke",
+      options: invokeCall?.[1] as never,
+      params: invokeCall?.[2] as never,
+      callOptions: invokeCall?.[3],
+    } as never);
+    expect(runParams.approved).toBe(true);
+    expect(runParams.approvalDecision).toBe("allow-once");
+    expect(result.details?.status).not.toBe("approval-pending");
+  });
+
+  it("policy-owned ask: policy unregisters before dispatch → deny, no invoke", async () => {
+    nodeInvokePolicyRegistryMock.value = {
+      nodeInvokePolicies: [{ policy: { commands: ["system.run"] } }],
+    };
+    resolveExecHostApprovalContextMock.mockReturnValue({
+      approvals: { allowlist: [], file: { version: 1, agents: {} } },
+      hostSecurity: "full",
+      hostAsk: "always",
+      askFallback: "deny",
+    });
+    // The self-resolve succeeding is the last step before the dispatch assert:
+    // flip the registry away there to exercise the TOCTOU re-check.
+    const original = callGatewayToolMock.getMockImplementation();
+    callGatewayToolMock.mockImplementation(async (method: string, ...rest: never[]) => {
+      if (method === "exec.approval.resolve") {
+        nodeInvokePolicyRegistryMock.value = null;
+      }
+      return original?.(method, ...rest);
+    });
+
+    await expect(
+      executeNodeHostCommand(createNodeHostRequest({ toolCallId: "tool-node-policy-gone" })),
+    ).rejects.toThrow(/node-invoke policy unregistered/);
+
+    expect(
+      callGatewayToolMock.mock.calls.find(
+        (c) =>
+          c[0] === "node.invoke" &&
+          (c[2] as { command?: string } | undefined)?.command === "system.run",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("awaitApprovalInline: approved → executes before returning the real result (no pending)", async () => {
+    resolveExecHostApprovalContextMock.mockReturnValue({
+      approvals: { allowlist: [], file: { version: 1, agents: {} } },
+      hostSecurity: "full",
+      hostAsk: "always",
+      askFallback: "deny",
+    });
+
+    const result = await executeNodeHostCommand(
+      createNodeHostRequest({
+        toolCallId: "tool-node-inline",
+        awaitApprovalInline: true,
+      }),
+    );
+
+    // The decision + dispatch completed INSIDE the call: no pending result was
+    // built, and the node invoke (3rd gateway call) already happened.
+    expect(buildExecApprovalPendingToolResultMock).not.toHaveBeenCalled();
+    expect(result.details?.status).not.toBe("approval-pending");
+    expect(callGatewayToolMock).toHaveBeenCalledTimes(3);
+    const call = requireGatewayCall(2);
+    expect(call.callOptions).toEqual({ scopes: ["operator.write", "operator.approvals"] });
+    const runParams = requireRunParams(call);
+    expect(runParams.approved).toBe(true);
+    expect(runParams.approvalDecision).toBe("allow-once");
+    expect(runParams.systemRunPlan).toEqual(preparedPlan);
+  });
+
+  it("awaitApprovalInline: denied → deny error, no invoke, no pending", async () => {
+    resolveExecHostApprovalContextMock.mockReturnValue({
+      approvals: { allowlist: [], file: { version: 1, agents: {} } },
+      hostSecurity: "full",
+      hostAsk: "always",
+      askFallback: "deny",
+    });
+    resolveExecApprovalWaitOutcomeMock.mockResolvedValueOnce({
+      kind: "resolved",
+      decision: null,
+      state: { approvedByAsk: false, deniedReason: "user-denied", timeoutContext: undefined },
+    } as never);
+
+    await expect(
+      executeNodeHostCommand(
+        createNodeHostRequest({
+          toolCallId: "tool-node-inline-deny",
+          awaitApprovalInline: true,
+        }),
+      ),
+    ).rejects.toThrow(/user-denied/);
+
+    expect(buildExecApprovalPendingToolResultMock).not.toHaveBeenCalled();
+    // Only the 2 approval-registration gateway calls — never the node invoke.
+    expect(callGatewayToolMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("awaitApprovalInline: approval request fails → deny error, no invoke", async () => {
+    resolveExecHostApprovalContextMock.mockReturnValue({
+      approvals: { allowlist: [], file: { version: 1, agents: {} } },
+      hostSecurity: "full",
+      hostAsk: "always",
+      askFallback: "deny",
+    });
+    resolveExecApprovalWaitOutcomeMock.mockResolvedValueOnce({
+      kind: "request-failed",
+    } as never);
+
+    await expect(
+      executeNodeHostCommand(
+        createNodeHostRequest({
+          toolCallId: "tool-node-inline-reqfail",
+          awaitApprovalInline: true,
+        }),
+      ),
+    ).rejects.toThrow(/approval-request-failed/);
+
+    expect(buildExecApprovalPendingToolResultMock).not.toHaveBeenCalled();
+    expect(callGatewayToolMock).toHaveBeenCalledTimes(2);
   });
 
   it("forwards cancellation without removing detached node approval scopes", async () => {
