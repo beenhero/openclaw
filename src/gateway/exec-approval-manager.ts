@@ -94,6 +94,12 @@ export type ExecApprovalRecord<TPayload = ExecApprovalRequestPayload> = {
   requestedByDeviceId?: string | null;
   requestedByClientId?: string | null;
   requestedByDeviceTokenAuth?: boolean;
+  /**
+   * Registered with delivery suppressed (silent, e.g. auto-review or a
+   * policy-owned ask): resolve/expiry notices stay silent too — a request the
+   * operator never saw must not produce operator-facing follow-ups.
+   */
+  deliverySuppressed?: boolean;
   approvalReviewerDeviceIds?: string[];
   resolvedAtMs?: number;
   decision?: ExecApprovalDecision;

@@ -314,6 +314,11 @@ export async function handlePendingApprovalRequest<
     // per-occurrence spam #128031 removed, while an approval client can end
     // the recurrence with one allow-always (standing grant).
     const approvalClientsOnly = !suppressDelivery && params.deliverToApprovalClientsOnly === true;
+    // Persisted so the RESOLVE/EXPIRY side stays silent too: a request the
+    // operator never saw must not produce operator-facing follow-up notices.
+    if (suppressDelivery) {
+      params.record.deliverySuppressed = true;
+    }
     const approvalClientConnIds = suppressDelivery
       ? null
       : resolveApprovalRequestRecipientConnIds({
@@ -620,7 +625,13 @@ export async function handleApprovalResolve<
     record: resolved.snapshot,
     event: resolvedEvent,
   });
-  params.context.approvalEvents?.publishResolved(params.approvalKind, resolvedEvent as never);
+  // Silently-registered approvals (deliverySuppressed) resolve silently: the
+  // channel forwarder subscribes to this publication, and a "resolved" notice
+  // for a request the operator never saw is pure noise. The ws broadcast above
+  // still updates control-plane clients/UI state.
+  if (resolved.snapshot.deliverySuppressed !== true) {
+    params.context.approvalEvents?.publishResolved(params.approvalKind, resolvedEvent as never);
+  }
 
   const followUps = [
     params.forwardResolved
