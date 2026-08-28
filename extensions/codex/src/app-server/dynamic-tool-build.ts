@@ -271,6 +271,11 @@ export async function buildDynamicTools(
     ...toolRunContext,
     exec: {
       ...params.execOverrides,
+      // host=node execs need an explicit remote cwd: without one the invoke
+      // params omit cwd entirely and cwd-faithful gates (e.g. a canonicalizing
+      // node-invoke policy) fail closed. Default to this run's effective
+      // cwd/workspace; an explicit per-call workdir still wins.
+      nodeCwd: input.effectiveCwd ?? input.effectiveWorkspace,
       ...(input.sessionPermissionPolicy ? { mode: input.sessionPermissionPolicy.execMode } : {}),
       ...resolveCodexNodeExecToolOverrides(nativeExecutionPolicy),
       config: params.config,
