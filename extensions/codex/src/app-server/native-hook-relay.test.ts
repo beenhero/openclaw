@@ -57,6 +57,42 @@ describe("Codex native hook relay managed policy", () => {
 });
 
 describe("Codex native hook relay config", () => {
+  it("gives pre_tool_use the human-approval window when a process.exec resolver is registered", async () => {
+    // A registered resolver means the hook can hold a HUMAN decision (wallet
+    // signature); the 10s default would kill the hold mid-approval.
+    const { createEmptyPluginRegistry, setActivePluginRegistry } =
+      await import("openclaw/plugin-sdk/plugin-test-runtime");
+    const registry = createEmptyPluginRegistry();
+    registry.approvalResolvers.push({
+      pluginId: "sigil",
+      pluginName: "Sigil",
+      source: "test",
+      registration: {
+        id: "sigil-exec-resolver",
+        description: "test resolver",
+        scope: { capabilities: ["process.exec"] },
+        exclusive: true,
+        resolve: async () => ({ requestId: "r", decision: "deny" }),
+      },
+    } as never);
+    setActivePluginRegistry(registry);
+    try {
+      const config = buildCodexNativeHookRelayConfig({ relay: createRelay() });
+      const preToolUse = (
+        config["hooks.PreToolUse"] as Array<{ hooks: Array<{ timeout: number }> }>
+      )[0];
+      expect(preToolUse?.hooks?.[0]?.timeout).toBe(330);
+      // Explicit hookTimeoutSec still wins over the resolver-aware default.
+      const explicit = buildCodexNativeHookRelayConfig({ relay: createRelay(), hookTimeoutSec: 7 });
+      const explicitPre = (
+        explicit["hooks.PreToolUse"] as Array<{ hooks: Array<{ timeout: number }> }>
+      )[0];
+      expect(explicitPre?.hooks?.[0]?.timeout).toBe(7);
+    } finally {
+      setActivePluginRegistry(createEmptyPluginRegistry());
+    }
+  });
+
   it("builds deterministic Codex config overrides with command hooks", () => {
     const config = buildCodexNativeHookRelayConfig({
       relay: createRelay(),
