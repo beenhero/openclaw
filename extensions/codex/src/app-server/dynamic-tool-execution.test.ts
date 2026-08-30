@@ -102,7 +102,7 @@ describe("dynamic tool execution helpers", () => {
         },
         config: undefined,
       }),
-    ).toBe(30_000 + 30_000 + CODEX_DYNAMIC_TOOL_TIMEOUT_MS);
+    ).toBe(30_000 + 30_000 + 330_000);
   });
   it("exec tool without a requested timeout keeps the human-approval default", () => {
     expect(
@@ -117,7 +117,8 @@ describe("dynamic tool execution helpers", () => {
         },
         config: undefined,
       }),
-    ).toBe(CODEX_DYNAMIC_TOOL_TIMEOUT_MS);
+      // max(default, approval hold): the hold window floors the exec watchdog.
+    ).toBe(330_000);
   });
   it("exec approval headroom stays under the dynamic-tool hard cap", () => {
     expect(
