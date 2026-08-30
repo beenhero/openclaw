@@ -50,6 +50,12 @@ export { resolveCodexToolAbortTerminalReason } from "./tool-abort-terminal-reaso
  * `resolveDynamicToolCallTimeoutMs` before this default is used.
  */
 const CODEX_DYNAMIC_TOOL_TIMEOUT_MS = 300_000;
+// Exec-capable tools can hold INSIDE the tool call for a human approval
+// (inline approval waits — shouldAwaitExecApprovalInline / node-invoke policy
+// holds). The outer watchdog must cover that hold ON TOP of the model's own
+// command budget; liveness defaults must not bound a human decision.
+// 330s = the 300s approval window + margin.
+const CODEX_EXEC_APPROVAL_HOLD_TIMEOUT_MS = 330_000;
 /** Hard cap for per-call Codex dynamic tool timeout overrides. */
 const CODEX_DYNAMIC_TOOL_MAX_TIMEOUT_MS = 600_000;
 // timeoutSeconds is an inner tool budget. Keep enough outer-watchdog headroom
@@ -573,9 +579,12 @@ export function resolveDynamicToolCallTimeoutMs(params: {
     const requestedMs = readDynamicToolCallTimeoutMs(params.call.arguments);
     return clampDynamicToolTimeoutMs(
       requestedMs === undefined
-        ? (readConfiguredDynamicToolTimeoutMs(params.call.tool, params.config) ??
-            CODEX_DYNAMIC_TOOL_TIMEOUT_MS)
-        : requestedMs + CODEX_DYNAMIC_TOOL_TIMEOUT_MS,
+        ? Math.max(
+            readConfiguredDynamicToolTimeoutMs(params.call.tool, params.config) ??
+              CODEX_DYNAMIC_TOOL_TIMEOUT_MS,
+            CODEX_EXEC_APPROVAL_HOLD_TIMEOUT_MS,
+          )
+        : requestedMs + CODEX_EXEC_APPROVAL_HOLD_TIMEOUT_MS,
     );
   }
   return clampDynamicToolTimeoutMs(

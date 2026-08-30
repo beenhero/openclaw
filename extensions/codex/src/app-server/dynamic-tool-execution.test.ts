@@ -14,7 +14,7 @@ import type { CodexDynamicToolCallParams, CodexDynamicToolCallResponse } from ".
 
 const dynamicCallContext = { threadId: "thread-1", turnId: "turn-1", namespace: null };
 
-const CODEX_DYNAMIC_TOOL_TIMEOUT_MS = 90_000;
+const CODEX_DYNAMIC_TOOL_TIMEOUT_MS = 300_000;
 const CODEX_DYNAMIC_TOOL_MAX_TIMEOUT_MS = 600_000;
 const CODEX_DYNAMIC_IMAGE_TOOL_TIMEOUT_MS = 60_000;
 const CODEX_DYNAMIC_MESSAGE_TOOL_TIMEOUT_MS = CODEX_DYNAMIC_TOOL_MAX_TIMEOUT_MS;
@@ -98,7 +98,7 @@ describe("dynamic tool execution helpers", () => {
         },
         config: undefined,
       }),
-    ).toBe(30_000 + 30_000 + CODEX_DYNAMIC_TOOL_TIMEOUT_MS);
+    ).toBe(30_000 + 30_000 + 330_000);
   });
   it("exec tool without a requested timeout keeps the human-approval default", () => {
     expect(
@@ -113,7 +113,8 @@ describe("dynamic tool execution helpers", () => {
         },
         config: undefined,
       }),
-    ).toBe(CODEX_DYNAMIC_TOOL_TIMEOUT_MS);
+      // max(default, approval hold): the hold window floors the exec watchdog.
+    ).toBe(330_000);
   });
   it("exec approval headroom stays under the dynamic-tool hard cap", () => {
     expect(
@@ -358,7 +359,7 @@ describe("dynamic tool execution helpers", () => {
     { name: "one hour", timeoutSeconds: 3600, expectedMs: 3_630_000 },
     { name: "clamped maximum", timeoutSeconds: 99_999, expectedMs: 3_630_000 },
     { name: "clamped minimum", timeoutSeconds: 1, expectedMs: 60_000 },
-    { name: "invalid fractional", timeoutSeconds: 1.5, expectedMs: 90_000 },
+    { name: "invalid fractional", timeoutSeconds: 1.5, expectedMs: CODEX_DYNAMIC_TOOL_TIMEOUT_MS },
   ])("preserves the $name human question wait", ({ timeoutSeconds, expectedMs }) => {
     for (const tool of ["secrets", "ask_user"]) {
       expect(
@@ -390,7 +391,7 @@ describe("dynamic tool execution helpers", () => {
         },
         config: undefined,
       }),
-    ).toBe(90_000);
+    ).toBe(CODEX_DYNAMIC_TOOL_TIMEOUT_MS);
   });
 
   it("returns a failed dynamic tool response when an app-server tool call exceeds the deadline", async () => {
