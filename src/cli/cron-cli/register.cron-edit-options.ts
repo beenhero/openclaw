@@ -1,11 +1,20 @@
+import path from "node:path";
 import { parseStrictPositiveInteger } from "@openclaw/normalization-core/number-coercion";
-import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
+import {
+  normalizeOptionalLowercaseString,
+  normalizeOptionalString,
+} from "@openclaw/normalization-core/string-coerce";
+import { publishPythonInlineArtifact } from "../../cron/python-inline-artifact.js";
 import { isSystemMonitorDeclaration } from "../../cron/system-owned-declaration.js";
-import type { CronJob } from "../../cron/types.js";
-import { isSystemOwnedCronPayloadKind } from "../../cron/types.js";
+import {
+  CRON_COMMAND_CONTINUATION_MAX_INPUT_BYTES,
+  type CronJob,
+  isSystemOwnedCronPayloadKind,
+} from "../../cron/types.js";
 import {
   parseCronCommandArgv,
   parseCronCommandEnv,
+  parseCronDisclosureList,
   parseCronFallbacks,
   parseCronToolsAllow,
 } from "./shared.js";
@@ -34,8 +43,16 @@ export async function resolveCronEditPayloadDeliveryPatch(
   const scriptPath = normalizeOptionalString(opts.script);
   const commandShell = normalizeOptionalString(opts.command);
   const commandArgv = parseCronCommandArgv(opts.commandArgv);
-  if (commandShell && commandArgv) {
-    throw new Error("Pass command payload either with --command or --command-argv, not both.");
+  const pythonFile = normalizeOptionalString(opts.pythonFile);
+  if (!pythonFile && (opts.pythonBin !== undefined || opts.pythonArg !== undefined)) {
+    throw new Error("--python-bin and --python-arg require --python-file.");
+  }
+  if (
+    [Boolean(commandShell), Boolean(commandArgv), Boolean(pythonFile)].filter(Boolean).length > 1
+  ) {
+    throw new Error(
+      "Pass command payload with exactly one of --command, --command-argv, or --python-file.",
+    );
   }
   // Raw flag presence owns the set/clear mutex even when normalization omits a blank value.
   const hasModel = typeof opts.model === "string";
@@ -84,6 +101,67 @@ export async function resolveCronEditPayloadDeliveryPatch(
   if (opts.outputMaxBytes !== undefined && outputMaxBytes === undefined) {
     throw new Error("Invalid --output-max-bytes (must be a positive integer).");
   }
+  const continuationInstructions = normalizeOptionalString(opts.continueMessage);
+  const continuationModel = normalizeOptionalString(opts.continueModel);
+  const continuationInputMaxBytes =
+    parseStrictPositiveInteger(opts.continueInputMaxBytes) ?? 256 * 1024;
+  if (
+    opts.continueInputMaxBytes !== undefined &&
+    parseStrictPositiveInteger(opts.continueInputMaxBytes) === undefined
+  ) {
+    throw new Error("Invalid --continue-input-max-bytes (must be a positive integer).");
+  }
+  if (continuationInputMaxBytes > CRON_COMMAND_CONTINUATION_MAX_INPUT_BYTES) {
+    throw new Error(
+      `--continue-input-max-bytes must not exceed ${CRON_COMMAND_CONTINUATION_MAX_INPUT_BYTES}.`,
+    );
+  }
+  const hasContinuationOption =
+    opts.continueMessage !== undefined ||
+    opts.continueInputMaxBytes !== undefined ||
+    opts.continueTools !== undefined ||
+    opts.continueModel !== undefined;
+  const hasContinuationField = hasContinuationOption || Boolean(opts.clearContinuation);
+  if (opts.clearContinuation && hasContinuationOption) {
+    throw new Error("Use --clear-continuation or continuation options, not both.");
+  }
+  if (hasContinuationField && !opts.clearContinuation && !continuationInstructions) {
+    throw new Error("--continue-message must be non-blank when using continuation options.");
+  }
+  const commandEnvMode = normalizeOptionalLowercaseString(opts.commandEnvMode);
+  if (
+    opts.commandEnvMode !== undefined &&
+    commandEnvMode !== "inherit" &&
+    commandEnvMode !== "replace"
+  ) {
+    throw new Error("--command-env-mode must be inherit or replace.");
+  }
+  const consequenceSummary = normalizeOptionalString(opts.consequenceSummary);
+  const hasConsequenceOption =
+    opts.consequenceSummary !== undefined ||
+    opts.filesystemDisclosure !== undefined ||
+    opts.networkDisclosure !== undefined ||
+    opts.dependencyDisclosure !== undefined;
+  if (hasConsequenceOption && !consequenceSummary) {
+    throw new Error("--consequence-summary must be non-blank when using consequence disclosures.");
+  }
+  const consequences = consequenceSummary
+    ? {
+        summary: consequenceSummary,
+        filesystem: {
+          access: "ambient-host-user" as const,
+          disclosures: parseCronDisclosureList(
+            opts.filesystemDisclosure,
+            "--filesystem-disclosure",
+          ),
+        },
+        network: {
+          access: "ambient-host-user" as const,
+          disclosures: parseCronDisclosureList(opts.networkDisclosure, "--network-disclosure"),
+        },
+        dependencies: parseCronDisclosureList(opts.dependencyDisclosure, "--dependency-disclosure"),
+      }
+    : undefined;
   const scriptTimeoutSeconds = parseStrictPositiveInteger(opts.scriptTimeoutSeconds);
   if (opts.scriptTimeoutSeconds !== undefined && scriptTimeoutSeconds === undefined) {
     throw new Error("Invalid --script-timeout-seconds (must be a positive integer).");
@@ -128,9 +206,13 @@ export async function resolveCronEditPayloadDeliveryPatch(
   const hasCommandSpecificPayloadField =
     Boolean(commandShell) ||
     Boolean(commandArgv) ||
+    Boolean(pythonFile) ||
     Boolean(commandCwd) ||
     hasCommandInput ||
     opts.commandEnv !== undefined ||
+    opts.commandEnvMode !== undefined ||
+    hasContinuationField ||
+    hasConsequenceOption ||
     noOutputTimeoutSeconds !== undefined ||
     outputMaxBytes !== undefined;
   const hasToolsAllowPatch =
@@ -239,22 +321,88 @@ export async function resolveCronEditPayloadDeliveryPatch(
     assignToolsAllowPatch(payload);
     patch.payload = payload;
   } else if (hasCommandPatch) {
-    const payload: Record<string, unknown> = { kind: "command" };
-    assignIf(payload, "argv", commandArgv, Boolean(commandArgv));
-    assignIf(payload, "argv", ["sh", "-lc", commandShell], Boolean(commandShell));
-    assignIf(payload, "cwd", commandCwd, Boolean(commandCwd));
-    assignIf(payload, "env", parseCronCommandEnv(opts.commandEnv), opts.commandEnv !== undefined);
-    assignIf(payload, "input", opts.commandInput, hasCommandInput);
-    assignIf(payload, "timeoutSeconds", timeoutSeconds, hasTimeoutSeconds);
-    assignIf(
-      payload,
-      "noOutputTimeoutSeconds",
-      noOutputTimeoutSeconds,
-      noOutputTimeoutSeconds !== undefined,
-    );
-    assignIf(payload, "outputMaxBytes", outputMaxBytes, outputMaxBytes !== undefined);
-    assignToolsAllowPatch(payload);
-    patch.payload = payload;
+    if (pythonFile) {
+      const pythonPath = normalizeOptionalString(opts.pythonBin);
+      if (!pythonPath || !path.isAbsolute(pythonPath)) {
+        throw new Error("--python-bin must be an absolute path with --python-file.");
+      }
+      if (hasCommandInput) {
+        throw new Error("--command-input cannot be combined with --python-file.");
+      }
+      if (opts.commandEnvMode !== undefined && commandEnvMode !== "replace") {
+        throw new Error("--python-file requires --command-env-mode replace.");
+      }
+      // Force an optimistic config-revision read before doing local publication.
+      await loadExistingJob();
+      const published = await publishPythonInlineArtifact({
+        sourcePath: path.resolve(pythonFile),
+        pythonPath,
+        cwd: path.resolve(commandCwd ?? process.cwd()),
+        env: {
+          ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
+          ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
+          ...(process.env.LANG ? { LANG: process.env.LANG } : {}),
+          ...parseCronCommandEnv(opts.commandEnv),
+        },
+        scriptArgv: Array.isArray(opts.pythonArg)
+          ? opts.pythonArg.filter((item): item is string => typeof item === "string")
+          : [],
+        ...(hasTimeoutSeconds ? { timeoutSeconds } : {}),
+        ...(noOutputTimeoutSeconds !== undefined ? { noOutputTimeoutSeconds } : {}),
+        ...(outputMaxBytes !== undefined ? { outputMaxBytes } : {}),
+        ...(continuationInstructions
+          ? {
+              continuation: {
+                kind: "agentTurn",
+                on: "command-success",
+                instructions: continuationInstructions,
+                input: "stdout",
+                inputMaxBytes: continuationInputMaxBytes,
+                inputTrust: "external",
+                toolsAllow: parseCronToolsAllow(opts.continueTools) ?? [],
+                ...(continuationModel ? { model: continuationModel } : {}),
+              },
+            }
+          : {}),
+        ...(consequences ? { consequences } : {}),
+      });
+      patch.payload = opts.clearContinuation ? { ...published, continuation: null } : published;
+    } else {
+      const payload: Record<string, unknown> = { kind: "command" };
+      assignIf(payload, "argv", commandArgv, Boolean(commandArgv));
+      assignIf(payload, "argv", ["sh", "-lc", commandShell], Boolean(commandShell));
+      assignIf(payload, "cwd", commandCwd, Boolean(commandCwd));
+      assignIf(payload, "env", parseCronCommandEnv(opts.commandEnv), opts.commandEnv !== undefined);
+      assignIf(payload, "envMode", commandEnvMode, opts.commandEnvMode !== undefined);
+      assignIf(payload, "input", opts.commandInput, hasCommandInput);
+      assignIf(payload, "timeoutSeconds", timeoutSeconds, hasTimeoutSeconds);
+      assignIf(
+        payload,
+        "noOutputTimeoutSeconds",
+        noOutputTimeoutSeconds,
+        noOutputTimeoutSeconds !== undefined,
+      );
+      assignIf(payload, "outputMaxBytes", outputMaxBytes, outputMaxBytes !== undefined);
+      if (opts.clearContinuation) {
+        payload.continuation = null;
+      } else if (continuationInstructions) {
+        payload.continuation = {
+          kind: "agentTurn",
+          on: "command-success",
+          instructions: continuationInstructions,
+          input: "stdout",
+          inputMaxBytes: continuationInputMaxBytes,
+          inputTrust: "external",
+          toolsAllow: parseCronToolsAllow(opts.continueTools) ?? [],
+          ...(continuationModel ? { model: continuationModel } : {}),
+        };
+      }
+      if (consequences) {
+        payload.consequences = consequences;
+      }
+      assignToolsAllowPatch(payload);
+      patch.payload = payload;
+    }
   } else if (hasScriptPatch) {
     const payload: Record<string, unknown> = { kind: "script" };
     if (scriptPath) {

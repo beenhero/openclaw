@@ -1,4 +1,5 @@
 import { finiteSecondsToTimerSafeMilliseconds } from "@openclaw/normalization-core/number-coercion";
+import { resolveMaxOutputBytes } from "../process/exec-output.js";
 import { runCommandWithTimeout } from "../process/exec.js";
 import {
   buildCronCommandSummary,
@@ -17,6 +18,26 @@ function secondsToMs(value: number | undefined): number | undefined {
     return EFFECTIVELY_UNBOUNDED_TIMEOUT_MS;
   }
   return finiteSecondsToTimerSafeMilliseconds(value) ?? undefined;
+}
+
+/**
+ * Resolve the literal limits the native runner will enforce. Authorization
+ * consumes this same result so normalization and defaults cannot make the
+ * signed representation differ from the executed one.
+ */
+export function resolveCronCommandExecutionLimits(
+  payload: Extract<CronJob["payload"], { kind: "command" }>,
+): {
+  timeoutMs: number;
+  noOutputTimeoutMs?: number;
+  maxOutputBytes: number;
+} {
+  const noOutputTimeoutMs = secondsToMs(payload.noOutputTimeoutSeconds);
+  return {
+    timeoutMs: secondsToMs(payload.timeoutSeconds) ?? DEFAULT_COMMAND_TIMEOUT_MS,
+    ...(noOutputTimeoutMs !== undefined ? { noOutputTimeoutMs } : {}),
+    maxOutputBytes: resolveMaxOutputBytes(payload.outputMaxBytes, "stdout"),
+  };
 }
 
 function formatCommand(argv: string[]): string {
@@ -96,15 +117,18 @@ export async function runCronCommandJob(params: {
   }
 
   const command = formatCommand(payload.argv);
-  const noOutputTimeoutMs = secondsToMs(payload.noOutputTimeoutSeconds);
+  const limits = resolveCronCommandExecutionLimits(payload);
   try {
     const result = await runCommandWithTimeout(payload.argv, {
-      timeoutMs: secondsToMs(payload.timeoutSeconds) ?? DEFAULT_COMMAND_TIMEOUT_MS,
+      timeoutMs: limits.timeoutMs,
       ...(payload.cwd ? { cwd: payload.cwd } : {}),
       ...(payload.input !== undefined ? { input: payload.input } : {}),
       ...(payload.env ? { env: payload.env } : {}),
-      ...(noOutputTimeoutMs !== undefined ? { noOutputTimeoutMs } : {}),
-      ...(payload.outputMaxBytes !== undefined ? { maxOutputBytes: payload.outputMaxBytes } : {}),
+      ...(payload.envMode === "replace" ? { baseEnv: {} } : {}),
+      ...(limits.noOutputTimeoutMs !== undefined
+        ? { noOutputTimeoutMs: limits.noOutputTimeoutMs }
+        : {}),
+      maxOutputBytes: limits.maxOutputBytes,
       preserveOutputLine: isCronCommandActionCriticalLine,
       ...(params.abortSignal ? { signal: params.abortSignal } : {}),
       killProcessTree: true,
@@ -150,6 +174,14 @@ export async function runCronCommandJob(params: {
           }
         : {}),
       ...(summary ? { summary } : {}),
+      ...(payload.continuation
+        ? {
+            outputText: result.stdout,
+            outputTruncated: Boolean(
+              result.stdoutTruncatedBytes && result.stdoutTruncatedBytes > 0,
+            ),
+          }
+        : {}),
       diagnostics: buildDiagnostics({
         command,
         status,

@@ -286,6 +286,64 @@ describe("cron protocol validators", () => {
     ]);
   });
 
+  it("closes immutable command artifacts and external continuations on the wire", () => {
+    const payload = {
+      kind: "command",
+      argv: ["/usr/bin/python3", "-I", "-S", "-c", "bootstrap"],
+      cwd: "/srv/example",
+      env: { HOME: "/var/empty" },
+      envMode: "replace",
+      input: "frame",
+      artifact: {
+        format: "python-inline-stdin-v1",
+        sourceSha256: "a".repeat(64),
+        sourceBytes: 5,
+        virtualFilename: "openclaw-python://fixture/job.py",
+        displayPath: "/srv/example/job.py",
+        bootstrapSha256: "b".repeat(64),
+      },
+      consequences: {
+        summary: "Read public data.",
+        filesystem: { access: "ambient-host-user", disclosures: [] },
+        network: { access: "ambient-host-user", disclosures: ["public API"] },
+        dependencies: [],
+      },
+      continuation: {
+        kind: "agentTurn",
+        on: "command-success",
+        instructions: "Summarize facts.",
+        input: "stdout",
+        inputMaxBytes: 262_144,
+        inputTrust: "external",
+        toolsAllow: [],
+      },
+    } as const;
+    expectCases(validateCronAddParams, true, [add({ sessionTarget: "isolated", payload })]);
+    expectCases(validateCronUpdateParams, true, [
+      update({ payload: { kind: "command", continuation: null } }),
+    ]);
+    expectCases(validateCronAddParams, false, [
+      add({
+        sessionTarget: "isolated",
+        payload: { ...payload, artifact: { ...payload.artifact, extra: true } },
+      }),
+      add({
+        sessionTarget: "isolated",
+        payload: {
+          ...payload,
+          continuation: { ...payload.continuation, inputTrust: "trusted" },
+        },
+      }),
+      add({
+        sessionTarget: "isolated",
+        payload: {
+          ...payload,
+          continuation: { ...payload.continuation, inputMaxBytes: 1_048_577 },
+        },
+      }),
+    ]);
+  });
+
   it("rejects add params when required scheduling fields are missing", () => {
     const { wakeMode: _wakeMode, ...withoutWakeMode } = minimalAddParams;
     expectCases(validateCronAddParams, false, [withoutWakeMode]);

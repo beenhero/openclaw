@@ -171,6 +171,85 @@ describe("cron edit command", () => {
     );
   });
 
+  it("explicitly republishes immutable Python bytes with optimistic revision binding", async () => {
+    const fixtureDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "cron-edit-python-"));
+    const sourcePath = path.join(fixtureDir, "digest.py");
+    await fs.promises.writeFile(sourcePath, "print('published')\n", "utf8");
+    const configRevision = `sha256:${"A".repeat(43)}`;
+    callGatewayFromCli.mockImplementation(async (method: string) => {
+      if (method === "cron.get") {
+        return {
+          id: "job-1",
+          configRevision,
+          payload: { kind: "command", argv: ["/old/python"] },
+        };
+      }
+      return { ok: true };
+    });
+
+    try {
+      await createCronProgram().parseAsync(
+        [
+          "edit",
+          "job-1",
+          "--python-file",
+          sourcePath,
+          "--python-bin",
+          "/usr/bin/python3",
+          "--command-cwd",
+          fixtureDir,
+          "--continue-message",
+          "Summarize facts only.",
+          "--consequence-summary",
+          "Fetches a remote feed and writes a local digest.",
+          "--filesystem-disclosure",
+          "Writes the digest cache.",
+          "--network-disclosure",
+          "Calls the configured feed endpoint.",
+          "--dependency-disclosure",
+          "Uses the selected Python runtime and installed packages.",
+        ],
+        { from: "user" },
+      );
+    } finally {
+      await fs.promises.rm(fixtureDir, { recursive: true, force: true });
+    }
+
+    expect(callGatewayFromCli).toHaveBeenCalledWith(
+      "cron.update",
+      expect.anything(),
+      expect.objectContaining({
+        id: "job-1",
+        expectedConfigRevision: configRevision,
+        patch: {
+          payload: expect.objectContaining({
+            kind: "command",
+            cwd: fixtureDir,
+            envMode: "replace",
+            argv: ["/usr/bin/python3", "-I", "-S", "-c", expect.any(String)],
+            artifact: expect.objectContaining({ format: "python-inline-stdin-v1" }),
+            continuation: expect.objectContaining({
+              inputTrust: "external",
+              toolsAllow: [],
+            }),
+            consequences: {
+              summary: "Fetches a remote feed and writes a local digest.",
+              filesystem: {
+                access: "ambient-host-user",
+                disclosures: ["Writes the digest cache."],
+              },
+              network: {
+                access: "ambient-host-user",
+                disclosures: ["Calls the configured feed endpoint."],
+              },
+              dependencies: ["Uses the selected Python runtime and installed packages."],
+            },
+          }),
+        },
+      }),
+    );
+  });
+
   it.each([
     ["empty", "", undefined],
     ["whitespace", "   ", undefined],

@@ -80,6 +80,9 @@ export function mergeCronPayload(existing: CronPayload, patch: CronPayloadPatch)
     if (patch.env && typeof patch.env === "object" && !Array.isArray(patch.env)) {
       next.env = patch.env;
     }
+    if (patch.envMode === "inherit" || patch.envMode === "replace") {
+      next.envMode = patch.envMode;
+    }
     if (typeof patch.input === "string") {
       next.input = patch.input;
     }
@@ -91,6 +94,17 @@ export function mergeCronPayload(existing: CronPayload, patch: CronPayloadPatch)
     }
     if (typeof patch.outputMaxBytes === "number") {
       next.outputMaxBytes = patch.outputMaxBytes;
+    }
+    if (patch.artifact) {
+      next.artifact = structuredClone(patch.artifact);
+    }
+    if (patch.consequences) {
+      next.consequences = structuredClone(patch.consequences);
+    }
+    if (patch.continuation === null) {
+      delete next.continuation;
+    } else if (patch.continuation) {
+      next.continuation = structuredClone(patch.continuation);
     }
     applyToolsAllowPatch(next, patch, existing);
     return next;
@@ -170,12 +184,20 @@ function buildPayloadFromPatch(patch: CronPayloadPatch): CronPayload {
       argv: patch.argv,
       ...(patch.cwd !== undefined ? { cwd: patch.cwd } : {}),
       ...(patch.env !== undefined ? { env: patch.env } : {}),
+      ...(patch.envMode !== undefined ? { envMode: patch.envMode } : {}),
       ...(patch.input !== undefined ? { input: patch.input } : {}),
       ...(patch.timeoutSeconds !== undefined ? { timeoutSeconds: patch.timeoutSeconds } : {}),
       ...(patch.noOutputTimeoutSeconds !== undefined
         ? { noOutputTimeoutSeconds: patch.noOutputTimeoutSeconds }
         : {}),
       ...(patch.outputMaxBytes !== undefined ? { outputMaxBytes: patch.outputMaxBytes } : {}),
+      ...(patch.artifact !== undefined ? { artifact: structuredClone(patch.artifact) } : {}),
+      ...(patch.consequences !== undefined
+        ? { consequences: structuredClone(patch.consequences) }
+        : {}),
+      ...(patch.continuation !== undefined && patch.continuation !== null
+        ? { continuation: structuredClone(patch.continuation) }
+        : {}),
     };
     applyToolsAllowPatch(next, patch);
     return next;

@@ -47,13 +47,45 @@ export function registerCronMutationOptions(command: Command, mode: "add" | "edi
     .option("--script-tool-budget <n>", "Maximum script tool calls")
     .option("--command <shell>", "Command payload run as sh -lc <shell> on the Gateway")
     .option("--command-argv <json>", "Command payload argv as JSON array of strings")
+    .option("--python-file <path>", "Publish a Python file as an immutable stdin artifact")
+    .option("--python-bin <path>", "Absolute Python executable for --python-file")
+    .option(
+      "--python-arg <value>",
+      "Argument exposed to the published Python program (repeatable)",
+      (value: string, previous: string[] | undefined) => [...(previous ?? []), value],
+    )
     .option("--command-cwd <path>", "Working directory for command payloads")
+    .option("--command-env-mode <mode>", "Command environment mode (inherit|replace)")
     .option(
       "--command-env <KEY=VALUE>",
       "Environment override for command payloads (repeatable)",
       (value: string, previous: string[] | undefined) => [...(previous ?? []), value],
     )
     .option("--command-input <text>", "stdin for command payloads")
+    .option(
+      "--continue-message <text>",
+      "Continue successful command stdout in a native agent turn",
+    )
+    .option("--continue-input-max-bytes <n>", "Maximum stdout bytes accepted by the continuation")
+    .option("--continue-tools <list>", "Tool allow-list for the continuation agent turn")
+    .option("--continue-model <model>", "Model override for the continuation agent turn")
+    .option("--clear-continuation", "Remove the command-to-agent continuation", false)
+    .option("--consequence-summary <text>", "Owner-facing summary of command consequences")
+    .option(
+      "--filesystem-disclosure <text>",
+      "Filesystem behavior to disclose (repeatable; descriptive, not sandboxed)",
+      (value: string, previous: string[] | undefined) => [...(previous ?? []), value],
+    )
+    .option(
+      "--network-disclosure <text>",
+      "Network behavior to disclose (repeatable; descriptive, not sandboxed)",
+      (value: string, previous: string[] | undefined) => [...(previous ?? []), value],
+    )
+    .option(
+      "--dependency-disclosure <text>",
+      "Runtime dependency to disclose (repeatable; attested, not sealed)",
+      (value: string, previous: string[] | undefined) => [...(previous ?? []), value],
+    )
     .option("--thinking <level>", `Thinking level for agent jobs (${THINKING_LEVELS_HELP})`)
     .option("--model <model>", "Model override for agent jobs (provider/model or alias)")
     .option("--fallbacks <list>", "Fallback model list for agent jobs")

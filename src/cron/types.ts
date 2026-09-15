@@ -184,6 +184,7 @@ export type CronRunErrorClassification =
 export type CronFailureNotificationDetail =
   | { kind: "command-exit"; exitCode: number }
   | { kind: "command-timeout"; mode: "wall-clock" | "no-output" }
+  | { kind: "command-authorization"; outcome: "timed-out" | "failed" }
   | {
       kind: "script-failure";
       source: "payload" | "trigger";
@@ -205,6 +206,10 @@ export type CronRunOutcome = {
   sessionId?: string;
   sessionKey?: string;
   diagnostics?: CronRunDiagnostics;
+  /** Transient command stdout used only by an explicitly configured continuation. */
+  outputText?: string;
+  /** True when command stdout exceeded its configured capture boundary. */
+  outputTruncated?: boolean;
 };
 
 /** One run's requested delay before the same paced job runs again. */
@@ -326,10 +331,51 @@ type CronCommandPayloadFields = {
   argv: string[];
   cwd?: string;
   env?: Record<string, string>;
+  /** `replace` starts from an empty environment; omitted/`inherit` preserves legacy behavior. */
+  envMode?: "inherit" | "replace";
   input?: string;
   timeoutSeconds?: number;
   noOutputTimeoutSeconds?: number;
   outputMaxBytes?: number;
+  /** Immutable publication metadata. The executable consumes only `input`, never displayPath. */
+  artifact?: CronCommandArtifact;
+  /** Consequence disclosure signed by an external automation authorizer. */
+  consequences?: CronCommandConsequences;
+  /** Native agent continuation fed from successful command stdout as external content. */
+  continuation?: CronCommandContinuation;
+};
+
+export type CronCommandArtifact = {
+  format: "python-inline-stdin-v1";
+  sourceSha256: string;
+  sourceBytes: number;
+  virtualFilename: string;
+  displayPath: string;
+  bootstrapSha256: string;
+};
+
+export type CronCommandConsequences = {
+  summary: string;
+  filesystem: { access: "ambient-host-user"; disclosures: string[] };
+  network: { access: "ambient-host-user"; disclosures: string[] };
+  dependencies: string[];
+};
+
+export const CRON_COMMAND_CONTINUATION_MAX_INPUT_BYTES = 1024 * 1024;
+
+export type CronCommandContinuation = {
+  kind: "agentTurn";
+  on: "command-success";
+  instructions: string;
+  input: "stdout";
+  inputMaxBytes: number;
+  inputTrust: "external";
+  toolsAllow: string[];
+  model?: string;
+  fallbacks?: string[];
+  thinking?: string;
+  timeoutSeconds?: number;
+  lightContext?: boolean;
 };
 
 type CronCommandPayload = {
@@ -338,7 +384,9 @@ type CronCommandPayload = {
 
 type CronCommandPayloadPatch = {
   kind: "command";
-} & Partial<CronCommandPayloadFields>;
+} & Partial<Omit<CronCommandPayloadFields, "continuation">> & {
+    continuation?: CronCommandContinuation | null;
+  };
 
 type CronScriptPayloadFields = {
   script: string;

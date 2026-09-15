@@ -168,6 +168,14 @@ export function normalizeCronPayload(payload: UnknownRecord): UnknownRecord {
   if ("env" in next) {
     next.env = normalizeCommandEnv(next.env);
   }
+  if ("envMode" in next) {
+    const envMode = normalizeLowercaseStringOrEmpty(next.envMode);
+    if (envMode === "inherit" || envMode === "replace") {
+      next.envMode = envMode;
+    } else {
+      delete next.envMode;
+    }
+  }
   if ("input" in next && typeof next.input !== "string") {
     delete next.input;
   }
@@ -219,9 +227,13 @@ export function normalizeCronPayload(payload: UnknownRecord): UnknownRecord {
     delete next.argv;
     delete next.cwd;
     delete next.env;
+    delete next.envMode;
     delete next.input;
     delete next.noOutputTimeoutSeconds;
     delete next.outputMaxBytes;
+    delete next.artifact;
+    delete next.consequences;
+    delete next.continuation;
     delete next.script;
     delete next.toolBudget;
   } else if (next.kind === "agentTurn") {
@@ -229,9 +241,13 @@ export function normalizeCronPayload(payload: UnknownRecord): UnknownRecord {
     delete next.argv;
     delete next.cwd;
     delete next.env;
+    delete next.envMode;
     delete next.input;
     delete next.noOutputTimeoutSeconds;
     delete next.outputMaxBytes;
+    delete next.artifact;
+    delete next.consequences;
+    delete next.continuation;
     delete next.script;
     delete next.toolBudget;
   } else if (next.kind === "command") {
@@ -255,9 +271,13 @@ export function normalizeCronPayload(payload: UnknownRecord): UnknownRecord {
     delete next.argv;
     delete next.cwd;
     delete next.env;
+    delete next.envMode;
     delete next.input;
     delete next.noOutputTimeoutSeconds;
     delete next.outputMaxBytes;
+    delete next.artifact;
+    delete next.consequences;
+    delete next.continuation;
   }
   return { ...next };
 }

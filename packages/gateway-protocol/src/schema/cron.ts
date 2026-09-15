@@ -6,6 +6,7 @@ import {
   MAX_DATE_TIMESTAMP_MS,
   cronAgentTurnPayloadSchema,
   cronCommandPayloadSchema,
+  CronCommandContinuationSchema,
   cronScriptPayloadSchema,
 } from "./cron-shared.js";
 import { FailoverReasonSchema } from "./failover-reason.js";
@@ -237,6 +238,7 @@ const CronAgentTurnPayloadSchema = cronAgentTurnPayloadSchema({
 const CronCommandPayloadSchema = cronCommandPayloadSchema({
   argv: Type.Array(NonEmptyString, { minItems: 1 }),
   toolsAllow: Type.Array(Type.String()),
+  continuation: CronCommandContinuationSchema,
 });
 const CronScriptPayloadSchema = cronScriptPayloadSchema({
   script: Type.String({ minLength: 1, maxLength: 65_536 }),
@@ -278,6 +280,7 @@ const CronPayloadPatchSchema = Type.Union([
   cronCommandPayloadSchema({
     argv: Type.Optional(Type.Array(NonEmptyString, { minItems: 1 })),
     toolsAllow: Type.Union([Type.Array(Type.String()), Type.Null()]),
+    continuation: Type.Union([CronCommandContinuationSchema, Type.Null()]),
   }),
   cronScriptPayloadSchema({
     script: Type.Optional(Type.String({ minLength: 1, maxLength: 65_536 })),

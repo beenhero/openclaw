@@ -1,3 +1,4 @@
+import path from "node:path";
 // Cron status/list/add command registration and create-payload normalization.
 import { parseStrictPositiveInteger } from "@openclaw/normalization-core/number-coercion";
 import {
@@ -6,7 +7,8 @@ import {
 } from "@openclaw/normalization-core/string-coerce";
 import type { Command } from "commander";
 import { theme } from "../../../packages/terminal-core/src/theme.js";
-import type { CronJob } from "../../cron/types.js";
+import { publishPythonInlineArtifact } from "../../cron/python-inline-artifact.js";
+import { CRON_COMMAND_CONTINUATION_MAX_INPUT_BYTES, type CronJob } from "../../cron/types.js";
 import { normalizeHttpWebhookUrl } from "../../cron/webhook-url.js";
 import { sanitizeAgentId } from "../../routing/session-key.js";
 import { defaultRuntime } from "../../runtime.js";
@@ -22,6 +24,7 @@ import {
   handleCronCliError,
   parseCronCommandArgv,
   parseCronCommandEnv,
+  parseCronDisclosureList,
   parseCronFallbacks,
   parseCronToolsAllow,
   printCronJson,
@@ -100,6 +103,9 @@ export function registerCronAddCommand(cron: Command) {
           cmd: Command,
         ) => {
           try {
+            if (opts.clearContinuation) {
+              throw new Error("--clear-continuation is only valid for cron edit.");
+            }
             const hasScheduleFlag =
               typeof opts.at === "string" ||
               typeof opts.cron === "string" ||
@@ -139,28 +145,57 @@ export function registerCronAddCommand(cron: Command) {
               const positionalMessage = normalizeOptionalString(messageArg);
               const commandShell = normalizeOptionalString(opts.command);
               const commandArgv = parseCronCommandArgv(opts.commandArgv);
+              const pythonFile = normalizeOptionalString(opts.pythonFile);
               const scriptPath = normalizeOptionalString(opts.script);
               const toolsAllow = parseCronToolsAllow(opts.tools);
+              const hasCommandPayload = Boolean(commandShell || commandArgv || pythonFile);
+              const hasCommandOnlyOption =
+                opts.pythonBin !== undefined ||
+                opts.pythonArg !== undefined ||
+                opts.commandCwd !== undefined ||
+                opts.commandEnv !== undefined ||
+                opts.commandEnvMode !== undefined ||
+                opts.commandInput !== undefined ||
+                opts.noOutputTimeoutSeconds !== undefined ||
+                typeof opts.outputTimeoutSeconds === "string" ||
+                typeof opts.outputTimeoutSeconds === "number" ||
+                opts.outputMaxBytes !== undefined ||
+                opts.continueMessage !== undefined ||
+                opts.continueInputMaxBytes !== undefined ||
+                opts.continueTools !== undefined ||
+                opts.continueModel !== undefined ||
+                opts.consequenceSummary !== undefined ||
+                opts.filesystemDisclosure !== undefined ||
+                opts.networkDisclosure !== undefined ||
+                opts.dependencyDisclosure !== undefined;
               if (optionMessage && positionalMessage && optionMessage !== positionalMessage) {
                 throw new Error(
                   "Pass the automation message either positionally or with --message, not both.",
                 );
               }
               const message = optionMessage ?? positionalMessage ?? "";
-              if (commandShell && commandArgv) {
+              if (
+                [Boolean(commandShell), Boolean(commandArgv), Boolean(pythonFile)].filter(Boolean)
+                  .length > 1
+              ) {
                 throw new Error(
-                  "Pass command payload either with --command or --command-argv, not both.",
+                  "Pass command payload with exactly one of --command, --command-argv, or --python-file.",
+                );
+              }
+              if (!hasCommandPayload && hasCommandOnlyOption) {
+                throw new Error(
+                  "Command-specific options require --command, --command-argv, or --python-file.",
                 );
               }
               const chosen = [
                 Boolean(systemEvent),
                 Boolean(message),
-                Boolean(commandShell) || Boolean(commandArgv),
+                hasCommandPayload,
                 Boolean(scriptPath),
               ].filter(Boolean).length;
               if (chosen !== 1) {
                 throw new Error(
-                  "Choose exactly one payload: --system-event, --message, --command, or --script",
+                  "Choose exactly one payload: --system-event, --message, --command/--python-file, or --script",
                 );
               }
               if (systemEvent) {
@@ -196,7 +231,7 @@ export function registerCronAddCommand(cron: Command) {
               if (opts.timeoutSeconds !== undefined && timeoutSeconds === undefined) {
                 throw new Error("Invalid --timeout-seconds (must be a positive integer).");
               }
-              if (commandShell || commandArgv) {
+              if (commandShell || commandArgv || pythonFile) {
                 const rawNoOutputTimeoutSeconds =
                   opts.noOutputTimeoutSeconds ??
                   (typeof opts.outputTimeoutSeconds === "string" ||
@@ -217,15 +252,128 @@ export function registerCronAddCommand(cron: Command) {
                 if (opts.outputMaxBytes !== undefined && outputMaxBytes === undefined) {
                   throw new Error("Invalid --output-max-bytes (must be a positive integer).");
                 }
+                const continuationInstructions = normalizeOptionalString(opts.continueMessage);
+                const hasContinuationOption =
+                  opts.continueMessage !== undefined ||
+                  opts.continueInputMaxBytes !== undefined ||
+                  opts.continueTools !== undefined ||
+                  opts.continueModel !== undefined;
+                if (hasContinuationOption && !continuationInstructions) {
+                  throw new Error(
+                    "--continue-message must be non-blank when using continuation options.",
+                  );
+                }
+                const continuationInputMaxBytes =
+                  parseStrictPositiveInteger(opts.continueInputMaxBytes) ?? 256 * 1024;
+                if (
+                  opts.continueInputMaxBytes !== undefined &&
+                  parseStrictPositiveInteger(opts.continueInputMaxBytes) === undefined
+                ) {
+                  throw new Error(
+                    "Invalid --continue-input-max-bytes (must be a positive integer).",
+                  );
+                }
+                if (continuationInputMaxBytes > CRON_COMMAND_CONTINUATION_MAX_INPUT_BYTES) {
+                  throw new Error(
+                    `--continue-input-max-bytes must not exceed ${CRON_COMMAND_CONTINUATION_MAX_INPUT_BYTES}.`,
+                  );
+                }
+                const continuationModel = normalizeOptionalString(opts.continueModel);
+                const continuation = continuationInstructions
+                  ? {
+                      kind: "agentTurn" as const,
+                      on: "command-success" as const,
+                      instructions: continuationInstructions,
+                      input: "stdout" as const,
+                      inputMaxBytes: continuationInputMaxBytes,
+                      inputTrust: "external" as const,
+                      toolsAllow: parseCronToolsAllow(opts.continueTools) ?? [],
+                      ...(continuationModel ? { model: continuationModel } : {}),
+                    }
+                  : undefined;
+                const consequenceSummary = normalizeOptionalString(opts.consequenceSummary);
+                const hasConsequenceOption =
+                  opts.consequenceSummary !== undefined ||
+                  opts.filesystemDisclosure !== undefined ||
+                  opts.networkDisclosure !== undefined ||
+                  opts.dependencyDisclosure !== undefined;
+                if (hasConsequenceOption && !consequenceSummary) {
+                  throw new Error(
+                    "--consequence-summary must be non-blank when using consequence disclosures.",
+                  );
+                }
+                const consequences = consequenceSummary
+                  ? {
+                      summary: consequenceSummary,
+                      filesystem: {
+                        access: "ambient-host-user" as const,
+                        disclosures: parseCronDisclosureList(
+                          opts.filesystemDisclosure,
+                          "--filesystem-disclosure",
+                        ),
+                      },
+                      network: {
+                        access: "ambient-host-user" as const,
+                        disclosures: parseCronDisclosureList(
+                          opts.networkDisclosure,
+                          "--network-disclosure",
+                        ),
+                      },
+                      dependencies: parseCronDisclosureList(
+                        opts.dependencyDisclosure,
+                        "--dependency-disclosure",
+                      ),
+                    }
+                  : undefined;
+                const envMode = normalizeLowercaseStringOrEmpty(opts.commandEnvMode) || "inherit";
+                if (envMode !== "inherit" && envMode !== "replace") {
+                  throw new Error("--command-env-mode must be inherit or replace.");
+                }
+                if (pythonFile) {
+                  const pythonPath = normalizeOptionalString(opts.pythonBin);
+                  if (!pythonPath || !path.isAbsolute(pythonPath)) {
+                    throw new Error("--python-bin must be an absolute path with --python-file.");
+                  }
+                  if (opts.commandInput !== undefined) {
+                    throw new Error("--command-input cannot be combined with --python-file.");
+                  }
+                  if (opts.commandEnvMode !== undefined && envMode !== "replace") {
+                    throw new Error("--python-file requires --command-env-mode replace.");
+                  }
+                  const explicitEnv = parseCronCommandEnv(opts.commandEnv);
+                  return {
+                    kind: "pythonArtifact" as const,
+                    sourcePath: path.resolve(pythonFile),
+                    pythonPath,
+                    cwd: path.resolve(normalizeOptionalString(opts.commandCwd) ?? process.cwd()),
+                    env: {
+                      ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
+                      ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
+                      ...(process.env.LANG ? { LANG: process.env.LANG } : {}),
+                      ...explicitEnv,
+                    },
+                    scriptArgv: Array.isArray(opts.pythonArg)
+                      ? opts.pythonArg.filter((item): item is string => typeof item === "string")
+                      : [],
+                    timeoutSeconds,
+                    noOutputTimeoutSeconds,
+                    outputMaxBytes,
+                    continuation,
+                    consequences,
+                  };
+                }
                 return {
                   kind: "command" as const,
                   argv: commandArgv ?? ["sh", "-lc", commandShell ?? ""],
                   cwd: normalizeOptionalString(opts.commandCwd),
                   env: parseCronCommandEnv(opts.commandEnv),
+                  envMode,
                   input: typeof opts.commandInput === "string" ? opts.commandInput : undefined,
                   timeoutSeconds,
                   noOutputTimeoutSeconds,
                   outputMaxBytes,
+                  continuation,
+                  consequences,
                   ...(toolsAllow ? { toolsAllow } : {}),
                 };
               }
@@ -241,6 +389,10 @@ export function registerCronAddCommand(cron: Command) {
               };
             })();
             const resolvedPayload = await (async () => {
+              if (payload.kind === "pythonArtifact") {
+                const { kind: _kind, ...publish } = payload;
+                return await publishPythonInlineArtifact(publish);
+              }
               if (payload.kind !== "script") {
                 return payload;
               }

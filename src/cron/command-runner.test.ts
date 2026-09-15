@@ -61,6 +61,32 @@ describe("runCronCommandJob", () => {
     expect(result.summary).toBe("NO_REPLY");
   });
 
+  it("uses an exact replacement environment for immutable automations", async () => {
+    const ambientKey = "OPENCLAW_CRON_AMBIENT_LEAK_TEST";
+    process.env[ambientKey] = "must-not-leak";
+    try {
+      const result = await runCronCommandJob({
+        job: makeCommandJob({
+          kind: "command",
+          argv: [
+            process.execPath,
+            "-e",
+            `process.stdout.write(JSON.stringify({ ambient: process.env.${ambientKey}, explicit: process.env.SIGIL_EXPLICIT, cli: process.env.OPENCLAW_CLI }))`,
+          ],
+          envMode: "replace",
+          env: { SIGIL_EXPLICIT: "yes" },
+        }),
+      });
+
+      expect(result).toMatchObject({
+        status: "ok",
+        summary: JSON.stringify({ explicit: "yes", cli: "1" }),
+      });
+    } finally {
+      delete process.env[ambientKey];
+    }
+  });
+
   it("marks non-zero exit codes as cron errors and keeps stderr as summary", async () => {
     const result = await runCronCommandJob({
       job: makeCommandJob({

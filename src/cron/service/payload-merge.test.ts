@@ -188,4 +188,38 @@ describe("mergeCronPayload trigger tool caps", () => {
       toolsAllowIsDefault: true,
     });
   });
+
+  it("preserves immutable metadata while replacing or clearing only the continuation", () => {
+    const continuation = {
+      kind: "agentTurn" as const,
+      on: "command-success" as const,
+      instructions: "Summarize.",
+      input: "stdout" as const,
+      inputMaxBytes: 1024,
+      inputTrust: "external" as const,
+      toolsAllow: [] as string[],
+    };
+    const existing: CronPayload = {
+      kind: "command",
+      argv: ["/usr/bin/python3"],
+      envMode: "replace",
+      artifact: {
+        format: "python-inline-stdin-v1",
+        sourceSha256: "a".repeat(64),
+        sourceBytes: 1,
+        virtualFilename: "openclaw-python://a/job.py",
+        displayPath: "/tmp/job.py",
+        bootstrapSha256: "b".repeat(64),
+      },
+      continuation,
+    };
+    expect(mergeCronPayload(existing, { kind: "command", timeoutSeconds: 30 })).toEqual({
+      ...existing,
+      timeoutSeconds: 30,
+    });
+    const { continuation: _continuation, ...withoutContinuation } = existing;
+    expect(mergeCronPayload(existing, { kind: "command", continuation: null })).toEqual(
+      withoutContinuation,
+    );
+  });
 });

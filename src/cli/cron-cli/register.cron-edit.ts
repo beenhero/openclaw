@@ -128,7 +128,10 @@ export function registerCronEditCommand(cron: Command) {
           if (typeof opts.session === "string" && !sessionTarget) {
             throw new Error("--session must be main, isolated, current, or session:<id>");
           }
-          if (sessionTarget === "main" && (opts.message || opts.command || opts.commandArgv)) {
+          if (
+            sessionTarget === "main" &&
+            (opts.message || opts.command || opts.commandArgv || opts.pythonFile)
+          ) {
             throw new Error(
               "Main jobs cannot use --message or --command; use --system-event or --session isolated.",
             );

@@ -57,6 +57,84 @@ describe("shared automation mutation options", () => {
     callGatewayFromCli.mockResolvedValue({ ok: true });
   });
 
+  it("persists consequence-first disclosures on command creation", async () => {
+    await createMutationProgram().parseAsync(
+      [
+        "add",
+        "--name",
+        "Disclosed command",
+        "--every",
+        "1h",
+        "--command-argv",
+        '["/usr/bin/env","true"]',
+        "--no-deliver",
+        "--consequence-summary",
+        "Reads a feed and writes a local digest.",
+        "--filesystem-disclosure",
+        "Reads local configuration.",
+        "--filesystem-disclosure",
+        "Writes the digest cache.",
+        "--network-disclosure",
+        "Calls the configured feed endpoint.",
+        "--dependency-disclosure",
+        "Uses the selected host runtime and installed packages.",
+      ],
+      { from: "user" },
+    );
+
+    expect(callGatewayFromCli).toHaveBeenCalledWith(
+      "cron.add",
+      expect.anything(),
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          kind: "command",
+          consequences: {
+            summary: "Reads a feed and writes a local digest.",
+            filesystem: {
+              access: "ambient-host-user",
+              disclosures: ["Reads local configuration.", "Writes the digest cache."],
+            },
+            network: {
+              access: "ambient-host-user",
+              disclosures: ["Calls the configured feed endpoint."],
+            },
+            dependencies: ["Uses the selected host runtime and installed packages."],
+          },
+        }),
+      }),
+    );
+  });
+
+  it("rejects command disclosures on a non-command payload", async () => {
+    const errorSpy = vi.spyOn(defaultRuntime, "error").mockImplementation(() => {});
+    try {
+      await expect(
+        createMutationProgram().parseAsync(
+          [
+            "add",
+            "--name",
+            "Invalid disclosure",
+            "--every",
+            "1h",
+            "--message",
+            "hello",
+            "--consequence-summary",
+            "This must not be discarded.",
+          ],
+          { from: "user" },
+        ),
+      ).rejects.toMatchObject({ name: "ExitError", code: 1 });
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "Command-specific options require --command, --command-argv, or --python-file.",
+        ),
+      );
+      expect(callGatewayFromCli).not.toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
   it.each([
     { operation: "add", flag: "--every" },
     { operation: "add", flag: "--stagger" },

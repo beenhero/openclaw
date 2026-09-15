@@ -78,6 +78,17 @@ export function parseCronCommandEnv(values: unknown): Record<string, string> | u
   return env;
 }
 
+export function parseCronDisclosureList(values: unknown, flag: string): string[] {
+  const rawValues = Array.isArray(values) ? values : typeof values === "string" ? [values] : [];
+  return rawValues.map((raw) => {
+    const value = normalizeOptionalString(raw);
+    if (!value) {
+      throw new Error(`${flag} must be non-blank`);
+    }
+    return value;
+  });
+}
+
 export const getCronChannelOptions = () => {
   // Keep help truthful even before the plugin registry is bootstrapped. The fallback names the
   // channel plugin id the runtime resolves, not a per-conversation platform channel identifier.
