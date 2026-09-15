@@ -37,6 +37,14 @@ describe("cronFailureDetailLines", () => {
       { kind: "command-timeout", mode: "no-output" } as const,
       "Cause: command stopped after producing no output",
     ],
+    [
+      { kind: "command-authorization", outcome: "timed-out" } as const,
+      "Cause: command authorization timed out before execution",
+    ],
+    [
+      { kind: "command-authorization", outcome: "failed" } as const,
+      "Cause: command authorization failed before execution",
+    ],
   ])("renders closed command detail %#", (detail, expected) => {
     expect(cronFailureDetailLines(undefined, detail)).toEqual([expected]);
   });

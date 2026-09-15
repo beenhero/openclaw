@@ -41,6 +41,13 @@ export function cronFailureDetailLines(
         : "Cause: command stopped after producing no output",
     ];
   }
+  if (failureNotificationDetail.kind === "command-authorization") {
+    return [
+      failureNotificationDetail.outcome === "timed-out"
+        ? "Cause: command authorization timed out before execution"
+        : "Cause: command authorization failed before execution",
+    ];
+  }
   const label =
     failureNotificationDetail.source === "payload" ? "automation script" : "trigger script";
   return [`Cause: ${label} ${SCRIPT_FAILURE_COPY[failureNotificationDetail.code]}`];

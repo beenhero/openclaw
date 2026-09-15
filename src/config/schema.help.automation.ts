@@ -95,6 +95,10 @@ export const AUTOMATION_FIELD_HELP: Record<string, string> = {
     "Enables automation execution for stored schedules managed by the gateway. Keep enabled for normal reminder/automation flows, and disable only to pause all automation execution without deleting jobs.",
   "cron.skipMissedJobs":
     "Skips missed recurring cron/every slots at Gateway startup and schedules their next future occurrence instead of catching up. Default: false. Enable to avoid stale reminders after downtime; one-shot at jobs still catch up.",
+  "cron.executionAuthorization":
+    "Selects capability-scoped authorization providers for automation execution. Leave unset to preserve legacy behavior; once selected, an unavailable or mismatched provider denies before the runner.",
+  "cron.executionAuthorization.command":
+    "Exact approval-resolver id required for immutable command automations, for example `sigil-automation`. Protected commands must use a frozen publish artifact and replacement environment.",
   "cron.webhookToken":
     "Bearer token attached to automation webhook POST deliveries when webhook mode is used. Prefer secret/env substitution and rotate this token regularly if shared webhook endpoints are internet-reachable.",
   "cron.webhookSsrfPolicy":

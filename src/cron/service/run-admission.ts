@@ -486,6 +486,7 @@ export async function executeQueuedCronRun(params: {
   onSetupError?: (job: CronJob, errorText: string) => void;
   /** Runs before admission release; true means terminal handling is complete. */
   onCompleted?: (outcome: TimedCronRunOutcome) => Promise<boolean>;
+  runClass?: import("../execution-authorization.js").CronAutomationRunClass;
 }): Promise<
   | { kind: "stopped" }
   | { kind: "skipped" }
@@ -606,6 +607,7 @@ export async function executeQueuedCronRun(params: {
           runId: taskRunId,
           activeJobMarker,
           runReceipt: started.runReceipt,
+          runClass: params.runClass ?? "scheduled",
           executionIdentity: createCronOwnerExecutionIdentityAdmission({
             state,
             runReceipt: started.runReceipt,

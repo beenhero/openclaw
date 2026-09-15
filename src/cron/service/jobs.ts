@@ -35,6 +35,7 @@ import {
 import { reconcileToolsAllowAuthority } from "./jobs-tool-policy.js";
 import {
   assertAnnounceDeliveryChannelSupport,
+  assertCommandExecutionAuthorizationSupport,
   assertTimeScheduleSatisfiable,
   assertDeliverySupport,
   assertFailureDestinationSupport,
@@ -180,6 +181,7 @@ function validateFullJob(
     validateCapabilities();
   }
   assertSupportedJobSpec(job);
+  assertCommandExecutionAuthorizationSupport(job, cronConfig);
   assertPacingSupport(job);
   if (context.kind !== "declarative") {
     validateCapabilities();

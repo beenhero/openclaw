@@ -343,6 +343,11 @@ export const OpenClawSchemaShape = {
           enabled: z.boolean().optional(),
         })
         .optional(),
+      executionAuthorization: z
+        .strictObject({
+          command: z.string().trim().min(1).optional(),
+        })
+        .optional(),
       webhookToken: SecretInputSchema.optional().register(sensitive),
       webhookSsrfPolicy: SsrFPolicyConfigSchema.optional(),
       sessionRetention: z.union([z.string(), z.literal(false)]).optional(),

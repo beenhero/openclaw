@@ -5,6 +5,7 @@ import type { CronConfig } from "../../config/types.cron.js";
 import { normalizeAgentId } from "../../routing/session-key.js";
 import { compileSafeRegexDetailed } from "../../security/safe-regex.js";
 import { resolveCronDeliveryPlan } from "../delivery-plan.js";
+import { assertAuthorizedCronCommandShape } from "../execution-authorization.js";
 import { parseCronPacingBounds } from "../pacing.js";
 import { parseAbsoluteTimeMs } from "../parse.js";
 import { assertSafeCronSessionTargetId } from "../session-target.js";
@@ -69,6 +70,20 @@ export function assertSupportedJobSpec(
       'isolated cron jobs require payload.kind="agentTurn", "command", or "script"; script payloads do not support current/session targets',
     );
   }
+}
+
+/**
+ * Once an operator configures an execution authorizer, reject command shapes
+ * that cannot be authorized before they can arm a trigger or stream watcher.
+ */
+export function assertCommandExecutionAuthorizationSupport(
+  job: CronJob,
+  cronConfig?: CronConfig,
+): void {
+  if (!cronConfig?.executionAuthorization?.command || job.payload.kind !== "command") {
+    return;
+  }
+  assertAuthorizedCronCommandShape(job);
 }
 
 export function assertScriptPayloadSupport(

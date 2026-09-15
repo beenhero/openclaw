@@ -27,6 +27,11 @@ export type CronConfig = {
   triggers?: {
     enabled?: boolean;
   };
+  /** Optional capability-resolver owner for immutable command automations. */
+  executionAuthorization?: {
+    /** Exact registered approval-resolver id. Absence preserves legacy behavior. */
+    command?: string;
+  };
   /** Bearer token for cron webhook POST delivery. */
   webhookToken?: SecretInput;
   /** SSRF policy for all outbound cron webhook deliveries. */

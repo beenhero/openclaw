@@ -945,6 +945,12 @@ export function buildGatewayCronService(params: {
         abortSignal,
         nowMs: Date.now,
       });
+      // A successful command with a native continuation has not completed the
+      // automation yet. The cron core feeds stdout to the agent runner, whose
+      // ordinary delivery path owns the single final delivery.
+      if (job.payload.kind === "command" && job.payload.continuation && result.status === "ok") {
+        return result;
+      }
       const summaryIsSilent =
         typeof result.summary === "string" && isSilentReplyText(result.summary, SILENT_REPLY_TOKEN);
       if (summaryIsSilent) {

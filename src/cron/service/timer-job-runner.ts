@@ -55,6 +55,7 @@ type CronCoreRunOptions = {
   streamSourceIdentity?: string;
   runReceipt?: import("../store/run-receipt-store.js").CronRunReceiptHandle;
   executionIdentity?: import("./state.js").CronExecutionIdentityAdmission;
+  runClass?: import("../execution-authorization.js").CronAutomationRunClass;
 };
 
 async function deliverPrimaryWebhook(
@@ -218,7 +219,17 @@ async function executeJobCoreWithTimeoutUnfinalized(
           onCancel: () => operatorCancellation.resolve(operatorCancellationMarker),
         })
       : undefined;
-  const jobTimeoutMs = resolveCronJobTimeoutMs(job);
+  const commandAuthorizationProvider =
+    job.payload.kind === "command"
+      ? state.deps.cronConfig?.executionAuthorization?.command?.trim()
+      : undefined;
+  // A protected command is a pipeline of independently bounded phases:
+  // capability authorization owns its resolver deadline, the native command
+  // runner owns payload.timeoutSeconds, and an optional agent continuation
+  // owns its own timeout. Reusing the command's process budget as an outer
+  // wall-clock deadline aborts a still-valid approval before the command has
+  // started and then misclassifies it as an execution timeout.
+  const jobTimeoutMs = commandAuthorizationProvider ? undefined : resolveCronJobTimeoutMs(job);
   try {
     const timeout = createDeferredCore<CronRunTimeout>();
 
@@ -284,6 +295,8 @@ async function executeJobCoreWithTimeoutUnfinalized(
           ? (heartbeat) => watchdog.replaceTimeout(resolveHeartbeatTimeoutMs(heartbeat))
           : undefined,
       assertRunCurrent,
+      runReceipt: opts?.runReceipt,
+      runClass: opts?.runClass,
       executionIdentity: executionIdentity && {
         ...executionIdentity,
         onPostAdmission: (context) => {

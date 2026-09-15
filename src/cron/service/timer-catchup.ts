@@ -425,6 +425,7 @@ async function executeStartupCatchupPlan(
           skipAtIfAlreadyRan: true,
           allowCronMissedRunByLastRun: true,
         },
+        runClass: "startup-catchup",
         onNotRunnable: async () => {
           commitStartupCatchupRows({ state, reservations: [candidate] });
         },
