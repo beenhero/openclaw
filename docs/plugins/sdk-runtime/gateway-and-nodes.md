@@ -167,7 +167,19 @@ Reach the Gateway and paired nodes from plugin code, and the events a long-lived
 
     Plugins that expose node-hosted agent tools can set `agentTool.defaultPlatforms` for non-dangerous commands that should be allowlisted by default. Omit it when operators must opt in with `gateway.nodes.commands.allow`. Dangerous node-host commands should register a node-invoke policy with `api.registerNodeInvokePolicy(...)`; the policy runs in the Gateway after command allowlist checks and before the command is forwarded to the node, so direct `node.invoke` calls, node-hosted plugin tools, and higher-level plugin tools share the same enforcement path.
 
-    `allow-always` remains one policy decision unless the node-invoke policy explicitly declares `standingApproval: { kind: "placement", scope: "<capability>" }`. That opt-in permits later launches only for a high-risk command on the same current managed placement, node pairing, environment owner, workspace, and semantic capability scope, for at most 30 days and never across Gateway restart. Use a stable, content-free scope for a capability whose approval deliberately covers later argument changes. Do not opt in when the approved target or other request arguments must remain exact.
+    The current Gateway supplies every node-invoke policy with `ctx.lifecycle`:
+    an abort `signal`, the
+    outer invocation's absolute `deadlineAtMs` when bounded, and synchronous
+    `isCurrent()` / `assertCurrent()` guards. Treat this as authorization
+    authority. Re-check it after every awaited signer, approval, or storage
+    operation and immediately before creating a reusable grant or calling
+    `ctx.invokeNode`. The field stays optional in the SDK type only for source
+    compatibility with older hosts and test doubles. A policy that creates
+    reusable authority should deny on an older host where it is absent. A late
+    approval after this lifecycle closes is audit data only; it cannot authorize
+    dispatch or mint future authority.
+
+    `allow-always` remains one policy decision unless the node-invoke policy explicitly declares `standingApproval: { kind: "placement", scope: "<capability>" }`. That opt-in permits later launches only for a high-risk command on the same current managed placement, node pairing, environment owner, workspace, and semantic capability scope, for at most 30 days and never across Gateway restart. The grant write must still occur while `ctx.lifecycle` is current. Use a stable, content-free scope for a capability whose approval deliberately covers later argument changes. Do not opt in when the approved target or other request arguments must remain exact.
 
     A node command may declare `prepare(context)` for asynchronous native startup.
     Node-host initialization awaits it before publishing the initial manifest or

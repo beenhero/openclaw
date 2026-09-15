@@ -142,6 +142,26 @@ describe("ApprovalsPage", () => {
     expect(page.querySelectorAll(".approval-history-table tbody tr")).toHaveLength(2);
   });
 
+  it("renders an internal policy handoff as delegation, never as a user allow", async () => {
+    const handoff = {
+      ...terminal("handoff", 2_000),
+      status: "allowed",
+      decision: "allow-once",
+      reason: "policy-handoff",
+      resolver: { kind: "runtime", id: "agent-runtime" },
+    } as ApprovalHistoryResult["items"][number];
+    const request = vi.fn().mockResolvedValueOnce({ items: [handoff] });
+    const { page } = createPage(stubGrants(request));
+
+    await settle(page);
+
+    const rowText = page.querySelector(".approval-history-table tbody tr")?.textContent ?? "";
+    expect(rowText).toContain("Delegated to node policy");
+    expect(rowText).toContain("Internal policy handoff");
+    expect(rowText).not.toContain("Allowed · Allow once");
+    expect(rowText).not.toContain("User decision");
+  });
+
   it("does not claim an empty history when the load failed", async () => {
     const request = vi.fn().mockRejectedValueOnce(new Error("boom"));
     const { page } = createPage(stubGrants(request));

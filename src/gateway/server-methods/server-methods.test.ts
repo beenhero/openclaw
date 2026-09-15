@@ -2478,11 +2478,25 @@ describe("exec approval handlers", () => {
     approvalRuntime?: boolean;
     agentRuntimeIdentity?: { agentId: string; sessionKey: string };
   }): ExecApprovalRequestArgs["client"] {
+    const operationalRunInstance = {
+      instanceId: `instance-${params.connId}`,
+      runId: `run-${params.connId}`,
+    };
     const internal = {
       ...(params.approvalRuntime ? { approvalRuntime: true } : {}),
       ...(params.agentRuntimeIdentity
         ? {
-            agentRuntimeIdentity: { kind: "agentRuntime" as const, ...params.agentRuntimeIdentity },
+            agentRuntimeIdentity: {
+              kind: "agentRuntime" as const,
+              ...params.agentRuntimeIdentity,
+              operationalRunInstance,
+              delegatedAuthority: {
+                kind: "local" as const,
+                lifecycleGeneration: `lifecycle-${params.connId}`,
+                claimId: `claim-${params.connId}`,
+                operationalRunInstance,
+              },
+            },
           }
         : {}),
     };
@@ -2629,6 +2643,7 @@ describe("exec approval handlers", () => {
     respond: ReturnType<typeof vi.fn>;
     context: { broadcast: (event: string, payload: unknown) => void };
     client?: ExecApprovalResolveArgs["client"];
+    handoff?: { kind: "node-invoke-policy" };
   }) {
     return expectDefined(
       params.handlers["exec.approval.resolve"],
@@ -2637,6 +2652,7 @@ describe("exec approval handlers", () => {
       params: {
         id: params.id,
         decision: params.decision ?? "allow-once",
+        ...(params.handoff ? { handoff: params.handoff } : {}),
       } as ExecApprovalResolveArgs["params"],
       respond: params.respond as unknown as ExecApprovalResolveArgs["respond"],
       context: toExecApprovalResolveContext(params.context),
@@ -2674,7 +2690,9 @@ describe("exec approval handlers", () => {
   }
 
   function createExecApprovalFixture(testContext: TestContext, opts?: { config?: OpenClawConfig }) {
-    const manager = createTestApprovalManager(testContext);
+    const manager = createTestApprovalManager(testContext, {
+      validateAgentRuntimeDelegatedAuthority: () => true,
+    });
     const handlers = createExecApprovalHandlers(manager);
     const broadcasts: Array<{ event: string; payload: unknown }> = [];
     const respond = vi.fn();
@@ -2684,6 +2702,7 @@ describe("exec approval handlers", () => {
         broadcasts.push({ event, payload });
       },
       hasExecApprovalClients: () => true,
+      validateAgentRuntimeApprovalAuthority: () => true,
       chatRunState: createChatRunState(),
     };
     return { manager, handlers, broadcasts, respond, context };
@@ -2744,9 +2763,19 @@ describe("exec approval handlers", () => {
     await waitForFast(() => {
       expect(fixture.respond.mock.calls.some((call) => call[1]?.status === "accepted")).toBe(true);
     });
+    const explicitId = typeof params.request.id === "string" ? params.request.id : undefined;
+    const requested = fixture.broadcasts.some((entry) => entry.event === "exec.approval.requested")
+      ? getRequestedExecApprovalPayload(fixture.broadcasts)
+      : explicitId
+        ? {
+            approvalKind: "exec" as const,
+            id: explicitId,
+            request: fixture.manager.getSnapshot(explicitId)?.request ?? {},
+          }
+        : getRequestedExecApprovalPayload(fixture.broadcasts);
     return {
       ...fixture,
-      ...getRequestedExecApprovalPayload(fixture.broadcasts),
+      ...requested,
       requestPromise,
     };
   }
@@ -3500,6 +3529,135 @@ describe("exec approval handlers", () => {
       decision: "allow-once",
       resolutionSource: "auto-review",
     });
+  });
+
+  it("records a trusted silent native-gate handoff without claiming user approval", async (testContext) => {
+    const requesterClient = createApprovalRuntimeClient(
+      "conn-policy-handoff-requester",
+      "device-policy-handoff-requester",
+      { agentId: "main", sessionKey: "agent:main:main" },
+    );
+    const resolverClient = createApprovalRuntimeClient(
+      "conn-policy-handoff-resolver",
+      "device-policy-handoff-resolver",
+      { agentId: "main", sessionKey: "agent:main:main" },
+    );
+    const { manager, handlers, context, requestPromise } = await createAcceptedExecApproval(
+      testContext,
+      {
+        client: requesterClient,
+        request: {
+          id: "approval-policy-handoff",
+          twoPhase: true,
+          suppressDelivery: true,
+          requireDeliveryRoute: false,
+        },
+      },
+    );
+
+    const resolveRespond = await resolveExecApprovalForTest({
+      handlers,
+      id: "approval-policy-handoff",
+      context,
+      client: resolverClient,
+      handoff: { kind: "node-invoke-policy" },
+    });
+    await requestPromise;
+
+    expect(resolveRespond).toHaveBeenCalledWith(true, { ok: true }, undefined);
+    expect(manager.getSnapshot("approval-policy-handoff")).toMatchObject({
+      decision: "allow-once",
+      resolutionSource: "policy-handoff",
+      terminalReason: "policy-handoff",
+    });
+  });
+
+  it("does not disclose a hidden node-policy handoff to an untrusted resolver", async (testContext) => {
+    const requesterClient = createApprovalRuntimeClient(
+      "conn-forged-handoff-requester",
+      "device-forged-handoff-requester",
+      { agentId: "main", sessionKey: "agent:main:main" },
+    );
+    const untrustedResolver = createExecApprovalClient({
+      connId: "conn-forged-handoff-resolver",
+      clientId: GATEWAY_CLIENT_IDS.CONTROL_UI,
+      deviceId: "device-forged-handoff-resolver",
+      scopes: ["operator.approvals"],
+    });
+    const { manager, handlers, context, requestPromise } = await createAcceptedExecApproval(
+      testContext,
+      {
+        client: requesterClient,
+        request: {
+          id: "approval-forged-policy-handoff",
+          twoPhase: true,
+          suppressDelivery: true,
+          requireDeliveryRoute: false,
+        },
+      },
+    );
+
+    const resolveRespond = await resolveExecApprovalForTest({
+      handlers,
+      id: "approval-forged-policy-handoff",
+      context,
+      client: untrustedResolver,
+      handoff: { kind: "node-invoke-policy" },
+    });
+
+    expect(mockCallArg(resolveRespond)).toBe(false);
+    expectRecordFields(mockCallArg(resolveRespond, 0, 2), {
+      code: "INVALID_REQUEST",
+      message: "unknown or expired approval id",
+    });
+    expect(manager.getSnapshot("approval-forged-policy-handoff")?.decision).toBeUndefined();
+
+    expect(manager.resolve("approval-forged-policy-handoff", "deny")).toBe(true);
+    await requestPromise;
+  });
+
+  it("rejects a node-policy handoff after its trusted resolver authority closes", async (testContext) => {
+    const requesterClient = createApprovalRuntimeClient(
+      "conn-closed-handoff-requester",
+      "device-closed-handoff-requester",
+      { agentId: "main", sessionKey: "agent:main:main" },
+    );
+    const resolverClient = createApprovalRuntimeClient(
+      "conn-closed-handoff-resolver",
+      "device-closed-handoff-resolver",
+      { agentId: "main", sessionKey: "agent:main:main" },
+    );
+    const { manager, handlers, context, requestPromise } = await createAcceptedExecApproval(
+      testContext,
+      {
+        client: requesterClient,
+        request: {
+          id: "approval-closed-policy-handoff",
+          twoPhase: true,
+          suppressDelivery: true,
+          requireDeliveryRoute: false,
+        },
+      },
+    );
+    context.validateAgentRuntimeApprovalAuthority = () => false;
+
+    const resolveRespond = await resolveExecApprovalForTest({
+      handlers,
+      id: "approval-closed-policy-handoff",
+      context,
+      client: resolverClient,
+      handoff: { kind: "node-invoke-policy" },
+    });
+
+    expect(mockCallArg(resolveRespond)).toBe(false);
+    expectRecordFields(mockCallArg(resolveRespond, 0, 2), {
+      code: "INVALID_REQUEST",
+      message: "node policy handoff identity does not match request",
+    });
+    expect(manager.getSnapshot("approval-closed-policy-handoff")?.decision).toBeUndefined();
+
+    expect(manager.resolve("approval-closed-policy-handoff", "deny")).toBe(true);
+    await requestPromise;
   });
 
   it("rejects auto-review resolution when trusted agent identity mismatches the request", async (testContext) => {

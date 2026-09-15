@@ -121,6 +121,10 @@ function reasonLabel(reason: ApprovalTerminalReason): string {
   switch (reason) {
     case "user":
       return t("approvalHistory.reasons.user");
+    case "auto-review":
+      return t("approvalHistory.reasons.autoReview");
+    case "policy-handoff":
+      return t("approvalHistory.reasons.policyHandoff");
     case "timeout":
       return t("approvalHistory.reasons.timeout");
     case "malformed-verdict":
@@ -135,6 +139,15 @@ function reasonLabel(reason: ApprovalTerminalReason): string {
       return t("approvalHistory.reasons.storageCorrupt");
   }
   return reason satisfies never;
+}
+
+function decisionSummary(item: TerminalApprovalSnapshot): string {
+  if (item.reason === "policy-handoff") {
+    return t("approvalHistory.decisions.policyHandoff");
+  }
+  return `${statusLabel(item.status)} · ${decisionLabel(
+    "decision" in item ? item.decision : undefined,
+  )}`;
 }
 
 function requestLabel(item: TerminalApprovalSnapshot): string {
@@ -490,8 +503,7 @@ class ApprovalsPage extends OpenClawLightDomElement {
                           ${requestLabel(item)}
                         </td>
                         <td data-label=${t("approvalHistory.columns.decision")}>
-                          ${statusLabel(item.status)} ·
-                          ${decisionLabel("decision" in item ? item.decision : undefined)}
+                          ${decisionSummary(item)}
                         </td>
                         <td data-label=${t("approvalHistory.columns.reason")}>
                           ${reasonLabel(item.reason)}

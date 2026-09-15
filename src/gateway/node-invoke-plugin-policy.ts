@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { asOptionalRecord } from "@openclaw/normalization-core/record-coerce";
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
 import { recordRuntimeActionDecision } from "../audit/runtime-action-decision.js";
+import { racePromiseWithAbortSignal } from "../infra/abort-signal.js";
 import type { PluginRegistry } from "../plugins/registry-types.js";
 import { getActivePluginGatewayNodePolicyRegistry } from "../plugins/runtime-state.js";
 import { getPluginRuntimeGatewayRequestScope } from "../plugins/runtime/gateway-request-scope.js";
@@ -111,6 +112,8 @@ export async function applyPluginNodeInvokePolicy(params: {
   };
   timeoutMs?: number;
   signal?: AbortSignal;
+  /** Absolute outer invocation deadline. Plugin approval may not outlive it. */
+  deadlineAtMs?: number;
   resolveRemainingTimeoutMs?: () => number | undefined;
   onNodeCommandDispatched?: () => void;
   nodeInvokeStream?: GatewayNodeInvokeStream;
@@ -230,6 +233,55 @@ export async function applyPluginNodeInvokePolicy(params: {
       (registry.plugins.includes(pluginRecord) &&
         pluginRecord.enabled &&
         pluginRecord.status === "loaded"));
+  const deadlineSignal =
+    params.deadlineAtMs === undefined
+      ? undefined
+      : params.deadlineAtMs <= Date.now()
+        ? AbortSignal.abort(new ApprovalObserverClosedError())
+        : AbortSignal.timeout(Math.min(params.deadlineAtMs - Date.now(), 2_147_483_647));
+  const lifecycleSignal =
+    params.signal && deadlineSignal
+      ? AbortSignal.any([params.signal, deadlineSignal])
+      : (params.signal ?? deadlineSignal ?? new AbortController().signal);
+  const isOuterLifetimeCurrent = () =>
+    !lifecycleSignal.aborted &&
+    (params.deadlineAtMs === undefined || Date.now() < params.deadlineAtMs);
+  const assertOuterLifetimeCurrent = () => {
+    if (!isOuterLifetimeCurrent()) {
+      throw new ApprovalObserverClosedError();
+    }
+  };
+  const isPolicyInvocationCurrent = (): boolean => {
+    if (
+      !isOuterLifetimeCurrent() ||
+      !isPluginCurrent() ||
+      !isCallerRuntimeAuthorityActive() ||
+      params.privateTransport?.isCurrent() === false ||
+      params.isApprovalAuthorityActive?.() === false ||
+      params.nodeInvokeStream?.isRuntimeCurrent() === false
+    ) {
+      return false;
+    }
+    const currentNode = params.nodeSession.pairingGeneration
+      ? params.context.nodeRegistry.getForPairingGeneration(
+          params.nodeSession.nodeId,
+          params.nodeSession.pairingGeneration,
+        )
+      : params.context.nodeRegistry.get(params.nodeSession.nodeId);
+    return (
+      currentNode?.connId === params.nodeSession.connId && currentNode.client.invalidated !== true
+    );
+  };
+  const lifecycle: NonNullable<OpenClawPluginNodeInvokePolicyContext["lifecycle"]> = {
+    signal: lifecycleSignal,
+    ...(params.deadlineAtMs === undefined ? {} : { deadlineAtMs: params.deadlineAtMs }),
+    isCurrent: isPolicyInvocationCurrent,
+    assertCurrent: () => {
+      if (!isPolicyInvocationCurrent()) {
+        throw new ApprovalObserverClosedError();
+      }
+    },
+  };
   const dispatchNode = async (
     override: Parameters<OpenClawPluginNodeInvokePolicyContext["invokeNode"]>[0] = {},
     sessionAuthority?: { assertCurrent: () => void; signal: AbortSignal },
@@ -248,6 +300,7 @@ export async function applyPluginNodeInvokePolicy(params: {
       });
       return result;
     };
+    assertOuterLifetimeCurrent();
     sessionAuthority?.assertCurrent();
     if (!isCallerRuntimeAuthorityActive()) {
       return deny("node_runtime_authority_closed", {
@@ -265,6 +318,7 @@ export async function applyPluginNodeInvokePolicy(params: {
         message: "node pairing changed before dispatch",
       });
     }
+    assertOuterLifetimeCurrent();
     const currentNode = params.nodeSession.pairingGeneration
       ? params.context.nodeRegistry.getForPairingGeneration(
           params.nodeSession.nodeId,
@@ -326,6 +380,7 @@ export async function applyPluginNodeInvokePolicy(params: {
         : requestedTimeoutMs;
     // Pairing and policy checks above may await. Revalidate the exact runtime
     // capability at the final transport handoff so closure wins that race.
+    assertOuterLifetimeCurrent();
     sessionAuthority?.assertCurrent();
     if (params.privateTransport?.isCurrent() === false) {
       return deny("node_private_owner_closed", {
@@ -374,13 +429,9 @@ export async function applyPluginNodeInvokePolicy(params: {
       params: override.params ?? params.params,
       timeoutMs,
       ...(sessionAuthority
-        ? {
-            signal: params.signal
-              ? AbortSignal.any([params.signal, sessionAuthority.signal])
-              : sessionAuthority.signal,
-          }
-        : params.signal
-          ? { signal: params.signal }
+        ? { signal: AbortSignal.any([lifecycle.signal, sessionAuthority.signal]) }
+        : params.signal || deadlineSignal
+          ? { signal: lifecycle.signal }
           : {}),
       ...(params.sessionKey ? { sessionKey: params.sessionKey } : {}),
       idempotencyKey: override.idempotencyKey ?? params.idempotencyKey,
@@ -390,11 +441,13 @@ export async function applyPluginNodeInvokePolicy(params: {
       }),
       isDispatchAuthorized: () => {
         try {
+          lifecycle.assertCurrent();
           sessionAuthority?.assertCurrent();
         } catch {
           return false;
         }
         const current =
+          lifecycle.isCurrent() &&
           isPluginCurrent() &&
           params.privateTransport?.isCurrent() !== false &&
           (params.nodeInvokeStream?.isRuntimeCurrent() ?? true) &&
@@ -515,60 +568,67 @@ export async function applyPluginNodeInvokePolicy(params: {
 
   let result: OpenClawPluginNodeInvokePolicyResult;
   try {
-    result = await entry.policy.handle({
-      nodeId: params.nodeSession.nodeId,
-      command: params.command,
-      params: params.params,
-      timeoutMs: params.timeoutMs,
-      idempotencyKey: params.idempotencyKey,
-      config: params.context.getRuntimeConfig(),
-      pluginConfig: entry.pluginConfig,
-      node: {
-        nodeId: params.nodeSession.nodeId,
-        displayName: params.nodeSession.displayName,
-        platform: params.nodeSession.platform,
-        deviceFamily: params.nodeSession.deviceFamily,
-        commands: params.nodeSession.commands,
-      },
-      client: params.client
-        ? {
-            connId: params.client.connId,
-            scopes: parseScopes(params.client),
-          }
-        : null,
-      ...(risk ? { risk } : {}),
-      approvals: createPluginNodeInvokeApprovalRuntime({
-        context: params.context,
-        client: params.client,
-        callerIdentity,
-        pluginId: entry.pluginId,
-        command: params.command,
-        ...(approvalScope ? { approvalScope } : {}),
-        nodeSession: params.nodeSession,
-        risk,
-        standingGrantAuthorization,
-        ...(scope?.nodePlacementGrantAuthority
-          ? { placementGrantAuthority: scope.nodePlacementGrantAuthority }
-          : {}),
-        turnSource: trustedTurnSource,
-        isCurrent: () =>
-          isPluginCurrent() &&
-          isCallerRuntimeAuthorityActive() &&
-          params.privateTransport?.isCurrent() !== false &&
-          params.isApprovalAuthorityActive?.() !== false,
-      }),
-      invokeNode,
-      ...(ownedInvocation
-        ? {
-            invokeNodeWithSessionFull: async ({ workspace, createParams }) =>
-              await invokeOwned("session-full", { workspace }, createParams),
-          }
-        : {}),
-    });
+    assertOuterLifetimeCurrent();
+    result = await racePromiseWithAbortSignal(
+      Promise.resolve().then(() =>
+        entry.policy.handle({
+          nodeId: params.nodeSession.nodeId,
+          command: params.command,
+          params: params.params,
+          timeoutMs: params.timeoutMs,
+          idempotencyKey: params.idempotencyKey,
+          config: params.context.getRuntimeConfig(),
+          pluginConfig: entry.pluginConfig,
+          node: {
+            nodeId: params.nodeSession.nodeId,
+            displayName: params.nodeSession.displayName,
+            platform: params.nodeSession.platform,
+            deviceFamily: params.nodeSession.deviceFamily,
+            commands: params.nodeSession.commands,
+          },
+          client: params.client
+            ? {
+                connId: params.client.connId,
+                scopes: parseScopes(params.client),
+              }
+            : null,
+          ...(risk ? { risk } : {}),
+          lifecycle,
+          approvals: createPluginNodeInvokeApprovalRuntime({
+            context: params.context,
+            client: params.client,
+            callerIdentity,
+            pluginId: entry.pluginId,
+            command: params.command,
+            ...(approvalScope ? { approvalScope } : {}),
+            nodeSession: params.nodeSession,
+            risk,
+            standingGrantAuthorization,
+            ...(scope?.nodePlacementGrantAuthority
+              ? { placementGrantAuthority: scope.nodePlacementGrantAuthority }
+              : {}),
+            turnSource: trustedTurnSource,
+            signal: lifecycle.signal,
+            deadlineAtMs: lifecycle.deadlineAtMs,
+            isCurrent: lifecycle.isCurrent,
+          }),
+          invokeNode,
+          ...(ownedInvocation
+            ? {
+                invokeNodeWithSessionFull: async ({ workspace, createParams }) =>
+                  await invokeOwned("session-full", { workspace }, createParams),
+              }
+            : {}),
+        }),
+      ),
+      lifecycle.signal,
+    );
+    assertOuterLifetimeCurrent();
   } catch (error) {
     // Observer closure is not a denial. Do not attribute a late policy failure
     // after the exact caller authority has closed.
-    const policyFailed = !(error instanceof ApprovalObserverClosedError);
+    const lifecycleClosed = !isOuterLifetimeCurrent();
+    const policyFailed = !lifecycleClosed && !(error instanceof ApprovalObserverClosedError);
     if (policyFailed && !nodeCommandDispatched && isCallerRuntimeAuthorityActive()) {
       recordNodeDecision({
         pluginId: entry.pluginId,
@@ -577,6 +637,9 @@ export async function applyPluginNodeInvokePolicy(params: {
         reasonCode: "node_plugin_policy_failed",
         summary: "The registered plugin policy failed closed before node transport dispatch.",
       });
+    }
+    if (lifecycleClosed) {
+      throw new ApprovalObserverClosedError();
     }
     throw error;
   }

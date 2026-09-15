@@ -293,6 +293,8 @@ export async function openTerminalSession(
               nodeSession: access.node,
               command: nodeCatalogPlan.command,
               params: nodeParams,
+              signal: deadline.controller.signal,
+              deadlineAtMs: deadline.expiresAtMs,
             }),
           deadline,
         );

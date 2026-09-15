@@ -24,6 +24,22 @@ function legacyTwoKindCreateSql(): string {
     .replace(/'exec',\s*'plugin',\s*'system-agent'/, "'exec', 'plugin'");
 }
 
+function previousTerminalReasonCreateSql(): string {
+  return canonicalOperatorApprovalCreateSql()
+    .replace(/\n\s*'auto-review',\n\s*'policy-handoff',/u, "")
+    .replace(
+      / {6}AND \(\n {8}\(\n {10}decision IN \('allow-once', 'allow-always'\)\n {10}AND terminal_reason = 'user'\n {8}\)\n {8}OR \(\n {10}decision = 'allow-once'\n {10}AND terminal_reason IN \('auto-review', 'policy-handoff'\)\n {8}\)\n {6}\)/u,
+      "      AND decision IN ('allow-once', 'allow-always')\n      AND terminal_reason = 'user'",
+    );
+}
+
+function broadAutomatedTerminalReasonCreateSql(): string {
+  return canonicalOperatorApprovalCreateSql().replace(
+    / {6}AND \(\n {8}\(\n {10}decision IN \('allow-once', 'allow-always'\)\n {10}AND terminal_reason = 'user'\n {8}\)\n {8}OR \(\n {10}decision = 'allow-once'\n {10}AND terminal_reason IN \('auto-review', 'policy-handoff'\)\n {8}\)\n {6}\)/u,
+    "      AND decision IN ('allow-once', 'allow-always')\n      AND terminal_reason IN ('user', 'auto-review', 'policy-handoff')",
+  );
+}
+
 function withoutResolutionRefColumn(sql: string): string {
   const resolutionRefStart = sql.indexOf("\n  resolution_ref ");
   const followingColumnStart = sql.indexOf("\n  kind ", resolutionRefStart);
@@ -100,6 +116,62 @@ describe("repairOperatorApprovalKinds", () => {
     expect(
       db.prepare("SELECT strict FROM pragma_table_list WHERE name = 'operator_approvals'").get(),
     ).toEqual({ strict: 1 });
+    db.close();
+  });
+
+  it("migrates the previous terminal-reason constraints and preserves rows", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(previousTerminalReasonCreateSql());
+    seedRow(db, "exec");
+
+    expect(() => assertCanonicalOperatorApprovalKinds(db, ":memory:")).toThrow(
+      "legacy operator approval schema",
+    );
+    expect(repairOperatorApprovalSchema(db)).toEqual([
+      "Migrated shared state operator approvals → OpenClaw system changes",
+    ]);
+    expect(() => assertCanonicalOperatorApprovalKinds(db, ":memory:")).not.toThrow();
+    expect(db.prepare("SELECT approval_id FROM operator_approvals").all()).toEqual([
+      { approval_id: "a1" },
+    ]);
+    db.close();
+  });
+
+  it("migrates the broad automated-reason constraint and drops invalid standing authority", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(broadAutomatedTerminalReasonCreateSql());
+    seedRow(db, "exec", RESOLUTION_REF, "valid-once");
+    seedRow(db, "exec", "ref1111111111111111111111111111111111111111", "invalid-standing");
+    db.prepare(`
+      UPDATE operator_approvals
+      SET status = 'allowed', decision = 'allow-once', terminal_reason = 'policy-handoff',
+          resolved_at_ms = 2, resolver_kind = 'runtime', updated_at_ms = 2
+      WHERE approval_id = 'valid-once';
+    `).run();
+    db.prepare(`
+      UPDATE operator_approvals
+      SET status = 'allowed', decision = 'allow-always', terminal_reason = 'auto-review',
+          resolved_at_ms = 2, resolver_kind = 'runtime', updated_at_ms = 2
+      WHERE approval_id = 'invalid-standing';
+    `).run();
+
+    expect(repairOperatorApprovalSchema(db)).toEqual([
+      "Migrated shared state operator approvals → OpenClaw system changes",
+    ]);
+    expect(() => assertCanonicalOperatorApprovalKinds(db, ":memory:")).not.toThrow();
+    expect(
+      db
+        .prepare(
+          "SELECT approval_id, decision, terminal_reason FROM operator_approvals ORDER BY approval_id",
+        )
+        .all(),
+    ).toEqual([
+      {
+        approval_id: "valid-once",
+        decision: "allow-once",
+        terminal_reason: "policy-handoff",
+      },
+    ]);
     db.close();
   });
 

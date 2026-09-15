@@ -326,20 +326,24 @@ export function sanitizeSystemRunParamsForForwarding(opts: {
     });
   }
   const recordedResolutionSource = snapshot.resolutionSource ?? "operator";
-  if (recordedResolutionSource !== "operator" && recordedResolutionSource !== "auto-review") {
+  if (
+    recordedResolutionSource !== "operator" &&
+    recordedResolutionSource !== "auto-review" &&
+    recordedResolutionSource !== "policy-handoff"
+  ) {
     return systemRunApprovalGuardError({
       code: "INVALID_APPROVAL_SOURCE",
       message: "approval record source invalid",
       details: { runId },
     });
   }
-  if (recordedResolutionSource === "auto-review" && snapshot.decision !== "allow-once") {
+  if (recordedResolutionSource !== "operator" && snapshot.decision !== "allow-once") {
     if (snapshot.consumedDecision === "allow-once") {
       return systemRunApprovalRequired(runId);
     }
     return systemRunApprovalGuardError({
       code: "APPROVAL_SOURCE_MISMATCH",
-      message: "auto-review source does not match approval decision",
+      message: "automated approval source does not match approval decision",
       details: { runId },
     });
   }
@@ -483,11 +487,11 @@ export function sanitizeSystemRunParamsForForwarding(opts: {
         details: { runId },
       });
     }
-    if (recordedResolutionSource === "auto-review") {
+    if (recordedResolutionSource !== "operator") {
       if (!runtimeContext.plan) {
         return systemRunApprovalGuardError({
           code: "APPROVAL_PLAN_REQUIRED",
-          message: "auto-review approval requires an approved execution plan",
+          message: "automated approval requires an approved execution plan",
           details: { runId },
         });
       }
@@ -499,6 +503,17 @@ export function sanitizeSystemRunParamsForForwarding(opts: {
       // Source is derived only from the consumed server-side record. Never
       // forward caller-supplied explicit flags as auto-review authority.
       next.approvalSource = "auto-review";
+      return {
+        ok: true,
+        params: next,
+        approvalAuthority: { recordId: runId, decision: "allow-once" },
+      };
+    }
+    if (recordedResolutionSource === "policy-handoff") {
+      // This only satisfies the native node replay gate. The downstream plugin
+      // policy must independently authorize the canonical command.
+      next.approved = true;
+      next.approvalDecision = "allow-once";
       return {
         ok: true,
         params: next,

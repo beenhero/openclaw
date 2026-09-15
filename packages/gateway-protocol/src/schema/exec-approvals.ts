@@ -327,6 +327,12 @@ export const ExecApprovalResolveParamsSchema = closedObject({
   id: NonEmptyString,
   decision: NonEmptyString,
   reviewer: Type.Optional(ApprovalChannelReviewerSchema),
+  /** Trusted runtime-only marker for an internal native-gate → plugin-policy handoff. */
+  handoff: Type.Optional(
+    closedObject({
+      kind: Type.Literal("node-invoke-policy"),
+    }),
+  ),
   // Per-grant expiry override for allow-always on automation approvals:
   // days from resolution. Absent defers to tools.exec.grantExpiryDays, and
   // an unset config keeps the grant valid until revoked. Ignored for other

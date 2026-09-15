@@ -53,6 +53,8 @@ export type OperatorApprovalStatus = "pending" | "allowed" | "denied" | "expired
 type OperatorApprovalDecision = "allow-once" | "allow-always" | "deny";
 export type OperatorApprovalTerminalReason =
   | "user"
+  | "auto-review"
+  | "policy-handoff"
   | "timeout"
   | "malformed-verdict"
   | "no-route"
@@ -231,6 +233,8 @@ const OPERATOR_APPROVAL_STATUSES = new Set<OperatorApprovalStatus>([
 ]);
 const OPERATOR_APPROVAL_TERMINAL_REASONS = new Set<OperatorApprovalTerminalReason>([
   "user",
+  "auto-review",
+  "policy-handoff",
   "timeout",
   "malformed-verdict",
   "no-route",
@@ -398,11 +402,11 @@ function hasValidLifecycleTuple(params: {
       decision === "allow-once"
         ? noConsumption || (row.consumed_at_ms !== null && Boolean(row.consumed_by?.trim()))
         : noConsumption;
-    return (
-      (decision === "allow-once" || decision === "allow-always") &&
-      terminalReason === "user" &&
-      validConsumption
-    );
+    const validDecisionReason =
+      (terminalReason === "user" && (decision === "allow-once" || decision === "allow-always")) ||
+      ((terminalReason === "auto-review" || terminalReason === "policy-handoff") &&
+        decision === "allow-once");
+    return validDecisionReason && validConsumption;
   }
   if (decision !== "deny" || !noConsumption) {
     return false;
@@ -516,6 +520,12 @@ function decodeOperatorApprovalRow(row: OperatorApprovalRow): OperatorApprovalRe
 
 function operatorApprovalReasonCode(record: OperatorApprovalRecord): string {
   if (record.status === "allowed") {
+    if (record.terminalReason === "policy-handoff") {
+      return "operator_approval_policy_handoff";
+    }
+    if (record.terminalReason === "auto-review") {
+      return "operator_approval_auto_review_allowed_once";
+    }
     return record.decision === "allow-always"
       ? "operator_approval_allowed_always"
       : "operator_approval_allowed_once";
@@ -545,6 +555,12 @@ function operatorApprovalPolicyRefs(record: OperatorApprovalRecord): string[] {
   switch (record.terminalReason) {
     case "user":
       refs.push("operator-approval:human-decision");
+      break;
+    case "auto-review":
+      refs.push("operator-approval:automated-runtime-policy");
+      break;
+    case "policy-handoff":
+      refs.push("operator-approval:downstream-policy-handoff");
       break;
     case "timeout":
       refs.push("operator-approval:deadline");
@@ -646,6 +662,7 @@ function projectOperatorApprovalReceipt(
   context: OperatorApprovalReceiptContext,
 ): DecisionReceiptV1 {
   const allowed = record.status === "allowed";
+  const policyHandoff = record.terminalReason === "policy-handoff";
   const sourceRef = record.resolutionRef;
   return {
     schemaVersion: 1,
@@ -657,10 +674,12 @@ function projectOperatorApprovalReceipt(
     occurredAt: record.resolvedAtMs ?? record.updatedAtMs,
     action: {
       family: record.kind,
-      operation: "approval",
-      summary: allowed
-        ? `A ${record.kind} approval allowed the requested action.`
-        : `A ${record.kind} approval stopped the requested action.`,
+      operation: policyHandoff ? "policy-handoff" : "approval",
+      summary: policyHandoff
+        ? "An internal runtime handoff admitted the request to a downstream node policy; it does not prove user approval or action execution."
+        : allowed
+          ? `A ${record.kind} approval allowed the requested action.`
+          : `A ${record.kind} approval stopped the requested action.`,
     },
     decision: {
       outcome: allowed ? "allowed" : "denied",
@@ -670,7 +689,7 @@ function projectOperatorApprovalReceipt(
       coverageState: "enforced",
       evaluatorRef: `operator-approval:${record.resolver?.kind ?? "system"}`,
       policyRefs: operatorApprovalPolicyRefs(record),
-      grantRefs: allowed ? [`operator-approval-grant:${sourceRef}`] : [],
+      grantRefs: allowed && !policyHandoff ? [`operator-approval-grant:${sourceRef}`] : [],
       contextFieldsUsed: ["contextId", "executionId", "runId"],
     },
     source: {
@@ -1683,6 +1702,8 @@ export function resolveOperatorApproval(params: {
   runtimeEpoch?: string;
   nowMs?: number;
   databaseOptions?: OpenClawStateDatabaseOptions;
+  /** Distinguishes real reviewer input from trusted automated transitions. */
+  terminalReason?: "user" | "auto-review" | "policy-handoff";
   mcpToolGrant?: { agentId: string; server: string; tool: string };
   /** Cron-context allow-always mints this scoped grant in the same transaction. */
   standingGrant?: { kind: "cron" } & CronStandingGrantMintSpec & {
@@ -1691,6 +1712,10 @@ export function resolveOperatorApproval(params: {
 }): ResolveOperatorApprovalResult {
   const id = requireApprovalId(params.id);
   const resolverId = normalizeNullableString(params.resolver.id);
+  const terminalReason = params.terminalReason ?? "user";
+  if (terminalReason !== "user" && params.decision !== "allow-once") {
+    throw new Error("automated approval terminal reason requires an allow-once decision");
+  }
   const runtimeEpoch =
     params.runtimeEpoch === undefined
       ? undefined
@@ -1735,7 +1760,7 @@ export function resolveOperatorApproval(params: {
       .set({
         status: params.decision === "deny" ? "denied" : "allowed",
         decision: params.decision,
-        terminal_reason: "user",
+        terminal_reason: terminalReason,
         resolved_at_ms: auditTimestampMs,
         resolver_kind: params.resolver.kind,
         resolver_id: resolverId,

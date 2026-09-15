@@ -263,6 +263,22 @@ export type OpenClawPluginNodeInvokePolicyContext = {
     family: string;
   };
   approvals?: OpenClawPluginNodeInvokePolicyApprovalRuntime;
+  /**
+   * Host-owned lifetime of this exact invocation. Policies must treat this as
+   * authorization authority, not merely as a hint to stop background work.
+   * Optional only for source compatibility with older hosts and test doubles;
+   * the current Gateway always supplies it.
+   */
+  lifecycle?: {
+    /** Aborts when the caller, run, route, or absolute invocation deadline closes. */
+    signal: AbortSignal;
+    /** Absolute wall-clock deadline shared with the outer invocation, when bounded. */
+    deadlineAtMs?: number;
+    /** Synchronous last-mile liveness probe; false means no new authority may be minted. */
+    isCurrent: () => boolean;
+    /** Throws when this exact invocation can no longer authorize work. */
+    assertCurrent: () => void;
+  };
   /** Full covers only the selected harness's declared node commands; undefined requires a human decision. */
   invokeNodeWithSessionFull?: (input: {
     workspace: OpenClawPluginNodeWorkspace;

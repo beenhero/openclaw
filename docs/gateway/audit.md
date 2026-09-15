@@ -34,10 +34,11 @@ decision-fact table.
 This includes operator-routed native Codex command and file prompts. The Codex
 bridge carries the admitted agent, session key, run, tool, context, and
 execution binding into the same approval owner, then returns only the approved
-native scope. Auto-review, full-access policy, native hook decisions, and
-requests rejected before operator routing have no operator-owned row and remain
-unsupported as operator-approval evidence; later tool events never manufacture
-one.
+native scope. Auto-review and internal policy-handoff rows, when retained by the
+unified owner, are explicitly labeled automated transitions and do not prove a
+human decision. Full-access policy, native hook decisions, and requests rejected
+before operator routing remain unsupported as operator-approval evidence; later
+tool events never manufacture a human approval.
 
 Shared outbound delivery is another owner-native source. Queue admission and
 platform-send start use a lazy progress companion, while terminal message rows
@@ -270,6 +271,8 @@ Approval outcomes map to stable receipt reasons:
 | Recorded approval result       | Receipt reason code                                                                       |
 | ------------------------------ | ----------------------------------------------------------------------------------------- |
 | Allow once / allow always      | `operator_approval_allowed_once` / `operator_approval_allowed_always`                     |
+| Automated runtime allow once   | `operator_approval_auto_review_allowed_once`                                              |
+| Internal downstream handoff    | `operator_approval_policy_handoff`                                                        |
 | Reviewer denial                | `operator_approval_denied_by_reviewer`                                                    |
 | Deadline expiry                | `operator_approval_expired`                                                               |
 | Run abort / Gateway restart    | `operator_approval_cancelled_run_aborted` / `operator_approval_cancelled_gateway_restart` |
@@ -281,11 +284,13 @@ Approval outcomes map to stable receipt reasons:
 | Malformed execution binding    | `operator_approval_execution_link_malformed`                                              |
 | Mismatched execution binding   | `operator_approval_execution_link_mismatch`                                               |
 
-Allowed, denied, expired, and cancelled rows are `enforced` because the
-recorded human decision or fail-closed owner policy changed whether the action
-could proceed. A no-route denial is `enforced` only because the approval owner
-records `no-route` as the winning terminal reason before returning the
-non-action. An unreadable row is `unknown`, never reconstructed. If a retained
+Allowed, denied, expired, and cancelled rows are `enforced` because their
+recorded decision or fail-closed owner policy changed whether the request could
+proceed. A `policy-handoff` receipt proves only admission to the named
+downstream policy: its operation is `policy-handoff`, it has no grant reference,
+and it does not prove human approval or action execution. A no-route denial is
+`enforced` only because the approval owner records `no-route` as the winning
+terminal reason before returning the non-action. An unreadable row is `unknown`, never reconstructed. If a retained
 approval names a run but its expected execution context is missing, run
 inspection returns `decision_context_link_missing` with `unknown` coverage and
 does not invent a receipt context.

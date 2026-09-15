@@ -287,6 +287,8 @@ public enum ApprovalAllowDecision: String, Codable, Sendable {
 
 public enum ApprovalAllowedReason: String, Codable, Sendable {
     case user = "user"
+    case autoReview = "auto-review"
+    case policyHandoff = "policy-handoff"
 }
 
 public enum ApprovalDeniedReason: String, Codable, Sendable {
@@ -313,6 +315,8 @@ public enum PluginApprovalSeverity: String, Codable, Sendable {
 
 public enum ApprovalTerminalReason: String, Codable, Sendable {
     case user = "user"
+    case autoReview = "auto-review"
+    case policyHandoff = "policy-handoff"
     case timeout = "timeout"
     case malformedVerdict = "malformed-verdict"
     case noRoute = "no-route"
@@ -20977,17 +20981,20 @@ public struct ExecApprovalResolveParams: Codable, Sendable {
     public let id: String
     public let decision: String
     public let reviewer: [String: AnyCodable]?
+    public let handoff: [String: AnyCodable]?
     public let grantexpiresindays: Int?
 
     public init(
         id: String,
         decision: String,
         reviewer: [String: AnyCodable]? = nil,
+        handoff: [String: AnyCodable]? = nil,
         grantexpiresindays: Int? = nil)
     {
         self.id = id
         self.decision = decision
         self.reviewer = reviewer
+        self.handoff = handoff
         self.grantexpiresindays = grantexpiresindays
     }
 
@@ -20995,6 +21002,7 @@ public struct ExecApprovalResolveParams: Codable, Sendable {
         case id
         case decision
         case reviewer
+        case handoff
         case grantexpiresindays = "grantExpiresInDays"
     }
 }

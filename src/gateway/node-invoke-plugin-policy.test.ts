@@ -17,6 +17,7 @@ import { createEmptyPluginRegistry } from "../plugins/registry-empty.js";
 import { resetPluginRuntimeStateForTest, setActivePluginRegistry } from "../plugins/runtime.js";
 import type { OpenClawPluginNodeInvokePolicyContext } from "../plugins/types.js";
 import { closeOpenClawStateDatabaseByPath } from "../state/openclaw-state-db.js";
+import { ApprovalObserverClosedError } from "./exec-approval-lifecycle.js";
 import { ExecApprovalManager } from "./exec-approval-manager.js";
 import { createTestApprovalManager } from "./exec-approval-manager.test-support.js";
 import { applyPluginNodeInvokePolicy } from "./node-invoke-plugin-policy.js";
@@ -323,6 +324,50 @@ describe("applyPluginNodeInvokePolicy", () => {
       expect(request?.timeoutMs).toBeLessThanOrEqual(250);
     },
   );
+
+  it("makes outer cancellation authoritative and blocks a late plugin dispatch", async () => {
+    let releasePolicy!: () => void;
+    const policyBlocked = new Promise<void>((resolve) => {
+      releasePolicy = resolve;
+    });
+    let observedLifecycle: OpenClawPluginNodeInvokePolicyContext["lifecycle"] | undefined;
+    let policyFinished = false;
+    setDangerousDemoCommandRegistry([
+      createDemoPolicy(async (ctx: OpenClawPluginNodeInvokePolicyContext) => {
+        try {
+          observedLifecycle = ctx.lifecycle;
+          await policyBlocked;
+          return await ctx.invokeNode();
+        } finally {
+          policyFinished = true;
+        }
+      }),
+    ]);
+    const { context, invoke } = createContext();
+    const controller = new AbortController();
+    const deadlineAtMs = Date.now() + 60_000;
+
+    const pending = applyPluginNodeInvokePolicy({
+      context,
+      client: null,
+      nodeSession: createNodeSession(),
+      command: DEMO_COMMAND,
+      params: DEMO_PARAMS,
+      signal: controller.signal,
+      deadlineAtMs,
+    });
+    await vi.waitFor(() => expect(observedLifecycle).toBeDefined());
+    expect(observedLifecycle?.deadlineAtMs).toBe(deadlineAtMs);
+    expect(observedLifecycle?.isCurrent()).toBe(true);
+
+    controller.abort();
+    await expect(pending).rejects.toBeInstanceOf(ApprovalObserverClosedError);
+    expect(observedLifecycle?.isCurrent()).toBe(false);
+
+    releasePolicy();
+    await vi.waitFor(() => expect(policyFinished).toBe(true));
+    expect(invoke).not.toHaveBeenCalled();
+  });
 
   it("marks plugin-owned work dispatched only after the node transport accepts it", async () => {
     setDangerousDemoCommandRegistry([

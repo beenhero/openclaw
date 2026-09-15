@@ -385,7 +385,11 @@ export async function executeNodeHostCommand(
     await callGatewayTool(
       "exec.approval.resolve",
       { timeoutMs: 15_000 },
-      { id: approvalId, decision: "allow-once" },
+      {
+        id: approvalId,
+        decision: "allow-once",
+        handoff: { kind: "node-invoke-policy" },
+      },
       { scopes: [APPROVALS_SCOPE], requireAgentRuntimeIdentity: true },
     );
     inlineApprovedByAsk = true;

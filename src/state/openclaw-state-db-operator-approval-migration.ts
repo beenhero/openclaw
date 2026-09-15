@@ -1,4 +1,4 @@
-// Doctor-only repair for the operator approval kind constraint.
+// Doctor-only repair for closed operator-approval schema enums.
 import type { DatabaseSync } from "node:sqlite";
 import { runSqliteImmediateTransactionSync } from "../infra/sqlite-transaction.js";
 import { tableExists } from "./openclaw-state-db-schema-helpers.js";
@@ -50,8 +50,27 @@ function hasCanonicalOperatorApprovalKinds(db: DatabaseSync): boolean {
   );
 }
 
+function hasCanonicalOperatorApprovalTerminalReasons(db: DatabaseSync): boolean {
+  if (!tableExists(db, "operator_approvals")) {
+    return true;
+  }
+  const sql = tableSql(db)?.toLowerCase() ?? "";
+  return (
+    /terminal_reason\s+text\s+check\s*\(\s*terminal_reason\s+in\s*\(\s*'user'\s*,\s*'auto-review'\s*,\s*'policy-handoff'/.test(
+      sql,
+    ) &&
+    /status\s*=\s*'allowed'\s+and\s*\(\s*\(\s*decision\s+in\s*\(\s*'allow-once'\s*,\s*'allow-always'\s*\)\s+and\s+terminal_reason\s*=\s*'user'\s*\)\s+or\s*\(\s*decision\s*=\s*'allow-once'\s+and\s+terminal_reason\s+in\s*\(\s*'auto-review'\s*,\s*'policy-handoff'\s*\)\s*\)\s*\)/.test(
+      sql,
+    )
+  );
+}
+
+function hasCanonicalOperatorApprovalSchema(db: DatabaseSync): boolean {
+  return hasCanonicalOperatorApprovalKinds(db) && hasCanonicalOperatorApprovalTerminalReasons(db);
+}
+
 export function assertCanonicalOperatorApprovalKinds(db: DatabaseSync, pathname: string): void {
-  if (!hasCanonicalOperatorApprovalKinds(db)) {
+  if (!hasCanonicalOperatorApprovalSchema(db)) {
     throw new Error(
       `OpenClaw state database ${pathname} has a legacy operator approval schema; run openclaw doctor --fix to migrate it.`,
     );
@@ -65,7 +84,7 @@ export function isCanonicalOperatorApprovalKind(
 }
 
 export function detectOperatorApprovalSchemaMigration(db: DatabaseSync, path: string) {
-  return hasCanonicalOperatorApprovalKinds(db)
+  return hasCanonicalOperatorApprovalSchema(db)
     ? []
     : [{ kind: "operator-approvals-system-agent" as const, path }];
 }
@@ -101,6 +120,40 @@ function alterAppendedResolutionRefCreateSql(sql: string): string {
   return withoutResolutionRef.replace(tailColumn, `${tailColumn} resolution_ref TEXT,`);
 }
 
+function removeAutomatedTerminalReasons(sql: string): string {
+  return replaceAllowedDecisionReasonRule(sql, [
+    "      AND decision IN ('allow-once', 'allow-always')",
+    "      AND terminal_reason = 'user'",
+  ]).replace(/\n\s*'auto-review',\n\s*'policy-handoff',/u, "");
+}
+
+function restoreBroadAutomatedTerminalReasons(sql: string): string {
+  return replaceAllowedDecisionReasonRule(sql, [
+    "      AND decision IN ('allow-once', 'allow-always')",
+    "      AND terminal_reason IN ('user', 'auto-review', 'policy-handoff')",
+  ]);
+}
+
+function replaceAllowedDecisionReasonRule(sql: string, replacement: string[]): string {
+  const canonicalRule = [
+    "      AND (",
+    "        (",
+    "          decision IN ('allow-once', 'allow-always')",
+    "          AND terminal_reason = 'user'",
+    "        )",
+    "        OR (",
+    "          decision = 'allow-once'",
+    "          AND terminal_reason IN ('auto-review', 'policy-handoff')",
+    "        )",
+    "      )",
+  ].join("\n");
+  const replaced = sql.replace(canonicalRule, replacement.join("\n"));
+  if (replaced === sql) {
+    throw new Error("canonical operator approval lifecycle rule is unavailable");
+  }
+  return replaced;
+}
+
 // The only legacy shapes this repair may destructively replace are the exact
 // prior canonical table with the two-kind constraint (before 'system-agent')
 // and its shipped ALTER-appended resolution_ref variant.
@@ -112,13 +165,28 @@ function hasExactLegacyOperatorApprovalSchema(db: DatabaseSync): boolean {
   if (!live) {
     return false;
   }
-  const exactStrictLegacy = canonicalOperatorApprovalCreateSql()
+  const exactStrictCanonical = canonicalOperatorApprovalCreateSql().replace(
+    "CREATE TABLE IF NOT EXISTS operator_approvals (",
+    "CREATE TABLE operator_approvals (",
+  );
+  const exactStrictLegacy = exactStrictCanonical
     // sqlite_master stores the CREATE statement without "IF NOT EXISTS".
-    .replace("CREATE TABLE IF NOT EXISTS operator_approvals (", "CREATE TABLE operator_approvals (")
     .replace(/'exec',\s*'plugin',\s*'system-agent'/, "'exec', 'plugin'");
+  const exactStrictBroadReasons = restoreBroadAutomatedTerminalReasons(exactStrictCanonical);
+  const exactStrictLegacyKindsAndBroadReasons =
+    restoreBroadAutomatedTerminalReasons(exactStrictLegacy);
+  const exactStrictPreviousReasons = removeAutomatedTerminalReasons(exactStrictCanonical);
+  const exactStrictLegacyKindsAndReasons = removeAutomatedTerminalReasons(exactStrictLegacy);
   const normalizedLive = normalizeDdl(live);
-  const alterAppendedStrictLegacy = alterAppendedResolutionRefCreateSql(exactStrictLegacy);
-  return [exactStrictLegacy, alterAppendedStrictLegacy].some((strictLegacy) =>
+  const supportedLegacyShapes = [
+    exactStrictLegacy,
+    exactStrictBroadReasons,
+    exactStrictLegacyKindsAndBroadReasons,
+    exactStrictPreviousReasons,
+    exactStrictLegacyKindsAndReasons,
+  ];
+  const alterAppendedLegacyShapes = supportedLegacyShapes.map(alterAppendedResolutionRefCreateSql);
+  return [...supportedLegacyShapes, ...alterAppendedLegacyShapes].some((strictLegacy) =>
     [strictLegacy, strictLegacy.replace(/\) STRICT;$/u, ");")]
       .map(normalizeDdl)
       .includes(normalizedLive),
@@ -150,7 +218,7 @@ function operatorApprovalIndexSql(): string {
 
 function repairOperatorApprovalKinds(db: DatabaseSync): boolean {
   if (
-    hasCanonicalOperatorApprovalKinds(db) ||
+    hasCanonicalOperatorApprovalSchema(db) ||
     tableExists(db, "operator_approvals_migration_new") ||
     !hasExactLegacyOperatorApprovalSchema(db)
   ) {
@@ -172,7 +240,12 @@ function repairOperatorApprovalKinds(db: DatabaseSync): boolean {
       SELECT ${columns} FROM operator_approvals
       WHERE typeof(resolution_ref) = 'text'
         AND length(resolution_ref) = 43
-        AND resolution_ref NOT GLOB '*[^A-Za-z0-9_-]*';
+        AND resolution_ref NOT GLOB '*[^A-Za-z0-9_-]*'
+        AND NOT (
+          status = 'allowed'
+          AND terminal_reason IN ('auto-review', 'policy-handoff')
+          AND decision != 'allow-once'
+        );
       DROP TABLE operator_approvals;
       ALTER TABLE operator_approvals_migration_new RENAME TO operator_approvals;
     `);

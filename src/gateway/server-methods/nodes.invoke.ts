@@ -431,6 +431,7 @@ export const nodeInvokeHandlers: GatewayRequestHandlers = {
               },
               timeoutMs: p.timeoutMs,
               signal: invocationLifecycle,
+              deadlineAtMs: invokeDeadlineAtMs,
               resolveRemainingTimeoutMs: resolveRemainingInvokeTimeoutMs,
               onNodeCommandDispatched: () => {
                 // Deadline races must retain transport ownership so a command

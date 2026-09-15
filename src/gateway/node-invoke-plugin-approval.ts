@@ -88,6 +88,8 @@ export function createPluginNodeInvokeApprovalRuntime(params: {
     accountId?: unknown;
     threadId?: unknown;
   };
+  signal: AbortSignal;
+  deadlineAtMs?: number;
   isCurrent: () => boolean;
 }): OpenClawPluginNodeInvokePolicyContext["approvals"] | undefined {
   const manager = params.context.pluginApprovalManager;
@@ -96,7 +98,15 @@ export function createPluginNodeInvokeApprovalRuntime(params: {
   }
   return {
     async request(input) {
-      const timeoutMs = resolvePluginApprovalTimeoutMs(input.timeoutMs);
+      const configuredTimeoutMs = resolvePluginApprovalTimeoutMs(input.timeoutMs);
+      const remainingLifetimeMs =
+        params.deadlineAtMs === undefined
+          ? undefined
+          : Math.max(0, params.deadlineAtMs - Date.now());
+      const timeoutMs =
+        remainingLifetimeMs === undefined
+          ? configuredTimeoutMs
+          : Math.min(configuredTimeoutMs, Math.max(1, remainingLifetimeMs));
       const turnSource = resolveNodeInvokeTurnSourceFields(params.turnSource);
       const callerIdentity = params.callerIdentity;
       const invocationSessionKey =
@@ -182,6 +192,7 @@ export function createPluginNodeInvokeApprovalRuntime(params: {
         turnSourceThreadId: turnSource.turnSourceThreadId,
       };
       const record = manager.create(request, timeoutMs, `plugin:${randomUUID()}`);
+      record.approvalSignals = [params.signal];
       if (callerIdentity) {
         record.agentRuntimeDelegatedAuthority = callerIdentity.delegatedAuthority;
         if (callerIdentity.executionIdentity) {

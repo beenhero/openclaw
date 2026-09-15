@@ -17,8 +17,9 @@ import type {
   ResolveOperatorApprovalResult,
 } from "./operator-approval-store.js";
 
-// Node replay distinguishes a trusted auto-review verdict from an operator decision.
-export type ExecApprovalResolutionSource = "operator" | "auto-review";
+// Node replay distinguishes automated policy outcomes and internal handoffs
+// from a real operator decision.
+export type ExecApprovalResolutionSource = "operator" | "auto-review" | "policy-handoff";
 
 export type ExecApprovalRecord<TPayload = ExecApprovalRequestPayload> = {
   id: string;

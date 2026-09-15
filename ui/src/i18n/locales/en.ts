@@ -4066,9 +4066,12 @@ export const en: TranslationMap & {
       allowOnce: "Allow once",
       allowAlways: "Always allow",
       deny: "Deny",
+      policyHandoff: "Delegated to node policy",
     },
     reasons: {
       user: "User decision",
+      autoReview: "Automated runtime policy",
+      policyHandoff: "Internal policy handoff",
       timeout: "Timed out",
       malformedVerdict: "Malformed verdict",
       noRoute: "No route",

@@ -368,6 +368,9 @@ export function createWorkerComputerTransportOwner(options: {
             params: commandParams,
             sessionKey: placement.sessionKey,
             timeoutMs: request.timeoutMs,
+            ...(typeof request.timeoutMs === "number" && request.timeoutMs > 0
+              ? { deadlineAtMs: Date.now() + request.timeoutMs }
+              : {}),
             idempotencyKey: request.idempotencyKey,
             signal,
             isInvocationCurrent: isCurrent,

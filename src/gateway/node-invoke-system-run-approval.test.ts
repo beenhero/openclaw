@@ -349,6 +349,33 @@ describe("sanitizeSystemRunParamsForForwarding", () => {
     expectRejectedForwardingResult(sanitize(), "APPROVAL_REQUIRED");
   });
 
+  test("treats a policy handoff as native-gate admission, not human approval provenance", () => {
+    const record = makeRecord(echoSafeCommand, echoSafeArgv);
+    record.resolutionSource = "policy-handoff";
+    record.request.systemRunPlan = {
+      argv: echoSafeArgv,
+      cwd: null,
+      commandText: echoSafeCommand,
+      agentId: null,
+      sessionKey: null,
+    };
+    const approvalManager = manager(record);
+    const result = sanitizeSystemRunParamsForForwarding({
+      rawParams: approvedRunParams({ command: echoSafeArgv, rawCommand: echoSafeCommand }),
+      nodeId: "node-1",
+      client,
+      execApprovalManager: approvalManager,
+      nowMs: now,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      throw new Error("unreachable");
+    }
+    expect(result.params).toMatchObject({ approved: true, approvalDecision: "allow-once" });
+    expect(result.params).not.toHaveProperty("approvalSource");
+  });
+
   test("rejects auto-review provenance when the stored decision is not allow-once", () => {
     const record = makeRecord(echoSafeCommand, echoSafeArgv);
     record.decision = "allow-always";

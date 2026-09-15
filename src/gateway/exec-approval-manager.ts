@@ -327,6 +327,7 @@ export class ExecApprovalManager<
       : undefined;
     let result: ResolveOperatorApprovalResult;
     try {
+      const terminalReason = localResolutionSource === "operator" ? "user" : localResolutionSource;
       result = resolveOperatorApproval({
         id: recordId,
         decision,
@@ -334,6 +335,7 @@ export class ExecApprovalManager<
         expectedKind: this.approvalKind,
         runtimeEpoch: persistence.runtimeEpoch,
         databaseOptions: persistence.databaseOptions,
+        terminalReason,
         ...(standingGrant?.kind === "cron" ? { standingGrant } : {}),
         ...(standingGrant?.kind === "mcp-tool" ? { mcpToolGrant: standingGrant } : {}),
       });

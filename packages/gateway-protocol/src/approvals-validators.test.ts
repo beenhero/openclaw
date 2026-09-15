@@ -197,6 +197,20 @@ describe("unified approval protocol validators", () => {
       validateExecApprovalResolveParams({ id: execRecord.id, decision: "deny", reviewer }),
     ).toBe(true);
     expect(
+      validateExecApprovalResolveParams({
+        id: execRecord.id,
+        decision: "allow-once",
+        handoff: { kind: "node-invoke-policy" },
+      }),
+    ).toBe(true);
+    expect(
+      validateExecApprovalResolveParams({
+        id: execRecord.id,
+        decision: "allow-once",
+        handoff: { kind: "unknown" },
+      }),
+    ).toBe(false);
+    expect(
       validatePluginApprovalResolveParams({ id: pluginRecord.id, decision: "deny", reviewer }),
     ).toBe(true);
     expect(
@@ -241,6 +255,16 @@ describe("unified approval protocol validators", () => {
     for (const snapshot of [pending, allowed, denied, expired, cancelled]) {
       expect(validateApprovalGetResult({ approval: snapshot })).toBe(true);
     }
+    expect(
+      validateApprovalGetResult({
+        approval: { ...allowed, reason: "auto-review" },
+      }),
+    ).toBe(true);
+    expect(
+      validateApprovalGetResult({
+        approval: { ...allowed, reason: "policy-handoff" },
+      }),
+    ).toBe(true);
 
     expect(validateApprovalGetResult({ approval: { ...allowed, decision: "deny" } })).toBe(false);
     expect(

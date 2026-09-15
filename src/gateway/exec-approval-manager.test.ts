@@ -117,8 +117,8 @@ describe("ExecApprovalManager", () => {
     expect(manager.resolveAutoReview("approval-auto-review", "agent-runtime")).toBe(true);
     await expect(decisionPromise).resolves.toBe("allow-once");
     expect(manager.getSnapshot("approval-auto-review")).toMatchObject({
-      decision: "allow-once",
       resolutionSource: "auto-review",
+      terminalReason: "auto-review",
       resolvedBy: "agent-runtime",
     });
   });

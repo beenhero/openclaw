@@ -601,6 +601,35 @@ describe("operator approval store", () => {
     });
   });
 
+  it("limits automated terminal reasons to allow-once authority", () => {
+    const databaseOptions = createDatabaseOptions();
+    insertOperatorApproval({ approval: approval("automated-once-only"), databaseOptions });
+
+    expect(() =>
+      resolveOperatorApproval({
+        id: "automated-once-only",
+        decision: "allow-always",
+        terminalReason: "policy-handoff",
+        resolver: { kind: "runtime", id: "runtime" },
+        nowMs: 2_000,
+        databaseOptions,
+      }),
+    ).toThrow("automated approval terminal reason requires an allow-once decision");
+    expect(() =>
+      resolveOperatorApproval({
+        id: "automated-once-only",
+        decision: "deny",
+        terminalReason: "auto-review",
+        resolver: { kind: "runtime", id: "runtime" },
+        nowMs: 2_000,
+        databaseOptions,
+      }),
+    ).toThrow("automated approval terminal reason requires an allow-once decision");
+    expect(
+      getOperatorApproval({ id: "automated-once-only", nowMs: 2_000, databaseOptions }),
+    ).toMatchObject({ status: "pending", decision: null, terminalReason: null });
+  });
+
   it("expires at the exact deadline and never accepts a late allow", () => {
     const databaseOptions = createDatabaseOptions();
     insertOperatorApproval({

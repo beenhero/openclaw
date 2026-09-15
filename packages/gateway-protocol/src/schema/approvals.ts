@@ -37,6 +37,8 @@ export const ApprovalAllowDecisionSchema = Type.Union([
 /** Closed reason recorded for a terminal approval transition. */
 export const ApprovalTerminalReasonSchema = Type.Union([
   Type.Literal("user"),
+  Type.Literal("auto-review"),
+  Type.Literal("policy-handoff"),
   Type.Literal("timeout"),
   Type.Literal("malformed-verdict"),
   Type.Literal("no-route"),
@@ -46,7 +48,11 @@ export const ApprovalTerminalReasonSchema = Type.Union([
 ]);
 
 /** Terminal reason accepted for an allowed approval. */
-export const ApprovalAllowedReasonSchema = Type.Union([Type.Literal("user")]);
+export const ApprovalAllowedReasonSchema = Type.Union([
+  Type.Literal("user"),
+  Type.Literal("auto-review"),
+  Type.Literal("policy-handoff"),
+]);
 
 /** Terminal reasons accepted for a denied approval. */
 export const ApprovalDeniedReasonSchema = Type.Union([

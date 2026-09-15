@@ -440,6 +440,8 @@ CREATE TABLE IF NOT EXISTS operator_approvals (
   terminal_reason TEXT CHECK (
     terminal_reason IN (
       'user',
+      'auto-review',
+      'policy-handoff',
       'timeout',
       'malformed-verdict',
       'no-route',
@@ -473,8 +475,16 @@ CREATE TABLE IF NOT EXISTS operator_approvals (
     )
     OR (
       status = 'allowed'
-      AND decision IN ('allow-once', 'allow-always')
-      AND terminal_reason = 'user'
+      AND (
+        (
+          decision IN ('allow-once', 'allow-always')
+          AND terminal_reason = 'user'
+        )
+        OR (
+          decision = 'allow-once'
+          AND terminal_reason IN ('auto-review', 'policy-handoff')
+        )
+      )
       AND resolved_at_ms IS NOT NULL
       AND resolver_kind IS NOT NULL
     )

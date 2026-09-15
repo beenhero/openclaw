@@ -615,7 +615,8 @@ export function createExecApprovalHandlers(
         decision === "allow-always" && typeof overrideDays === "number"
           ? Date.now() + Math.floor(overrideDays) * 86_400_000
           : undefined;
-      let autoReviewResolution = false;
+      const handoff = (params as { handoff?: { kind?: unknown } }).handoff;
+      let resolutionSource: "operator" | "auto-review" | "policy-handoff" = "operator";
       await handleApprovalResolve({
         approvalKind: "exec",
         manager,
@@ -627,8 +628,29 @@ export function createExecApprovalHandlers(
         reviewer,
         exposeAmbiguousPrefixError: true,
         validateDecision: (snapshot) => {
+          if (handoff?.kind === "node-invoke-policy") {
+            const handoffIdentity = client?.internal?.agentRuntimeIdentity;
+            const requestAgentId = normalizeAgentId(snapshot.request.agentId ?? undefined);
+            const requestSessionKey = normalizeOptionalString(snapshot.request.sessionKey);
+            if (
+              !handoffIdentity ||
+              context.validateAgentRuntimeApprovalAuthority?.(handoffIdentity) !== true ||
+              reviewer !== undefined ||
+              decision !== "allow-once" ||
+              snapshot.deliverySuppressed !== true ||
+              snapshot.request.host !== "node" ||
+              requestAgentId !== handoffIdentity.agentId ||
+              requestSessionKey !== handoffIdentity.sessionKey
+            ) {
+              return {
+                message: "node policy handoff identity does not match request",
+                details: { reason: "NODE_POLICY_HANDOFF_IDENTITY_MISMATCH" },
+              };
+            }
+            resolutionSource = "policy-handoff";
+          }
           const autoReviewIdentity =
-            client?.internal?.approvalRuntime === true
+            resolutionSource === "operator" && client?.internal?.approvalRuntime === true
               ? client.internal.agentRuntimeIdentity
               : undefined;
           if (autoReviewIdentity) {
@@ -645,7 +667,7 @@ export function createExecApprovalHandlers(
                 details: { reason: "AUTO_REVIEW_APPROVAL_IDENTITY_MISMATCH" },
               };
             }
-            autoReviewResolution = true;
+            resolutionSource = "auto-review";
           }
           const allowedDecisions = resolveExecApprovalRequestAllowedDecisions(snapshot.request);
           return allowedDecisions.includes(decision)
@@ -656,8 +678,19 @@ export function createExecApprovalHandlers(
               };
         },
         resolveRecord: ({ approvalId, decision: decisionLocal, resolvedBy, resolver }) => {
-          if (autoReviewResolution) {
+          if (resolutionSource === "auto-review") {
             return manager.resolveAutoReview(approvalId, resolvedBy);
+          }
+          if (resolutionSource === "policy-handoff") {
+            return (
+              manager.resolveDetailed(
+                approvalId,
+                "allow-once",
+                resolver ?? { kind: "runtime", id: resolvedBy },
+                resolvedBy,
+                "policy-handoff",
+              ).outcome === "resolved"
+            );
           }
           const grantOptions = grantExpiresAtMs !== undefined ? { grantExpiresAtMs } : {};
           return resolver
