@@ -14,6 +14,7 @@ import {
   isCronRunReceiptSettlementPending,
   prepareCronRunReceiptAdjudication,
   prepareCronRunReceiptClaim,
+  recordCronRunAuthorization,
   trackCronRunReceiptSettlement,
   type PreparedCronRunReceiptClaim,
   type CronRunReceiptHandle,
@@ -112,6 +113,18 @@ export function assertServiceCronRunReceiptCurrent(
     isAgentAvailable: state.deps.isAgentAvailable,
     allowMissingJob:
       activeJobMarker?.jobId === handle.jobId && isCronSelfRemovalCurrent(activeJobMarker),
+  });
+}
+
+export function recordServiceCronRunAuthorization(params: {
+  state: CronServiceState;
+  handle: CronRunReceiptHandle;
+  authorization: Parameters<typeof recordCronRunAuthorization>[0]["authorization"];
+}): void {
+  recordCronRunAuthorization({
+    handle: params.handle,
+    resolveAgentId: resolveAgentId(params.state),
+    authorization: params.authorization,
   });
 }
 

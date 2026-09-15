@@ -37,6 +37,7 @@ import {
   finishCronRunReceipt,
   listActiveCronRunReceiptJobIdsInDatabase,
   prepareCronRunReceiptClaim,
+  recordCronRunAuthorization,
   releaseLocalCronRunReceiptOwnership,
   type CronRunReceiptHandle,
 } from "./run-receipt-store.js";
@@ -233,6 +234,82 @@ describe("cron run receipt store", () => {
     finishCronRunReceipt({ handle: second, status: "skipped", finishedAtMs: 121 });
 
     expect(receipts(storePath, job.id).map((receipt) => receipt.status)).toEqual(["skipped", "ok"]);
+  });
+
+  it("binds one immutable authorization fact to the current run receipt", async () => {
+    const { storePath } = await makeStorePath();
+    const job = makeJob("authorized-run");
+    await saveCronStore(storePath, { version: 1, jobs: [job] });
+    const receipt = claim(storePath, job, 100);
+    const authorization = {
+      providerId: "sigil-automation",
+      executionDigest: `sha256:${"a".repeat(64)}`,
+      decisionRef: "wallet-decision-1",
+      proofRef: `sha256:${"c".repeat(64)}`,
+      paramsDigest: `sha256:${"b".repeat(64)}`,
+      authorizedAtMs: 101,
+    };
+
+    expect(() =>
+      recordCronRunAuthorization({
+        handle: receipt,
+        resolveAgentId: (current) => current.agentId!,
+        authorization: { ...authorization, proofRef: "not-a-proof-digest" },
+      }),
+    ).toThrow(/proof digest/);
+
+    expect(
+      recordCronRunAuthorization({
+        handle: receipt,
+        resolveAgentId: (current) => current.agentId!,
+        authorization,
+      }),
+    ).toMatchObject({ receiptId: receipt.receiptId, ...authorization });
+    // An exact retry is idempotent, but it can never rewrite the decision.
+    expect(() =>
+      recordCronRunAuthorization({
+        handle: receipt,
+        resolveAgentId: (current) => current.agentId!,
+        authorization,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      recordCronRunAuthorization({
+        handle: receipt,
+        resolveAgentId: (current) => current.agentId!,
+        authorization: { ...authorization, decisionRef: "wallet-decision-2" },
+      }),
+    ).toThrow(/different authorization/);
+    expect(() =>
+      recordCronRunAuthorization({
+        handle: receipt,
+        resolveAgentId: (current) => current.agentId!,
+        authorization: { ...authorization, proofRef: `sha256:${"d".repeat(64)}` },
+      }),
+    ).toThrow(/different authorization/);
+
+    expect(
+      openOpenClawStateDatabase()
+        .db.prepare("SELECT * FROM cron_run_authorizations WHERE receipt_id = ?")
+        .get(receipt.receiptId),
+    ).toMatchObject({
+      receipt_id: receipt.receiptId,
+      provider_id: "sigil-automation",
+      execution_digest: authorization.executionDigest,
+      decision_ref: "wallet-decision-1",
+      proof_ref: authorization.proofRef,
+      params_digest: authorization.paramsDigest,
+      authorized_at_ms: 101,
+    });
+
+    finishCronRunReceipt({ handle: receipt, status: "ok", finishedAtMs: 110 });
+    expect(() =>
+      recordCronRunAuthorization({
+        handle: receipt,
+        resolveAgentId: (current) => current.agentId!,
+        authorization,
+      }),
+    ).toThrow(CronRunReceiptRevisionError);
   });
 
   it.each(["dead", "reused", "unreadable"] as const)(

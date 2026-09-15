@@ -1494,6 +1494,26 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_cron_run_receipts_active_job
 CREATE INDEX IF NOT EXISTS idx_cron_run_receipts_job_history
   ON cron_run_receipts(store_key, job_id, started_at_ms DESC, receipt_id DESC);
 
+-- Provider-neutral authorization correlation for one cron run. The provider's
+-- ledger remains the authorization authority; this row only binds its opaque
+-- decision reference, non-secret proof hash, and digests to the lifecycle
+-- receipt that reached runner.
+CREATE TABLE IF NOT EXISTS cron_run_authorizations (
+  receipt_id TEXT PRIMARY KEY,
+  provider_id TEXT NOT NULL,
+  execution_digest TEXT NOT NULL,
+  decision_ref TEXT NOT NULL,
+  proof_ref TEXT NOT NULL,
+  params_digest TEXT NOT NULL,
+  authorized_at_ms INTEGER NOT NULL,
+  FOREIGN KEY (receipt_id) REFERENCES cron_run_receipts(receipt_id) ON DELETE CASCADE,
+  CHECK (length(provider_id) BETWEEN 1 AND 128),
+  CHECK (length(decision_ref) BETWEEN 1 AND 256),
+  CHECK (execution_digest GLOB 'sha256:[a-f0-9]*' AND length(execution_digest) = 71),
+  CHECK (proof_ref GLOB 'sha256:[a-f0-9]*' AND length(proof_ref) = 71),
+  CHECK (params_digest GLOB 'sha256:[a-f0-9]*' AND length(params_digest) = 71)
+) STRICT;
+
 -- Runtime-private authority is independent of job_json so downgraded writers
 -- can rewrite recognized job config without erasing or silently widening it.
 CREATE TABLE IF NOT EXISTS cron_job_runtime_authorities (

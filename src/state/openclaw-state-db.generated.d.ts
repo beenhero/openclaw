@@ -385,6 +385,16 @@ export interface CronJobs {
   updated_at: number;
 }
 
+export interface CronRunAuthorizations {
+  authorized_at_ms: number;
+  decision_ref: string;
+  execution_digest: string;
+  params_digest: string;
+  proof_ref: string;
+  provider_id: string;
+  receipt_id: string;
+}
+
 export interface CronRunReceipts {
   agent_id: string;
   config_revision: string;
@@ -1717,6 +1727,7 @@ export interface DB {
   cron_job_runtime_authorities: CronJobRuntimeAuthorities;
   cron_job_scratch: CronJobScratch;
   cron_jobs: CronJobs;
+  cron_run_authorizations: CronRunAuthorizations;
   cron_run_receipts: CronRunReceipts;
   current_conversation_bindings: CurrentConversationBindings;
   delivery_queue_entries: DeliveryQueueEntries;

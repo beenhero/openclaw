@@ -43,7 +43,10 @@ import { loadedCronStoreFromRows, loadCronRows } from "./row-codec.js";
  * I4: Finalization applies outcomes to the authoritative row, never an admitted snapshot.
  */
 
-type CronRunReceiptDatabase = Pick<OpenClawStateDatabase, "cron_run_receipts">;
+type CronRunReceiptDatabase = Pick<
+  OpenClawStateDatabase,
+  "cron_run_authorizations" | "cron_run_receipts"
+>;
 type CronRunReceiptRow = Selectable<CronRunReceiptDatabase["cron_run_receipts"]>;
 
 export type CronRunReceiptStatus =
@@ -105,6 +108,8 @@ export type PreparedCronRunReceiptClaim = PreparedCronRunReceiptAdjudication & {
 const CRON_RUN_RECEIPT_SCHEMA_START = "CREATE TABLE IF NOT EXISTS cron_run_receipts (";
 const CRON_RUN_RECEIPT_SCHEMA_END =
   "ON cron_run_receipts(store_key, job_id, started_at_ms DESC, receipt_id DESC);";
+const CRON_RUN_AUTHORIZATION_SCHEMA_START = "CREATE TABLE IF NOT EXISTS cron_run_authorizations (";
+const CRON_RUN_AUTHORIZATION_SCHEMA_END = ") STRICT;";
 const CRON_RUN_RECEIPT_TERMINAL_RETENTION = 64;
 const CRON_RUN_RECEIPT_DELETE_BATCH_SIZE = 500;
 const CRON_RUN_RECEIPT_FINISH_RETRY_MS = 1_000;
@@ -158,6 +163,18 @@ function ensureCronRunReceiptSchema(database: DatabaseSync): void {
   // sqlite-allow-raw -- Canonical feature-local additive DDL only.
   database.exec(
     OPENCLAW_STATE_SCHEMA_SQL.slice(start, endMarker + CRON_RUN_RECEIPT_SCHEMA_END.length),
+  );
+}
+
+function ensureCronRunAuthorizationSchema(database: DatabaseSync): void {
+  const start = OPENCLAW_STATE_SCHEMA_SQL.indexOf(CRON_RUN_AUTHORIZATION_SCHEMA_START);
+  const endMarker = OPENCLAW_STATE_SCHEMA_SQL.indexOf(CRON_RUN_AUTHORIZATION_SCHEMA_END, start);
+  if (start < 0 || endMarker < start) {
+    throw new Error("OpenClaw cron run authorization schema marker is missing.");
+  }
+  // sqlite-allow-raw -- Canonical feature-local additive DDL only.
+  database.exec(
+    OPENCLAW_STATE_SCHEMA_SQL.slice(start, endMarker + CRON_RUN_AUTHORIZATION_SCHEMA_END.length),
   );
 }
 
@@ -628,6 +645,100 @@ export function assertCronRunReceiptCurrent(params: {
       params.allowMissingJob
         ? assertCronRunReceiptOwnedInDatabase({ database, handle: params.handle })
         : assertCronRunReceiptCurrentInDatabase({ database, ...params }),
+  );
+}
+
+export type CronRunAuthorizationRecord = {
+  receiptId: string;
+  providerId: string;
+  executionDigest: string;
+  decisionRef: string;
+  proofRef: string;
+  paramsDigest: string;
+  authorizedAtMs: number;
+};
+
+function assertAuthorizationRecordShape(record: CronRunAuthorizationRecord): void {
+  if (!record.providerId || record.providerId.length > 128) {
+    throw new Error("cron authorization provider id is invalid");
+  }
+  if (!record.decisionRef || record.decisionRef.length > 256) {
+    throw new Error("cron authorization decision reference is invalid");
+  }
+  for (const [label, digest] of [
+    ["execution", record.executionDigest],
+    ["proof", record.proofRef],
+    ["params", record.paramsDigest],
+  ] as const) {
+    if (!/^sha256:[a-f0-9]{64}$/.test(digest)) {
+      throw new Error(`cron authorization ${label} digest is invalid`);
+    }
+  }
+  if (!Number.isSafeInteger(record.authorizedAtMs) || record.authorizedAtMs < 0) {
+    throw new Error("cron authorization timestamp is invalid");
+  }
+}
+
+/**
+ * Correlates a provider decision to the still-current lifecycle receipt. The
+ * synchronous write transaction performs the authoritative job/revision read;
+ * a conflicting retry never overwrites the first authorization fact.
+ */
+export function recordCronRunAuthorization(params: {
+  handle: CronRunReceiptHandle;
+  resolveAgentId: ResolveReceiptAgentId;
+  authorization: Omit<CronRunAuthorizationRecord, "receiptId">;
+  env?: NodeJS.ProcessEnv;
+}): CronRunAuthorizationRecord {
+  const record: CronRunAuthorizationRecord = {
+    receiptId: params.handle.receiptId,
+    ...params.authorization,
+  };
+  assertAuthorizationRecordShape(record);
+  return withReceiptWrite(
+    "cron.run-receipt.record-authorization",
+    params.env ? { env: params.env } : {},
+    (database) => {
+      assertCronRunReceiptCurrentInDatabase({
+        database,
+        handle: params.handle,
+        resolveAgentId: params.resolveAgentId,
+      });
+      ensureCronRunAuthorizationSchema(database);
+      const existing = executeSqliteQueryTakeFirstSync(
+        database,
+        query(database)
+          .selectFrom("cron_run_authorizations")
+          .selectAll()
+          .where("receipt_id", "=", record.receiptId),
+      );
+      if (existing) {
+        if (
+          existing.provider_id !== record.providerId ||
+          existing.execution_digest !== record.executionDigest ||
+          existing.decision_ref !== record.decisionRef ||
+          existing.proof_ref !== record.proofRef ||
+          existing.params_digest !== record.paramsDigest ||
+          existing.authorized_at_ms !== record.authorizedAtMs
+        ) {
+          throw new Error("cron run receipt already has a different authorization");
+        }
+        return record;
+      }
+      executeSqliteQuerySync(
+        database,
+        query(database).insertInto("cron_run_authorizations").values({
+          receipt_id: record.receiptId,
+          provider_id: record.providerId,
+          execution_digest: record.executionDigest,
+          decision_ref: record.decisionRef,
+          proof_ref: record.proofRef,
+          params_digest: record.paramsDigest,
+          authorized_at_ms: record.authorizedAtMs,
+        }),
+      );
+      return record;
+    },
   );
 }
 
