@@ -249,11 +249,12 @@ describe("registerApprovalResolver host registrar", () => {
     expect(registry.registry.approvalResolvers).toEqual([]);
   });
 
-  it("L3.1 + L6.1: KNOWN_CAPABILITIES Set membership — process.exec, net.egress, and fs.write are members", () => {
+  it("includes command automation in the closed known-capability set", () => {
     // L3.1 established process.exec + net.egress; L6.1 adds fs.write.
     expect(KNOWN_CAPABILITIES.has("process.exec")).toBe(true);
     expect(KNOWN_CAPABILITIES.has("net.egress")).toBe(true);
     expect(KNOWN_CAPABILITIES.has("fs.write")).toBe(true);
+    expect(KNOWN_CAPABILITIES.has("automation.command")).toBe(true);
     // Unknown capabilities remain outside the set
     expect(KNOWN_CAPABILITIES.has("http.request")).toBe(false);
     expect(KNOWN_CAPABILITIES.has("mcp.invoke")).toBe(false);
@@ -494,11 +495,12 @@ describe("registerToolMetadata capabilities validation (L3.6 Tier-B)", () => {
     expect(registry.registry.diagnostics).toHaveLength(0);
   });
 
-  it("KNOWN_CAPABILITIES contains process.exec, net.egress, and fs.write (L6.1)", () => {
+  it("KNOWN_CAPABILITIES contains every shipped approval capability", () => {
     // L6.1 adds "fs.write" to the wired capability set.
     expect(KNOWN_CAPABILITIES.has("process.exec")).toBe(true);
     expect(KNOWN_CAPABILITIES.has("net.egress")).toBe(true);
     expect(KNOWN_CAPABILITIES.has("fs.write")).toBe(true);
+    expect(KNOWN_CAPABILITIES.has("automation.command")).toBe(true);
     // Unknown capabilities still outside the set:
     expect(KNOWN_CAPABILITIES.has("http.request")).toBe(false);
     expect(KNOWN_CAPABILITIES.has("mcp.invoke")).toBe(false);

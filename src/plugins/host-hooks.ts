@@ -128,11 +128,17 @@ export type ApprovalCapability = string;
  *                   fs.write is NOT added to SUPERSET_EFFECTS — an unparseable op is
  *                   process.exec+net.egress (the existing superset floor); we do not add
  *                   fs.write to avoid over-classifying every unknown op as a writer.
+ *
+ *   "automation.command" — exact immutable cron execution plan. This is
+ *                   emitted only by the cron runner immediately before process
+ *                   creation; the effect carries a versioned plan plus the
+ *                   frozen stdin evidence needed for independent validation.
  */
 export const KNOWN_CAPABILITIES: ReadonlySet<string> = new Set([
   "process.exec",
   "net.egress",
   "fs.write",
+  "automation.command",
 ]);
 
 /** Static scope declaration for an approval resolver. */

@@ -94,6 +94,28 @@ describe("decideCapabilityApproval", () => {
     expect(verdict).toEqual({ kind: "allow", requestId: req.requestId });
   });
 
+  it("returns only a non-secret reference to a consumed provider proof", async () => {
+    const req = makeRequest();
+    const proof = "provider-secret-proof";
+    setActivePluginRegistry(
+      makeRegistryWithResolver(async (r) => ({
+        requestId: r.requestId,
+        decision: "allow",
+        proof,
+      })),
+    );
+    const verdict = await decideCapabilityApproval(req, {
+      deadlineMs: 5000,
+      ledger: new InMemoryProofLedger(),
+    });
+    expect(verdict).toEqual({
+      kind: "allow",
+      requestId: req.requestId,
+      proofRef: `sha256:${"299546ae6a6cae5c7110d7c47258f564d78ceae93168da1033c6e3d46c725194"}`,
+    });
+    expect(JSON.stringify(verdict)).not.toContain(proof);
+  });
+
   it("deny — clean policy deny (matching requestId) → {kind:'deny',reason} with NO failureDisposition (graceful block)", async () => {
     setActivePluginRegistry(
       makeRegistryWithResolver(async (r) => ({

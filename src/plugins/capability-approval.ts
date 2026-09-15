@@ -158,7 +158,7 @@ export function __resetProofRegistryForTest(): void {
  * Every other outcome — including a clean policy deny — denies.
  */
 export type CapabilityApprovalVerdict =
-  | { kind: "allow"; requestId: string }
+  | { kind: "allow"; requestId: string; proofRef?: string }
   | {
       kind: "deny";
       requestId: string;
@@ -362,5 +362,16 @@ export async function decideCapabilityApproval(
     };
   }
 
-  return { kind: "allow", requestId: req.requestId };
+  // Never return the raw provider proof: providers may treat it as a reusable
+  // secret.  A non-secret digest is enough for durable effect receipts to pin
+  // the exact proof that passed replay/single-use consumption.
+  const proofRef =
+    verdict.proof === undefined
+      ? undefined
+      : `sha256:${crypto.createHash("sha256").update(verdict.proof).digest("hex")}`;
+  return {
+    kind: "allow",
+    requestId: req.requestId,
+    ...(proofRef ? { proofRef } : {}),
+  };
 }
