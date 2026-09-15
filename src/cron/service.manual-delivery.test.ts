@@ -79,6 +79,7 @@ describe("manual cron delivery occurrence", () => {
                 deliveryPlan: resolveCronDeliveryPlan(job),
                 undeliveredRunStatus: "ok",
                 spawnOnlyHandoff: false,
+                requesterYielded: false,
                 sourceDeliveryOutcome: {
                   visibleDeliveries: [],
                   verifiedMessageToolDelivery: false,

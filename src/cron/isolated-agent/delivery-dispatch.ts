@@ -617,6 +617,7 @@ export async function dispatchCronDelivery(
         timeoutMs: params.timeoutMs,
         deliveryBestEffort: params.deliveryBestEffort,
         spawnOnlyHandoff,
+        requesterYielded: params.requesterYielded,
         initialSynthesizedText,
       });
     if (finalReply) {

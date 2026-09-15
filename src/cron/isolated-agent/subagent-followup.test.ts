@@ -420,6 +420,29 @@ describe("waitForDescendantSubagentSummary", () => {
     },
   );
 
+  it("keeps waiting to the run deadline when the cron parent explicitly yielded", async () => {
+    vi.useFakeTimers();
+    vi.mocked(listDescendantRunsForRequester).mockReturnValue([]);
+    let parentReply = "on it";
+    vi.mocked(readLatestAssistantReply).mockImplementation(async () => parentReply);
+    setTimeout(() => {
+      // Longer than FAST_TEST_MODE's ordinary 50 ms synthesis grace.
+      parentReply = "Final parent synthesis after descendant reconciliation.";
+    }, 80);
+
+    const resultPromise = waitForDescendantSubagentSummary({
+      sessionKey: "cron-session",
+      initialReply: "on it",
+      timeoutMs: 200,
+      observedActiveDescendants: true,
+      requesterYielded: true,
+    });
+
+    const result = await resolveAfterAdvancingTimers(resultPromise, 120);
+
+    expect(result).toBe("Final parent synthesis after descendant reconciliation.");
+  });
+
   it("returns synthesis even if initial reply was undefined", async () => {
     vi.mocked(listDescendantRunsForRequester)
       .mockReturnValueOnce([

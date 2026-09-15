@@ -5441,6 +5441,54 @@ describe("deliverSubagentAnnouncement completion delivery", () => {
     );
   });
 
+  it("leaves yielded cron external delivery to its waiting cron dispatcher", async () => {
+    const callGateway = createGatewayMock({
+      status: "ok",
+      result: { payloads: [{ text: "The consolidated cron answer." }] },
+    });
+    const queueEmbeddedAgentMessageWithOutcome = createQueueOutcomeMock(true);
+    const sendMessage = createSendMessageMock();
+    testing.setDepsForTest({
+      callGateway,
+      getRequesterSessionActivity: () => ({
+        sessionId: "cron-run-session",
+        isActive: false,
+      }),
+      getRuntimeConfig: () => ({}) as never,
+      queueEmbeddedAgentMessageWithOutcome,
+      sendMessage,
+    });
+    const origin = { channel: "discord", to: "channel:daily", accountId: "acct-1" };
+
+    const result = await deliverSubagentAnnouncement({
+      requesterSessionKey: "agent:main:cron:daily:run:scheduled",
+      targetRequesterSessionKey: "agent:main:cron:daily:run:scheduled",
+      triggerMessage: "all spawned subagents settled",
+      steerMessage: "all spawned subagents settled",
+      requesterOrigin: origin,
+      requesterSessionOrigin: origin,
+      directOrigin: origin,
+      requesterIsSubagent: false,
+      expectsCompletionMessage: false,
+      requireDirectDelivery: true,
+      requireVisibleReply: true,
+      deferExternalDelivery: true,
+      directIdempotencyKey: "announce-requester-settle-cron",
+      sourceTool: "subagent_settle",
+    });
+
+    expect(result).toMatchObject({ delivered: true, path: "direct" });
+    expect(result.requesterVisibleFinalDelivered).toBeUndefined();
+    expectGatewayAgentParams(callGateway, {
+      deliver: false,
+      channel: "discord",
+      accountId: "acct-1",
+      to: "channel:daily",
+    });
+    expect(queueEmbeddedAgentMessageWithOutcome).not.toHaveBeenCalled();
+    expect(sendMessage).not.toHaveBeenCalled();
+  });
+
   it.each([
     {
       name: "a transient network cause wrapped by outbound delivery",

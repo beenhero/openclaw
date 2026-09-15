@@ -122,6 +122,7 @@ export async function resolveDescendantSubagentFollowup(params: {
   timeoutMs: number;
   deliveryBestEffort: boolean;
   spawnOnlyHandoff: boolean;
+  requesterYielded: boolean;
   initialSynthesizedText: string;
 }): Promise<DescendantSubagentFollowup> {
   const expectedFollowup = expectsSubagentFollowup(params.initialSynthesizedText);
@@ -129,7 +130,9 @@ export async function resolveDescendantSubagentFollowup(params: {
   let activeSubagentRuns = subagentRegistryRuntime.countActiveDescendantRuns(params.sessionKey);
   const shouldCheckCompletedDescendants =
     activeSubagentRuns === 0 &&
-    (params.spawnOnlyHandoff || isLikelyInterimCronMessage(params.initialSynthesizedText));
+    (params.spawnOnlyHandoff ||
+      params.requesterYielded ||
+      isLikelyInterimCronMessage(params.initialSynthesizedText));
   const needsFollowupRuntime =
     shouldCheckCompletedDescendants || activeSubagentRuns > 0 || expectedFollowup;
   const followupRuntime = needsFollowupRuntime
@@ -148,17 +151,22 @@ export async function resolveDescendantSubagentFollowup(params: {
     : undefined;
   const hadDescendants = activeSubagentRuns > 0 || Boolean(completedDescendantReply);
   if (
-    (!params.deliveryBestEffort || params.spawnOnlyHandoff) &&
-    (activeSubagentRuns > 0 || expectedFollowup)
+    (!params.deliveryBestEffort || params.spawnOnlyHandoff || params.requesterYielded) &&
+    (activeSubagentRuns > 0 || expectedFollowup || params.requesterYielded)
   ) {
     let finalReply = await followupRuntime?.waitForDescendantSubagentSummary({
       sessionKey: params.sessionKey,
       initialReply: params.initialSynthesizedText,
       timeoutMs: params.timeoutMs,
-      observedActiveDescendants: activeSubagentRuns > 0 || expectedFollowup,
+      observedActiveDescendants:
+        activeSubagentRuns > 0 || expectedFollowup || params.requesterYielded,
+      requesterYielded: params.requesterYielded,
+      deadlineAtMs: params.requesterYielded
+        ? params.runStartedAt + Math.max(0, params.timeoutMs)
+        : undefined,
     });
     activeSubagentRuns = subagentRegistryRuntime.countActiveDescendantRuns(params.sessionKey);
-    if (!finalReply && activeSubagentRuns === 0) {
+    if (!finalReply && activeSubagentRuns === 0 && !params.requesterYielded) {
       finalReply = await followupRuntime?.readDescendantSubagentFallbackReply({
         sessionKey: params.sessionKey,
         runStartedAt: params.runStartedAt,

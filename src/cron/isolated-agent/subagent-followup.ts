@@ -80,10 +80,23 @@ export async function waitForDescendantSubagentSummary(params: {
   initialReply?: string;
   timeoutMs: number;
   observedActiveDescendants?: boolean;
+  /** The cron parent explicitly paused for descendant results and still owns synthesis. */
+  requesterYielded?: boolean;
+  /** Absolute run deadline used so a yielded continuation cannot extend the cron timeout. */
+  deadlineAtMs?: number;
 }): Promise<string | undefined> {
   const timings = resolveCronSubagentTimings();
   const initialReply = params.initialReply?.trim();
-  const deadline = Date.now() + Math.max(timings.waitMinMs, Math.floor(params.timeoutMs));
+  const timeoutMs = Number.isFinite(params.timeoutMs)
+    ? Math.max(0, Math.floor(params.timeoutMs))
+    : 0;
+  const explicitDeadline =
+    typeof params.deadlineAtMs === "number" && Number.isFinite(params.deadlineAtMs)
+      ? Math.floor(params.deadlineAtMs)
+      : undefined;
+  const deadline =
+    explicitDeadline ??
+    Date.now() + (params.requesterYielded ? timeoutMs : Math.max(timings.waitMinMs, timeoutMs));
 
   // Snapshot the currently active descendant run IDs.
   const getActiveRuns = () =>
@@ -113,11 +126,14 @@ export async function waitForDescendantSubagentSummary(params: {
     getPendingRunIds: () => getActiveRuns().map((entry) => entry.runId),
   });
 
-  // --- Grace period: wait for the cron agent's synthesis ---
-  // After the subagent announces fire and the cron agent processes them, it
-  // produces a new assistant message.  Poll briefly (bounded by
-  // finalReplyGraceMs) to capture that synthesis.
-  const gracePeriodDeadline = Math.min(Date.now() + timings.finalReplyGraceMs, deadline);
+  // --- Wait for the cron agent's synthesis ---
+  // Ordinary turns get a short grace period because child output remains a
+  // valid fallback. An explicit sessions_yield is different: the parent kept
+  // ownership of synthesis, so wait for its continuation up to the original
+  // cron deadline instead of publishing raw child results after five seconds.
+  const gracePeriodDeadline = params.requesterYielded
+    ? deadline
+    : Math.min(Date.now() + timings.finalReplyGraceMs, deadline);
 
   const resolveUsableLatestReply = async () => {
     const latest = (await readLatestAssistantReply({ sessionKey: params.sessionKey }))?.trim();

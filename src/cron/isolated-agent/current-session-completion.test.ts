@@ -78,6 +78,7 @@ async function createCompletionFixture(state: OpenClawTestState) {
     deliveryRequested: true,
     undeliveredRunStatus: "ok",
     spawnOnlyHandoff: false,
+    requesterYielded: false,
     sourceDeliveryOutcome: {
       visibleDeliveries: [],
       verifiedMessageToolDelivery: false,

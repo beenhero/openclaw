@@ -202,7 +202,10 @@ export async function maybeWakeRequesterAfterAllChildrenSettled(
     return false;
   }
   const admittedRearmGeneration = initialState.rearmGeneration;
-  if (isCronSessionKey(requesterSessionKey)) {
+  const requesterIsCron = isCronSessionKey(requesterSessionKey);
+  if (requesterIsCron && initialState.requesterYieldBatch !== true) {
+    // Ordinary cron fan-out is finalized by cron's descendant fallback path.
+    // Only an explicit yield needs a requester continuation turn.
     completeBatch([params.settledEntry], initialState.rearmGeneration);
     return false;
   }
@@ -484,6 +487,9 @@ export async function maybeWakeRequesterAfterAllChildrenSettled(
         expectsCompletionMessage: false,
         requireDirectDelivery: true,
         ...(requesterYieldedAfterDelivery ? { requireVisibleReply: true } : {}),
+        // Cron delivery already owns the external receipt. This wake only
+        // produces the parent's consolidated transcript reply for it to send.
+        ...(requesterIsCron ? { deferExternalDelivery: true } : {}),
         directIdempotencyKey: buildAnnounceIdempotencyKey(
           attemptIndex === 0 ? wakeKeyBase : `${wakeKeyBase}:retry-${attemptIndex}`,
         ),

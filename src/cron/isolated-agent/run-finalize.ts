@@ -524,6 +524,7 @@ export async function finalizeCronRun(params: {
         : deliveryDisposition.kind
       : undefined,
     spawnOnlyHandoff,
+    requesterYielded: finalRunResult.meta?.yielded === true,
     sourceDeliveryOutcome,
     queueSourceSessionMessageToolAwareness,
     deliveryBestEffort: resolveCronDeliveryBestEffort(prepared.input.job),

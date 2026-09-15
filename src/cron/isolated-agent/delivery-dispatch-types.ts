@@ -36,6 +36,8 @@ export type DispatchCronDeliveryParams = {
   undeliveredRunStatus: "ok" | "error";
   skipDelivery?: NormalizeReplySkipReason;
   spawnOnlyHandoff: boolean;
+  /** Initial cron turn explicitly paused so its continuation retains final-output ownership. */
+  requesterYielded: boolean;
   sourceDeliveryOutcome: SourceDeliveryOutcome;
   /** Queues same-source fallback awareness only after a durable completion commit fails. */
   queueSourceSessionMessageToolAwareness?: () => Promise<void>;

@@ -389,7 +389,7 @@ describe("maybeWakeRequesterAfterAllChildrenSettled", () => {
     expect(completeBatchSpy).toHaveBeenLastCalledWith(["run-a", "run-b"]);
   });
 
-  it("skips cron requester sessions", async () => {
+  it("skips ordinary cron requester sessions", async () => {
     const woke = await maybeWakeRequesterAfterAllChildrenSettled(
       wakeParams({ requesterSessionKey: "agent:main:cron:daily-report" }),
     );
@@ -397,6 +397,42 @@ describe("maybeWakeRequesterAfterAllChildrenSettled", () => {
     expect(woke).toBe(false);
     expect(deliverSpy).not.toHaveBeenCalled();
     expect(completeBatchSpy).toHaveBeenLastCalledWith(["run-b"]);
+  });
+
+  it("wakes an explicitly yielded cron requester without taking external-delivery custody", async () => {
+    const requesterSessionKey = "agent:main:cron:daily-report:run:scheduled-run";
+    sessionStore[requesterSessionKey] = { sessionId: "sess-cron" };
+    const child = makeSettledChild({
+      runId: "run-b",
+      requesterSessionKey,
+      delivery: { status: "pending" },
+      requesterSettleWake: {
+        status: "pending",
+        attemptCount: 0,
+        batchRunIds: ["run-b"],
+        requesterYieldBatch: true,
+        rearmGeneration: 1,
+      },
+    });
+    registryRuntimeMock.listSubagentRunsForRequester.mockReturnValue([child]);
+
+    const woke = await maybeWakeRequesterAfterAllChildrenSettled(
+      wakeParams({ requesterSessionKey, settledEntry: child }),
+    );
+
+    expect(woke).toBe(true);
+    expect(deliverSpy).toHaveBeenCalledOnce();
+    expect(deliveredCallArg()).toMatchObject({
+      targetRequesterSessionKey: requesterSessionKey,
+      requesterIsSubagent: false,
+      requireDirectDelivery: true,
+      requireVisibleReply: true,
+      deferExternalDelivery: true,
+    });
+    expect(completeBatchSpy).toHaveBeenCalledWith(["run-b"], 1, {
+      delivered: true,
+      path: "direct",
+    });
   });
 
   it("skips requesters whose session entry is gone", async () => {

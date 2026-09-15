@@ -129,6 +129,8 @@ export async function sendSubagentAnnounceDirectly(params: {
   internalEvents?: AgentInternalEvent[];
   expectsCompletionMessage: boolean;
   requireVisibleReply?: boolean;
+  /** Run synthesis without sending it; the caller retains external-delivery custody. */
+  deferExternalDelivery?: boolean;
   bestEffortDeliver?: boolean;
   directIdempotencyKey: string;
   completionDirectOrigin?: DeliveryContext;
@@ -169,14 +171,15 @@ export async function sendSubagentAnnounceDirectly(params: {
       params.targetRequesterSessionKey,
       params.requesterAgentId,
     ).entry;
-    const deliveryTarget = !params.requesterIsSubagent
-      ? resolveExternalBestEffortDeliveryTarget({
-          channel: effectiveDirectOrigin?.channel,
-          to: effectiveDirectOrigin?.to,
-          accountId: effectiveDirectOrigin?.accountId,
-          threadId: effectiveDirectOrigin?.threadId,
-        })
-      : { deliver: false };
+    const deliveryTarget =
+      !params.requesterIsSubagent && !params.deferExternalDelivery
+        ? resolveExternalBestEffortDeliveryTarget({
+            channel: effectiveDirectOrigin?.channel,
+            to: effectiveDirectOrigin?.to,
+            accountId: effectiveDirectOrigin?.accountId,
+            threadId: effectiveDirectOrigin?.threadId,
+          })
+        : { deliver: false };
     const normalizedSessionOnlyOriginChannel = !params.requesterIsSubagent
       ? normalizeMessageChannel(sessionOnlyOrigin?.channel)
       : undefined;
@@ -654,6 +657,7 @@ export async function sendSubagentAnnounceDirectly(params: {
         hasVisibleNonSilentGatewayPayload &&
         directAnnounceResult?.deliveryStatus?.status !== "suppressed" &&
         (params.requesterIsSubagent ||
+          params.deferExternalDelivery ||
           [effectiveDirectOrigin, requesterSessionOrigin].every((origin) =>
             origin?.channel
               ? normalizeMessageChannel(origin.channel) === INTERNAL_MESSAGE_CHANNEL
@@ -684,6 +688,7 @@ export async function sendSubagentAnnounceDirectly(params: {
       // Synthetic wakes can commit their final to the requester transcript.
       // A canceled partial payload or accepted handoff is not that receipt.
       ...(!params.requesterIsSubagent &&
+      !params.deferExternalDelivery &&
       (requesterVisibleFinalDelivered ||
         (!params.expectsCompletionMessage &&
           asOptionalRecord(directAnnounceResponse)?.status === "ok" &&

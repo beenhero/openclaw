@@ -257,6 +257,7 @@ function makeBaseParams(overrides: {
   sessionTarget?: string;
   deliveryBestEffort?: boolean;
   spawnOnlyHandoff?: boolean;
+  requesterYielded?: boolean;
   runSessionKey?: string;
   resolvedDeliveryMode?: "explicit" | "implicit";
 }): Parameters<typeof dispatchCronDelivery>[0] {
@@ -304,6 +305,7 @@ function makeBaseParams(overrides: {
     undeliveredRunStatus: "ok",
     skipDelivery: undefined,
     spawnOnlyHandoff: overrides.spawnOnlyHandoff ?? false,
+    requesterYielded: overrides.requesterYielded ?? false,
     sourceDeliveryOutcome: {
       visibleDeliveries: [],
       verifiedMessageToolDelivery: false,
@@ -1531,6 +1533,37 @@ describe("dispatchCronDelivery — double-announce guard", () => {
     expect(readDescendantSubagentFallbackReply).not.toHaveBeenCalled();
     expectDeliveryCall(0, { payloads: [{ text: parentReply }] });
     expect(state.delivered).toBe(true);
+  });
+
+  it("does not publish raw child fallback when a yielded parent misses its synthesis deadline", async () => {
+    vi.mocked(countActiveDescendantRuns).mockReturnValueOnce(1).mockReturnValueOnce(0);
+    vi.mocked(waitForDescendantSubagentSummary).mockResolvedValue(undefined);
+    vi.mocked(readDescendantSubagentFallbackReply).mockResolvedValue("Unreconciled child output");
+
+    const params = makeBaseParams({
+      spawnOnlyHandoff: true,
+      requesterYielded: true,
+      synthesizedText: "",
+    });
+    params.synthesizedText = undefined;
+    params.deliveryPayloads = [];
+    params.summary = undefined;
+    params.outputText = undefined;
+
+    const state = await dispatchCronDelivery(params);
+
+    expect(waitForDescendantSubagentSummary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requesterYielded: true,
+        deadlineAtMs: params.runStartedAt + params.timeoutMs,
+      }),
+    );
+    expect(readDescendantSubagentFallbackReply).not.toHaveBeenCalled();
+    expectResultFields(state.result, {
+      status: "error",
+      error: "cron child-session handoff completed without a final assistant payload",
+    });
+    expect(deliverOutboundPayloads).not.toHaveBeenCalled();
   });
 
   it("immediately delivers a substantive threaded parent while its accepted child runs", async () => {

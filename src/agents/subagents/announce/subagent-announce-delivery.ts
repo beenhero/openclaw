@@ -155,6 +155,8 @@ export async function deliverSubagentAnnouncement(params: {
   expectsCompletionMessage: boolean;
   requireDirectDelivery?: boolean;
   requireVisibleReply?: boolean;
+  /** Run synthesis in the requester transcript while another owner performs external delivery. */
+  deferExternalDelivery?: boolean;
   bestEffortDeliver?: boolean;
   directIdempotencyKey: string;
   onDeliveryResult?: (delivery: SubagentAnnounceDeliveryResult) => void;
@@ -322,6 +324,7 @@ export async function deliverSubagentAnnouncement(params: {
         expectsCompletionMessage: params.expectsCompletionMessage,
         createUserTurnTranscriptRecorder: createCompletionUserTurnTranscriptRecorder,
         requireVisibleReply: params.requireVisibleReply,
+        deferExternalDelivery: params.deferExternalDelivery,
         onDeliveryResult: params.onDeliveryResult,
         signal: params.signal,
         bestEffortDeliver: params.bestEffortDeliver,

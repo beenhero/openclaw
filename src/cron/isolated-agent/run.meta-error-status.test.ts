@@ -267,6 +267,24 @@ describe("runCronIsolatedAgentTurn - meta.error status propagation", () => {
     expect(result.error).toBeUndefined();
   });
 
+  it("preserves yielded parent ownership through cron delivery finalization", async () => {
+    mockAgentRun({
+      acceptedSessionSpawns: [{ runId: "run-child", childSessionKey: "agent:default:child" }],
+      meta: { yielded: true },
+    });
+    mockAnnounceOutcome({ deliveryDisposition: { kind: "empty" } });
+
+    const result = await runCronIsolatedAgentTurn(makeIsolatedAgentParamsFixture());
+
+    expect(dispatchCronDeliveryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        spawnOnlyHandoff: true,
+        requesterYielded: true,
+      }),
+    );
+    expect(result.status).toBe("ok");
+  });
+
   it("preserves incomplete accepted child-session handoffs as cron errors", async () => {
     const error = "cron child-session handoff timed out before producing a final assistant payload";
     mockAgentRun({
