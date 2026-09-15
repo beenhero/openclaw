@@ -1,6 +1,6 @@
 // Codex tests cover the provider-neutral approval-resolver conformance factory.
 import type { ApprovalResolver } from "openclaw/plugin-sdk/agent-harness-runtime";
-import { InMemoryProofLedger } from "../../../../src/plugins/proof-ledger.js";
+import { InMemoryProofLedger } from "openclaw/plugin-sdk/plugin-test-runtime";
 import type { ConformanceAuditRecord } from "./approval-resolver-conformance.test-support.js";
 import { runApprovalResolverConformance } from "./approval-resolver-conformance.test-support.js";
 

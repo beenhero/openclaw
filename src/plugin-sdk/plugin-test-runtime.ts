@@ -98,6 +98,7 @@ export { resolveProviderPluginChoice } from "../plugins/provider-auth-choice.run
 export {
   __resetDefaultProofLedgerForTest,
   getDefaultProofLedger,
+  InMemoryProofLedger,
 } from "../plugins/proof-ledger.js";
 export {
   clearEmbeddingProviders,
