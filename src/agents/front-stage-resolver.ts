@@ -215,14 +215,10 @@ export async function runFrontStageResolver(args: {
   if (!consultKey) {
     return consult();
   }
-  const entry: FrontStageConsultEntry = { p: undefined as never };
-  entry.p = (async () => {
-    try {
-      return await consult();
-    } finally {
-      entry.settledAt = Date.now();
-    }
-  })();
+  const entry: FrontStageConsultEntry = { p: Promise.resolve().then(consult) };
+  entry.p = entry.p.finally(() => {
+    entry.settledAt = Date.now();
+  });
   FRONT_STAGE_CONSULTS.set(consultKey, entry);
   return entry.p;
 }

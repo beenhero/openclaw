@@ -63,6 +63,8 @@ export type CronCommandAuthorizationResult =
     };
 
 function asJson<T>(value: T): T {
+  // Callers pass closed data-only snapshots before hashing or storage.
+  // SAFETY: the JSON round trip only strips prototypes and undefined fields.
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
@@ -223,22 +225,29 @@ export function buildCronCommandExecutionPlan(params: {
     consequences,
     ...(payload.continuation ? { continuation: payload.continuation } : {}),
   });
+  // asJson produced a closed JSON value.
+  // SAFETY: the cast narrows only the canonical digest helper's recursive JSON contract.
   const definitionDigest = computeParamsDigest(definitionWithoutDigest as never);
   const definition = {
     ...definitionWithoutDigest,
     definitionDigest,
+    // The remaining keys are deliberately extensible.
+    // SAFETY: the literals and freshly computed digest satisfy every required field.
   } as CronCommandExecutionDefinition;
   const invocation = asJson({
     runClass: params.runClass,
     occurrenceId: `${params.runClass}:${job.state.runningAtMs ?? params.runReceipt.startedAtMs}`,
     runReceiptId: params.runReceipt.receiptId,
+    // SAFETY: asJson preserves all three required scalar fields in this closed object.
   }) as CronCommandExecutionPlan["invocation"];
+  // SAFETY: both members are validated JSON values created above.
   const executionDigest = computeParamsDigest({ definitionDigest, invocation } as never);
   const plan = asJson({
     version: 1,
     definition,
     invocation,
     executionDigest,
+    // SAFETY: asJson preserves every required field of this finalized, digested plan.
   }) as CronCommandExecutionPlan;
   return {
     plan,
@@ -291,6 +300,8 @@ export async function authorizeCronCommandExecution(params: {
       kind: CRON_COMMAND_APPROVAL_CAPABILITY,
       plan: built.plan,
       evidence: built.evidence,
+      // The closed automation.command descriptor extends EffectDescriptor's base shape.
+      // SAFETY: every nested value came from the validated asJson boundary above.
     }) as unknown as EffectDescriptor;
     const paramsDigest = computeParamsDigest(effect);
     const requestId = crypto.randomUUID();

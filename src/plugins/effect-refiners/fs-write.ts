@@ -309,6 +309,8 @@ export function refineWriteFsPaths(command: string | string[]): FsWriteTarget | 
  */
 export function extractNativeWritePaths(params: unknown): FsWriteTarget {
   if (params && typeof params === "object" && !Array.isArray(params)) {
+    // Each candidate property is independently required to be a non-empty string.
+    // SAFETY: the non-null object/non-array guard permits these keyed reads.
     const p = params as Record<string, unknown>;
     const path =
       typeof p["path"] === "string" && p["path"]

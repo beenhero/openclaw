@@ -321,20 +321,23 @@ const FRESH_INDEX_JSON = JSON.stringify(freshIndex());
  * decision time, but rejecting corrupt payloads early is cheaper than chasing subtle bugs.
  */
 function assertProofIndexShape(idx: unknown): asserts idx is ProofIndex {
+  if (idx === null || typeof idx !== "object" || Array.isArray(idx)) {
+    throw new Error("proof-index: malformed/corrupt index — refusing to reset-to-empty");
+  }
+  // Every field and nested record is validated below before this function returns.
+  // SAFETY: JSON parsing plus the object/non-array guard permits property reads.
+  const candidate = idx as ProofIndex;
   const bad =
-    idx === null ||
-    typeof idx !== "object" ||
-    Array.isArray(idx) ||
-    (idx as ProofIndex).v !== 1 ||
-    typeof (idx as ProofIndex).records !== "object" ||
-    (idx as ProofIndex).records === null ||
-    Array.isArray((idx as ProofIndex).records) ||
-    !Array.isArray((idx as ProofIndex).seenProofHashes);
+    candidate.v !== 1 ||
+    typeof candidate.records !== "object" ||
+    candidate.records === null ||
+    Array.isArray(candidate.records) ||
+    !Array.isArray(candidate.seenProofHashes);
   if (bad) {
     throw new Error("proof-index: malformed/corrupt index — refusing to reset-to-empty");
   }
   // Deep-validate each seenProofHashes element is a string.
-  const hashes = (idx as ProofIndex).seenProofHashes;
+  const hashes = candidate.seenProofHashes;
   for (const h of hashes) {
     if (typeof h !== "string") {
       throw new Error("proof-index: malformed/corrupt index — refusing to reset-to-empty");
@@ -342,8 +345,10 @@ function assertProofIndexShape(idx: unknown): asserts idx is ProofIndex {
   }
   // Deep-validate each records value carries the expected core fields with correct types.
   // Tolerant of extra fields; rejects missing or wrong-typed core fields.
-  const records = (idx as ProofIndex).records;
+  const records = candidate.records;
   for (const rec of Object.values(records)) {
+    // The following closed field checks establish every ProofRecord member.
+    // SAFETY: records was validated as a non-null object before Object.values.
     const r = rec as Record<string, unknown>;
     if (
       typeof r["requestId"] !== "string" ||
@@ -583,13 +588,12 @@ export class FileProofLedger implements ProofLedger {
       assertProofIndexShape(parsed); // shape-validate — throws on corrupt index
       const results: ProofAuditRecord[] = [];
       for (const record of Object.values(parsed.records)) {
-        const r = record as ProofRecord;
-        if (r.requestId === requestId) {
+        if (record.requestId === requestId) {
           results.push({
-            requestId: r.requestId,
-            paramsDigest: r.paramsDigest,
-            outcome: r.outcome,
-            consumedAt: r.consumedAt,
+            requestId: record.requestId,
+            paramsDigest: record.paramsDigest,
+            outcome: record.outcome,
+            consumedAt: record.consumedAt,
           });
         }
       }

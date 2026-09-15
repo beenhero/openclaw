@@ -225,7 +225,7 @@ export const FS_WRITE_TOOL_NAMES: ReadonlySet<string> = new Set([
 export const SUPERSET_EFFECTS: readonly EffectDescriptor[] = Object.freeze([
   Object.freeze({ kind: "process.exec", command: "<unparsed>", unparseable: true }),
   Object.freeze({ kind: "net.egress", hosts: ["*"] }),
-] as EffectDescriptor[]);
+] satisfies EffectDescriptor[]);
 
 // ---------------------------------------------------------------------------
 // Tier-A — harness-native discriminator (L3.5)
@@ -305,6 +305,8 @@ export function classifyTierA(
 
   if (EXEC_CAPABLE_TOOL_NAMES.has(name)) {
     // Exec-capable tool: extract command/cwd/argv from params if available
+    // Every property is independently type-checked before consumption.
+    // SAFETY: the object guard establishes the only structural assumption used below.
     const p = params && typeof params === "object" ? (params as Record<string, unknown>) : {};
     const command =
       typeof p["command"] === "string"
@@ -314,7 +316,7 @@ export function classifyTierA(
           : undefined;
     const cwd = typeof p["cwd"] === "string" ? p["cwd"] : undefined;
     const argv = Array.isArray(p["argv"])
-      ? (p["argv"] as unknown[]).filter((x): x is string => typeof x === "string")
+      ? p["argv"].filter((x): x is string => typeof x === "string")
       : undefined;
 
     const effect: EffectDescriptor = { kind: "process.exec" };
@@ -370,7 +372,7 @@ export function classifyTierB(toolName: unknown): EffectDescriptor[] {
 
   let toolMetadata: { metadata: { toolName: string; capabilities?: string[] } }[];
   try {
-    toolMetadata = registry.toolMetadata as typeof toolMetadata;
+    toolMetadata = registry.toolMetadata;
   } catch {
     return [];
   }
@@ -438,6 +440,8 @@ export function refineTierC(
   params: unknown,
 ): EffectDescriptor[] {
   const refined = [...effects];
+  // Every property is independently type-checked before consumption.
+  // SAFETY: the object guard establishes the only structural assumption used below.
   const p = params && typeof params === "object" ? (params as Record<string, unknown>) : {};
 
   // Check if we already have process.exec, net.egress, or fs.write effects
@@ -455,7 +459,7 @@ export function refineTierC(
     const commandFromEffect =
       typeof execEffect["command"] === "string" ? execEffect["command"] : undefined;
     const argvFromEffect = Array.isArray(execEffect["argv"])
-      ? (execEffect["argv"] as string[])
+      ? execEffect["argv"].filter((value): value is string => typeof value === "string")
       : undefined;
     const commandFromParams = typeof p["command"] === "string" ? p["command"] : undefined;
 

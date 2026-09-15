@@ -92,6 +92,8 @@ export function parsePythonInlineFrame(input: string): PythonInlineFrame {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("invalid python artifact frame");
   }
+  // JSON.parse can only produce data properties, and every field is closed below.
+  // SAFETY: the non-null object/non-array guard permits these keyed reads.
   const frame = parsed as Record<string, unknown>;
   const expectedKeys = [
     "displayPath",
@@ -125,6 +127,7 @@ export function parsePythonInlineFrame(input: string): PythonInlineFrame {
   ) {
     throw new Error("invalid python artifact frame values");
   }
+  const scriptArgv = frame.scriptArgv.filter((item): item is string => typeof item === "string");
   const source = Buffer.from(frame.sourceBase64, "base64");
   if (
     source.toString("base64") !== frame.sourceBase64 ||
@@ -141,7 +144,7 @@ export function parsePythonInlineFrame(input: string): PythonInlineFrame {
     sourceBytes: frame.sourceBytes,
     sourceSha256: frame.sourceSha256,
     sourceBase64: frame.sourceBase64,
-    scriptArgv: [...frame.scriptArgv] as string[],
+    scriptArgv: [...scriptArgv],
   };
 }
 
