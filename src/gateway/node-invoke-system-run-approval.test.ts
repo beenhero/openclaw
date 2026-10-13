@@ -686,8 +686,10 @@ describe("sanitizeSystemRunParamsForForwarding", () => {
     expectAllowOnceForwardingResult(result);
   });
 
-  test("uses systemRunPlan for forwarded command context and ignores caller tampering", () => {
+  test("uses systemRunPlan when approval ownership differs and ignores caller tampering", () => {
     const record = makeRecord(echoSafeCommand, echoSafeArgv);
+    record.request.agentId = "worker";
+    record.request.sessionKey = "agent:worker:subagent:run-1";
     record.request.systemRunPlan = {
       argv: ["/usr/bin/echo", "SAFE"],
       cwd: "/real/cwd",

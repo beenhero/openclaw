@@ -1,9 +1,22 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { createFixtureLifetime } from "../../test/helpers/fixture-lifetime.js";
 import { createDeferred } from "../../test/helpers/promise.js";
 import { setRuntimeConfigSnapshot } from "../config/config.js";
+import { createAgentRuntimeApprovalAuthorityValidator } from "../gateway/agent-runtime-identity-token.js";
+import { createTestApprovalManager } from "../gateway/exec-approval-manager.test-support.js";
+import { createChatRunState } from "../gateway/server-chat-state.js";
+import { createExecApprovalHandlers } from "../gateway/server-methods/exec-approval.js";
+import type { RespondFn } from "../gateway/server-methods/response-types.js";
+import type { GatewayClient, GatewayRequestContext } from "../gateway/server-methods/types.js";
+import {
+  claimAgentRunDelegatedAuthority,
+  releaseAgentRunDelegatedAuthority,
+  validateAgentRunDelegatedAuthority,
+} from "../infra/agent-run-registry.js";
 import { readExecApprovalsSnapshot, saveExecApprovals } from "../infra/exec-approvals.js";
+import { buildSystemRunApprovalBinding } from "../infra/system-run-approval-binding.js";
 import { handleInvoke } from "../node-host/invoke.js";
 import {
   captureActivePluginRegistrySnapshot,
@@ -17,6 +30,7 @@ import {
   createOpenClawTestState,
   type OpenClawTestState,
 } from "../test-utils/openclaw-test-state.js";
+import { createOperationalRunInstanceRef } from "./admitted-run-context.js";
 import { executeNodeHostCommand } from "./bash-tools.exec-host-node.js";
 import type { ExecuteNodeHostCommandParams } from "./bash-tools.exec-host-node.types.js";
 import { resolvePreparedExecEnvironment } from "./bash-tools.exec-request-preparation.js";
@@ -214,6 +228,175 @@ it("denies caller allowlist/off misses before dispatch to a permissive node", as
   );
   expect(invokeCount).toBe(0);
 });
+
+it("honors a retained policy-owner deny when another agent is permissive", async () => {
+  saveExecApprovals({
+    version: 1,
+    defaults: { security: "full", ask: "off" },
+    agents: {
+      main: { security: "deny", ask: "off" },
+      worker: { security: "full", ask: "off" },
+    },
+  });
+  const autoReviewer = vi.fn(async () => ({
+    decision: "allow-once" as const,
+    risk: "low" as const,
+    rationale: "would allow if called",
+  }));
+  await expect(
+    executeNodeHostCommand({ ...request, autoReview: true, autoReviewer }),
+  ).rejects.toThrow("exec denied: host=node security=deny");
+  expect(autoReviewer).not.toHaveBeenCalled();
+  expect(invokeCount).toBe(0);
+  expect(rpc.mock.calls.some(([method]) => method === "exec.approval.request")).toBe(false);
+});
+
+for (const { policyState, shouldExecute } of [
+  { policyState: "unchanged", shouldExecute: true },
+  { policyState: "retained-owner-revoked", shouldExecute: false },
+] as const) {
+  it(`auto-reviews as the active runtime while retaining node policy identity (${policyState})`, async (testContext) => {
+    const executionAgentId = "worker";
+    const executionSessionKey = "agent:worker:subagent:node-proof";
+    const policyAgentId = "main";
+    const policySessionKey = "agent:main:node-proof";
+    const operationalRunInstance = createOperationalRunInstanceRef("run-routed-node-proof");
+    const authority = claimAgentRunDelegatedAuthority(operationalRunInstance);
+    const runtimeClient = {
+      connId: "conn-routed-node-proof",
+      connect: {
+        client: { id: "gateway-client" },
+        device: { id: "device-routed-node-proof" },
+        scopes: ["operator.approvals"],
+      },
+      internal: {
+        approvalRuntime: true,
+        agentRuntimeIdentity: {
+          kind: "agentRuntime",
+          agentId: executionAgentId,
+          sessionKey: executionSessionKey,
+          operationalRunInstance,
+          delegatedAuthority: { kind: "local", ...authority },
+        },
+      },
+    } as unknown as GatewayClient;
+    const manager = createTestApprovalManager(testContext, {
+      validateAgentRuntimeDelegatedAuthority: validateAgentRunDelegatedAuthority,
+    });
+    const handlers = createExecApprovalHandlers(manager);
+    const context = {
+      getRuntimeConfig: () => ({}),
+      broadcast: vi.fn(),
+      hasExecApprovalClients: () => true,
+      chatRunState: createChatRunState(),
+      validateAgentRuntimeApprovalAuthority: createAgentRuntimeApprovalAuthorityValidator(),
+    } as unknown as GatewayRequestContext;
+    const fixture = createFixtureLifetime();
+    testContext.onTestFinished(() => fixture.cleanup());
+    const baseRpc = rpc.getMockImplementation();
+    if (!baseRpc) {
+      throw new Error("Expected node RPC fixture implementation");
+    }
+    let approvalId: string | undefined;
+
+    try {
+      await fixture.run(async () => {
+        rpc.mockImplementation(async (method, options, params) => {
+          if (method === "exec.approval.request" || method === "exec.approval.resolve") {
+            const firstResponse = createDeferred<Parameters<RespondFn>>();
+            const handler = handlers[method];
+            if (!handler) {
+              throw new Error("Expected exec approval handler");
+            }
+            if (method === "exec.approval.request") {
+              approvalId = params.id;
+            }
+            const pending = fixture.track(
+              Promise.resolve(
+                handler({
+                  req: { type: "req", id: method, method },
+                  params,
+                  respond: (...response) => firstResponse.resolve(response),
+                  client: runtimeClient,
+                  context,
+                  isWebchatConnect: () => false,
+                }),
+              ),
+            );
+            const [ok, payload, error] = await Promise.race([
+              firstResponse.promise,
+              pending.then(() => firstResponse.promise),
+            ]);
+            if (!ok) {
+              throw new Error(error?.message ?? "Exec approval failed");
+            }
+            if (method === "exec.approval.resolve" && !shouldExecute) {
+              saveExecApprovals({
+                version: 1,
+                defaults: { security: "full", ask: "off" },
+                agents: {
+                  [policyAgentId]: { security: "deny", ask: "off" },
+                  [executionAgentId]: { security: "full", ask: "off" },
+                },
+              });
+            }
+            return payload;
+          }
+          return await baseRpc(method, options, params);
+        });
+
+        saveExecApprovals({ version: 1, defaults: { security: "allowlist", ask: "on-miss" } });
+        const execution = executeNodeHostCommand({
+          ...request,
+          agentId: policyAgentId,
+          sessionKey: policySessionKey,
+          security: "allowlist",
+          ask: "on-miss",
+          autoReview: true,
+          autoReviewer: async () => ({
+            decision: "allow-once",
+            risk: "low",
+            rationale: "prints fixture output",
+          }),
+        });
+        if (shouldExecute) {
+          expect((await execution).details).toMatchObject({
+            status: "completed",
+            aggregated: "node-policy-proof",
+          });
+        } else {
+          await expect(execution).rejects.toThrow("exec denied: host=node security=deny");
+        }
+        expect(invokeCount).toBe(shouldExecute ? 1 : 0);
+        if (!approvalId) {
+          throw new Error("Expected registered approval id");
+        }
+        const snapshot = manager.getSnapshot(approvalId);
+        if (!snapshot?.request.systemRunPlan) {
+          throw new Error("Expected retained system.run plan");
+        }
+        expect(snapshot.request).toMatchObject({
+          agentId: executionAgentId,
+          sessionKey: executionSessionKey,
+          systemRunPlan: { agentId: policyAgentId, sessionKey: policySessionKey },
+          systemRunBinding: buildSystemRunApprovalBinding({
+            argv: snapshot.request.systemRunPlan.argv,
+            cwd: snapshot.request.systemRunPlan.cwd,
+            agentId: policyAgentId,
+            sessionKey: policySessionKey,
+          }).binding,
+        });
+        expect(snapshot).toMatchObject({ decision: "allow-once", resolutionSource: "auto-review" });
+      });
+    } finally {
+      releaseAgentRunDelegatedAuthority(authority);
+      if (approvalId) {
+        manager.forceDenyIfRuntimeAuthorityClosed(approvalId);
+      }
+      await fixture.cleanup();
+    }
+  });
+}
 
 it.each([
   { channel: "webchat", decision: "allow-once" },
