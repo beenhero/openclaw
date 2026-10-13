@@ -1,3 +1,4 @@
+import { authorizeCronCommandActivation } from "./execution-authorization.js";
 /** Stateful CronService facade around the locked service operation helpers. */
 import type {
   CronServiceContract,
@@ -9,6 +10,7 @@ import * as lifecycleOps from "./service/ops-lifecycle.js";
 import * as mutationOps from "./service/ops-mutations.js";
 import * as readOps from "./service/ops-read.js";
 import * as runOps from "./service/ops-run.js";
+import { resolveCurrentDefaultAgentId, resolveEffectiveJobAgentId } from "./service/ops-shared.js";
 import {
   type CronAddOptions,
   type CronServiceDeps,
@@ -28,6 +30,16 @@ export class CronService implements CronServiceContract {
   private readonly state;
   private startInProgress = 0;
   private startState: { generation: number; promise: Promise<void> } | null = null;
+  private readonly commandAuthorizationAttempts = new Map<
+    string,
+    {
+      controller: AbortController;
+      promise: Promise<void>;
+      providerId: string;
+      authorityRevision: string;
+      definitionDigest: string;
+    }
+  >();
 
   constructor(deps: CronServiceDeps) {
     this.state = createCronServiceState(deps);
@@ -71,12 +83,19 @@ export class CronService implements CronServiceContract {
         return;
       }
       this.state.schedulerStarted = !this.state.stopped;
+      for (const job of this.state.store?.jobs ?? []) {
+        this.reconcileCommandAuthorization(job);
+      }
     } finally {
       this.startInProgress -= 1;
     }
   }
 
   stop() {
+    for (const attempt of this.commandAuthorizationAttempts.values()) {
+      attempt.controller.abort(new Error("cron service stopped"));
+    }
+    this.commandAuthorizationAttempts.clear();
     lifecycleOps.stop(this.state);
   }
 
@@ -105,18 +124,24 @@ export class CronService implements CronServiceContract {
   }
 
   async add(input: CronJobCreate, opts?: CronAddOptions) {
-    return await mutationOps.add(this.state, input, opts);
+    const result = await mutationOps.add(this.state, input, opts);
+    this.reconcileCommandAuthorization("job" in result ? result.job : result);
+    return result;
   }
 
   async removeStaleJobFamily(
     family: { declarationKey: string; name: string; ownerPluginTag: string },
     opts?: { commitGuard?: () => void },
   ) {
-    return await mutationOps.removeStaleJobFamily(this.state, family, opts);
+    const removed = await mutationOps.removeStaleJobFamily(this.state, family, opts);
+    this.pruneCommandAuthorizationAttempts();
+    return removed;
   }
 
   async update(id: string, patch: CronJobPatch, opts?: CronUpdateOptions) {
-    return await mutationOps.update(this.state, id, patch, opts);
+    const result = await mutationOps.update(this.state, id, patch, opts);
+    this.reconcileCommandAuthorization(result);
+    return result;
   }
 
   async updateWithPrecondition(
@@ -125,15 +150,127 @@ export class CronService implements CronServiceContract {
     precondition: CronUpdatePrecondition,
     opts?: CronUpdateOptions,
   ) {
-    return await mutationOps.updateWithPrecondition(this.state, id, patch, precondition, opts);
+    const result = await mutationOps.updateWithPrecondition(
+      this.state,
+      id,
+      patch,
+      precondition,
+      opts,
+    );
+    this.reconcileCommandAuthorization(result);
+    return result;
+  }
+
+  private reconcileCommandAuthorization(job: CronJob): void {
+    const staged = job.state.commandAuthorization;
+    const active = this.commandAuthorizationAttempts.get(job.id);
+    if (!staged || staged.status !== "required" || job.payload.kind !== "command") {
+      if (active) {
+        active.controller.abort(new Error("cron command authorization no longer required"));
+        this.commandAuthorizationAttempts.delete(job.id);
+      }
+      return;
+    }
+    if (
+      active?.providerId === staged.providerId &&
+      active.authorityRevision === staged.authorityRevision &&
+      active.definitionDigest === staged.definitionDigest
+    ) {
+      return;
+    }
+    if (active) {
+      active.controller.abort(new Error("cron command authorization definition changed"));
+      this.commandAuthorizationAttempts.delete(job.id);
+    }
+
+    const controller = new AbortController();
+    const snapshot = structuredClone(job);
+    const agentId = resolveEffectiveJobAgentId(snapshot, resolveCurrentDefaultAgentId(this.state));
+    const authorize = async () => {
+      const result = await authorizeCronCommandActivation({
+        job: snapshot,
+        agentId,
+        providerId: staged.providerId,
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) {
+        return;
+      }
+      if (result.kind === "ready") {
+        await mutationOps.completeCommandAuthorization(this.state, {
+          jobId: snapshot.id,
+          providerId: result.providerId,
+          authorityRevision: result.authorityRevision,
+          definitionDigest: result.definitionDigest,
+          allowed: true,
+          decisionRef: result.decisionRef,
+          proofRef: result.proofRef,
+        });
+        return;
+      }
+      await mutationOps.completeCommandAuthorization(this.state, {
+        jobId: snapshot.id,
+        providerId: staged.providerId,
+        authorityRevision: staged.authorityRevision,
+        definitionDigest: staged.definitionDigest,
+        allowed: false,
+        reason:
+          result.kind === "denied"
+            ? result.denialKind === "authorization-required"
+              ? "standing authorization required"
+              : result.error
+            : "command authorizer is no longer configured",
+      });
+    };
+    const promise = (
+      this.state.deps.runSchedulerOwned ? this.state.deps.runSchedulerOwned(authorize) : authorize()
+    )
+      .catch((error: unknown) => {
+        this.state.deps.log.warn(
+          { jobId: snapshot.id, err: String(error) },
+          "cron: command activation authorization failed",
+        );
+      })
+      .finally(() => {
+        const currentAttempt = this.commandAuthorizationAttempts.get(snapshot.id);
+        if (currentAttempt?.controller === controller) {
+          this.commandAuthorizationAttempts.delete(snapshot.id);
+        }
+      });
+    this.commandAuthorizationAttempts.set(job.id, {
+      controller,
+      promise,
+      providerId: staged.providerId,
+      authorityRevision: staged.authorityRevision,
+      definitionDigest: staged.definitionDigest,
+    });
   }
 
   async remove(id: string, opts?: { systemOwned?: boolean; commitGuard?: () => void }) {
-    return await mutationOps.remove(this.state, id, opts);
+    const removed = await mutationOps.remove(this.state, id, opts);
+    if (removed.removed) {
+      const active = this.commandAuthorizationAttempts.get(id);
+      active?.controller.abort(new Error("cron job removed"));
+      this.commandAuthorizationAttempts.delete(id);
+    }
+    return removed;
   }
 
   async removeAgentJobsTransactional<T>(agentId: string, commit: () => Promise<T>): Promise<T> {
-    return await mutationOps.removeAgentJobsTransactional(this.state, agentId, commit);
+    const result = await mutationOps.removeAgentJobsTransactional(this.state, agentId, commit);
+    this.pruneCommandAuthorizationAttempts();
+    return result;
+  }
+
+  private pruneCommandAuthorizationAttempts(): void {
+    const existingJobIds = new Set((this.state.store?.jobs ?? []).map((job) => job.id));
+    for (const [jobId, active] of this.commandAuthorizationAttempts) {
+      if (existingJobIds.has(jobId)) {
+        continue;
+      }
+      active.controller.abort(new Error("cron job removed"));
+      this.commandAuthorizationAttempts.delete(jobId);
+    }
   }
 
   async quiesceJobs(jobs: readonly { id: string; revision: string }[], commitGuard: () => void) {

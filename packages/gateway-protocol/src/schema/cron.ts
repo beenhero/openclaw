@@ -452,6 +452,27 @@ const CronJobRuntimeFeedbackProperties = {
 export const CronJobStateSchema = closedObject({
   nextRunAtMs: Type.Optional(CronDateTimestampMsSchema),
   scheduleActivatedAtMs: Type.Optional(CronDateTimestampMsSchema),
+  commandAuthorization: Type.Optional(
+    Type.Union([
+      closedObject({
+        status: Type.Literal("required"),
+        providerId: NonEmptyString,
+        authorityRevision: NonEmptyString,
+        definitionDigest: NonEmptyString,
+        updatedAtMs: CronDateTimestampMsSchema,
+        reason: Type.Optional(Type.String()),
+      }),
+      closedObject({
+        status: Type.Literal("ready"),
+        providerId: NonEmptyString,
+        authorityRevision: NonEmptyString,
+        definitionDigest: NonEmptyString,
+        decisionRef: NonEmptyString,
+        proofRef: NonEmptyString,
+        updatedAtMs: CronDateTimestampMsSchema,
+      }),
+    ]),
+  ),
   runningAtMs: Type.Optional(CronDateTimestampMsSchema),
   lastRunAtMs: Type.Optional(CronDateTimestampMsSchema),
   lastRunStatus: Type.Optional(CronRunStatusSchema),

@@ -1,6 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { __resetProofRegistryForTest } from "../../plugins/capability-approval.js";
 import type { ApprovalResolver } from "../../plugins/host-hooks.js";
 import { createEmptyPluginRegistry } from "../../plugins/registry-empty.js";
@@ -22,6 +22,11 @@ import { createCronServiceState, type CronServiceState } from "./state.js";
 import { executeJobCoreWithTimeout } from "./timer-job-runner.js";
 
 const log = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+
+beforeEach(() => {
+  __resetProofRegistryForTest();
+  setActivePluginRegistry(createEmptyPluginRegistry());
+});
 
 afterEach(() => {
   __resetProofRegistryForTest();
@@ -171,6 +176,30 @@ describe("authorized command timeout ownership", () => {
           entries: [expect.objectContaining({ source: "cron-preflight" })],
         },
       });
+      expect(runCommandJob).not.toHaveBeenCalled();
+    });
+  });
+
+  it("reports missing standing authority as a skip without a failure alert", async () => {
+    installResolver(async (request) => ({
+      requestId: request.requestId,
+      decision: "deny",
+      denialKind: "authorization-required",
+      reason: "approval window closed",
+    }));
+    await withFixture(async ({ job, runReceipt, runCommandJob, state }) => {
+      const result = await executeJobCoreWithTimeout(state, job, {
+        runReceipt,
+        runClass: "scheduled",
+      });
+      expect(result).toMatchObject({
+        status: "skipped",
+        error: "cron: command authorization required before execution",
+        diagnostics: {
+          entries: [expect.objectContaining({ source: "cron-preflight", severity: "warn" })],
+        },
+      });
+      expect(result).not.toHaveProperty("failureNotificationDetail");
       expect(runCommandJob).not.toHaveBeenCalled();
     });
   });

@@ -95,6 +95,8 @@ Command payloads run deterministic scripts inside the Gateway scheduler without 
 When an agent-turn automation's exec needs approval, the card is delivered to connected approval surfaces and the run waits for the decision; answering **Always allow** mints a scoped standing grant so later occurrences run without prompting. See [Standing grants for automations](/tools/exec-approvals#standing-grants-for-automations) for lifetime, listing, and revocation.
 
 Command payloads are an operator-admin Gateway automation surface, not an agent `tools.exec` call. Creating, updating, removing, or manually running automation jobs requires `operator.admin`; scheduled command runs later execute inside the Gateway process as that admin-authored automation. Agent exec policy (`tools.exec.mode`, approval prompts, per-agent tool allowlists) governs model-visible exec tools, not command payloads.
+
+When `cron.executionAuthorization.command` selects an approval resolver, an enabled command is persisted as disabled with `state.commandAuthorization.status: "required"` before OpenClaw asks for standing authorization. The schedule is armed only after the resolver returns durable approval for that exact authority-bearing definition. Changes to the command, artifact, environment, execution limits, schedule, delivery, owner, or continuation require a new activation; display-only edits preserve the existing activation. `status: "ready"` records that activation completed—it is not an authorization cache, and every occurrence is still checked against the live provider before execution. If activation expires or is denied, the job stays disabled; explicitly enable it again to retry.
 </Note>
 
 ```bash

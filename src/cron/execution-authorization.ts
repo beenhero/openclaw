@@ -26,22 +26,33 @@ export type CronAutomationRunClass = "scheduled" | "startup-catchup" | "manual";
 type JsonObject = Record<string, unknown>;
 
 export type CronCommandExecutionDefinition = {
-  version: 1;
+  version: 2;
   capability: typeof CRON_COMMAND_APPROVAL_CAPABILITY;
   definitionDigest: string;
   [key: string]: unknown;
 };
 
 export type CronCommandExecutionPlan = {
-  version: 1;
+  version: 2;
   definition: CronCommandExecutionDefinition;
   invocation: {
     runClass: CronAutomationRunClass;
     occurrenceId: string;
     runReceiptId: string;
+    configRevision: string;
   };
   executionDigest: string;
   [key: string]: unknown;
+};
+
+export type CronCommandActivationPlan = {
+  version: 2;
+  definition: CronCommandExecutionDefinition;
+  activation: {
+    activationId: string;
+    configRevision: string;
+  };
+  activationDigest: string;
 };
 
 export type CronCommandAuthorization = {
@@ -59,12 +70,27 @@ export type CronCommandAuthorizationResult =
   | {
       kind: "denied";
       error: string;
+      denialKind?: "policy" | "authorization-required";
       failureDisposition?: "failed" | "timed_out";
     };
+
+export type CronCommandActivationResult =
+  | { kind: "unprotected"; job: CronJob }
+  | {
+      kind: "ready";
+      job: CronJob;
+      providerId: string;
+      authorityRevision: string;
+      definitionDigest: string;
+      decisionRef: string;
+      proofRef: string;
+    }
+  | Extract<CronCommandAuthorizationResult, { kind: "denied" }>;
 
 function asJson<T>(value: T): T {
   // Callers pass closed data-only snapshots before hashing or storage.
   // SAFETY: the JSON round trip only strips prototypes and undefined fields.
+  // oxlint-disable-next-line unicorn/prefer-structured-clone -- Preserve exact JSON transport semantics.
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
@@ -145,20 +171,20 @@ export function assertAuthorizedCronCommandShape(job: CronJob): asserts job is C
   }
 }
 
-/** Build the exact versioned definition and per-occurrence invocation plan. */
-export function buildCronCommandExecutionPlan(params: {
+/** Build the authority-bearing definition independently from any occurrence. */
+export function buildCronCommandAuthorizationDefinition(params: {
   job: CronJob;
-  runReceipt: CronRunReceiptHandle;
-  runClass: CronAutomationRunClass;
-}): { plan: CronCommandExecutionPlan; evidence: JsonObject; job: CronJob } {
+  agentId: string;
+}): {
+  definition: CronCommandExecutionDefinition;
+  evidence: JsonObject;
+  job: CronJob;
+  configRevision: string;
+  authorityRevision: string;
+} {
   const job = structuredClone(params.job);
   assertAuthorizedCronCommandShape(job);
-  if (params.runReceipt.jobId !== job.id) {
-    throw new Error("cron run receipt does not own this job");
-  }
-  if (resolveCronJobConfigRevision(job) !== params.runReceipt.configRevision) {
-    throw new Error("cron execution snapshot does not match its run receipt revision");
-  }
+  const configRevision = resolveCronJobConfigRevision(job);
   const payload = job.payload;
   const consequences =
     payload.consequences ??
@@ -178,16 +204,14 @@ export function buildCronCommandExecutionPlan(params: {
   finalEnvironment[OPENCLAW_CLI_ENV_VAR] = "1";
   const input = payload.input!;
   const limits = resolveCronCommandExecutionLimits(payload);
-  const definitionWithoutDigest = asJson({
-    version: 1,
+  const authoritySections = asJson({
     capability: CRON_COMMAND_APPROVAL_CAPABILITY,
     job: {
       jobId: job.id,
       createdAtMs: job.createdAtMs,
-      configRevision: params.runReceipt.configRevision,
-      agentId: params.runReceipt.agentId,
+      agentId: params.agentId,
       owner: {
-        agentId: job.owner?.agentId ?? params.runReceipt.agentId,
+        agentId: job.owner?.agentId ?? params.agentId,
         ...(job.owner?.accountId ? { accountId: job.owner.accountId } : {}),
       },
     },
@@ -225,6 +249,19 @@ export function buildCronCommandExecutionPlan(params: {
     consequences,
     ...(payload.continuation ? { continuation: payload.continuation } : {}),
   });
+  const authorityRevision = computeParamsDigest({
+    version: 1,
+    ...authoritySections,
+    // SAFETY: authoritySections crossed the closed asJson boundary above.
+  } as never);
+  const definitionWithoutDigest = asJson({
+    version: 2,
+    ...authoritySections,
+    job: {
+      ...authoritySections.job,
+      authorityRevision,
+    },
+  });
   // asJson produced a closed JSON value.
   // SAFETY: the cast narrows only the canonical digest helper's recursive JSON contract.
   const definitionDigest = computeParamsDigest(definitionWithoutDigest as never);
@@ -234,26 +271,187 @@ export function buildCronCommandExecutionPlan(params: {
     // The remaining keys are deliberately extensible.
     // SAFETY: the literals and freshly computed digest satisfy every required field.
   } as CronCommandExecutionDefinition;
+  return {
+    definition,
+    evidence: { stdinValue: input },
+    job,
+    configRevision,
+    authorityRevision,
+  };
+}
+
+/** Build the exact versioned definition and per-occurrence invocation plan. */
+export function buildCronCommandExecutionPlan(params: {
+  job: CronJob;
+  runReceipt: CronRunReceiptHandle;
+  runClass: CronAutomationRunClass;
+}): { plan: CronCommandExecutionPlan; evidence: JsonObject; job: CronJob } {
+  if (params.runReceipt.jobId !== params.job.id) {
+    throw new Error("cron run receipt does not own this job");
+  }
+  const built = buildCronCommandAuthorizationDefinition({
+    job: params.job,
+    agentId: params.runReceipt.agentId,
+  });
+  if (built.configRevision !== params.runReceipt.configRevision) {
+    throw new Error("cron execution snapshot does not match its run receipt revision");
+  }
   const invocation = asJson({
     runClass: params.runClass,
-    occurrenceId: `${params.runClass}:${job.state.runningAtMs ?? params.runReceipt.startedAtMs}`,
+    occurrenceId: `${params.runClass}:${built.job.state.runningAtMs ?? params.runReceipt.startedAtMs}`,
     runReceiptId: params.runReceipt.receiptId,
+    configRevision: params.runReceipt.configRevision,
     // SAFETY: asJson preserves all three required scalar fields in this closed object.
   }) as CronCommandExecutionPlan["invocation"];
   // SAFETY: both members are validated JSON values created above.
-  const executionDigest = computeParamsDigest({ definitionDigest, invocation } as never);
+  const executionDigest = computeParamsDigest({
+    definitionDigest: built.definition.definitionDigest,
+    invocation,
+    // SAFETY: the digest input contains only the validated definition digest and closed invocation.
+  } as never);
   const plan = asJson({
-    version: 1,
-    definition,
+    version: 2,
+    definition: built.definition,
     invocation,
     executionDigest,
     // SAFETY: asJson preserves every required field of this finalized, digested plan.
   }) as CronCommandExecutionPlan;
   return {
     plan,
-    evidence: { stdinValue: input },
-    job,
+    evidence: built.evidence,
+    job: built.job,
   };
+}
+
+/** Build a non-executing plan used to acquire or verify standing authority. */
+export function buildCronCommandActivationPlan(params: {
+  job: CronJob;
+  agentId: string;
+  activationId?: string;
+}): {
+  plan: CronCommandActivationPlan;
+  evidence: JsonObject;
+  job: CronJob;
+  authorityRevision: string;
+} {
+  const built = buildCronCommandAuthorizationDefinition(params);
+  const activation = asJson({
+    activationId: params.activationId ?? crypto.randomUUID(),
+    configRevision: built.configRevision,
+    // SAFETY: both required activation fields are closed strings after the asJson boundary.
+  }) as CronCommandActivationPlan["activation"];
+  const activationDigest = computeParamsDigest({
+    definitionDigest: built.definition.definitionDigest,
+    activation,
+    // SAFETY: the digest input contains only the validated definition digest and closed activation.
+  } as never);
+  return {
+    plan: asJson({
+      version: 2,
+      definition: built.definition,
+      activation,
+      activationDigest,
+      // SAFETY: every required plan member is validated and the remaining shape is closed by asJson.
+    }) as CronCommandActivationPlan,
+    evidence: built.evidence,
+    job: built.job,
+    authorityRevision: built.authorityRevision,
+  };
+}
+
+/** Acquire or reuse standing authority without executing the command. */
+export async function authorizeCronCommandActivation(params: {
+  job: CronJob;
+  agentId: string;
+  providerId?: string;
+  signal?: AbortSignal;
+  timeoutMs?: number;
+}): Promise<CronCommandActivationResult> {
+  const providerId = params.providerId?.trim();
+  if (!providerId) {
+    return { kind: "unprotected", job: params.job };
+  }
+
+  try {
+    const entry = getApprovalResolverForScope(CRON_COMMAND_APPROVAL_CAPABILITY);
+    let registeredId: string | undefined;
+    try {
+      registeredId = entry?.registration.id;
+    } catch {
+      registeredId = undefined;
+    }
+    if (!entry || registeredId !== providerId) {
+      return {
+        kind: "denied",
+        error: `configured automation authorizer ${JSON.stringify(providerId)} is unavailable`,
+        failureDisposition: "failed",
+      };
+    }
+    const built = buildCronCommandActivationPlan({ job: params.job, agentId: params.agentId });
+    const effect = asJson({
+      kind: CRON_COMMAND_APPROVAL_CAPABILITY,
+      plan: built.plan,
+      evidence: built.evidence,
+      // SAFETY: this closed automation.command value extends EffectDescriptor's base JSON shape.
+    }) as unknown as EffectDescriptor;
+    const paramsDigest = computeParamsDigest(effect);
+    const requestId = crypto.randomUUID();
+    const verdict = await decideCapabilityApproval(
+      {
+        requestId,
+        capability: CRON_COMMAND_APPROVAL_CAPABILITY,
+        toolName: "automation.authorize",
+        effects: [effect],
+        agentId: params.agentId,
+        sessionKey: params.job.sessionKey ?? `cron:${params.job.id}`,
+        runId: built.plan.activation.activationId,
+        paramsDigest,
+        subject: params.job.name,
+        origin: "cron:activation",
+      },
+      {
+        deadlineMs: params.timeoutMs ?? DEFAULT_CRON_COMMAND_APPROVAL_TIMEOUT_MS,
+        signal: params.signal,
+      },
+    );
+    if (verdict.kind !== "allow") {
+      return {
+        kind: "denied",
+        error:
+          verdict.kind === "fallthrough"
+            ? "configured automation authorizer did not claim the activation request"
+            : (verdict.reason ?? "automation activation was not authorized"),
+        ...(verdict.kind === "deny" && verdict.failureDisposition
+          ? { failureDisposition: verdict.failureDisposition }
+          : {}),
+        ...(verdict.kind === "deny" && verdict.denialKind
+          ? { denialKind: verdict.denialKind }
+          : {}),
+      };
+    }
+    if (!verdict.proofRef) {
+      return {
+        kind: "denied",
+        error: "configured automation authorizer returned no durable proof reference",
+        failureDisposition: "failed",
+      };
+    }
+    return {
+      kind: "ready",
+      job: built.job,
+      providerId,
+      authorityRevision: built.authorityRevision,
+      definitionDigest: built.plan.definition.definitionDigest,
+      decisionRef: verdict.requestId,
+      proofRef: verdict.proofRef,
+    };
+  } catch (error) {
+    return {
+      kind: "denied",
+      error: error instanceof Error ? error.message : String(error),
+      failureDisposition: "failed",
+    };
+  }
 }
 
 /**
@@ -329,9 +527,14 @@ export async function authorizeCronCommandExecution(params: {
         error:
           verdict.kind === "fallthrough"
             ? "configured automation authorizer did not claim the request"
-            : (verdict.reason ?? "automation execution was not authorized"),
+            : verdict.denialKind === "authorization-required"
+              ? "cron: command authorization required before execution"
+              : (verdict.reason ?? "automation execution was not authorized"),
         ...(verdict.kind === "deny" && verdict.failureDisposition
           ? { failureDisposition: verdict.failureDisposition }
+          : {}),
+        ...(verdict.kind === "deny" && verdict.denialKind
+          ? { denialKind: verdict.denialKind }
           : {}),
       };
     }

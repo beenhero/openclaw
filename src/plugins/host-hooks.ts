@@ -198,6 +198,13 @@ export type ApprovalDecision = {
   decision: "allow" | "deny";
   reason?: string;
   proof?: string;
+  /**
+   * A machine-readable classification for a well-formed deny. Providers use
+   * `authorization-required` when execution is blocked because no grant was
+   * completed within the interactive approval window. This is not a provider
+   * failure and must not be inferred by parsing `reason`.
+   */
+  denialKind?: "policy" | "authorization-required";
 };
 
 /**

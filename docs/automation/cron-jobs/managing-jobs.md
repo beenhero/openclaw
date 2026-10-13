@@ -163,6 +163,9 @@ Model override note:
 {
   cron: {
     enabled: true,
+    executionAuthorization: {
+      command: "sigil-automation",
+    },
     triggers: {
       enabled: false,
     },
@@ -185,6 +188,8 @@ when omitted. Prefer narrow `allowedHostnames` entries over the broad
 Automation jobs, run history, and quarantined malformed jobs live in the shared SQLite state database. Use the CLI or Gateway API to change jobs; `cron.store` is retired.
 
 Set `cron.skipMissedJobs: true` to skip recurring (`cron` and `every`) slots missed while the Gateway was offline. At startup, those jobs advance to their next future occurrence instead of catching up, avoiding stale reminders and unnecessary model calls at the cost of dropping missed work. The default is `false` (catch up); one-shot (`at`) jobs retain their normal catch-up behavior either way.
+
+`cron.executionAuthorization.command` names the exact capability approval resolver that owns protected command automation, for example `sigil-automation`. With a provider configured, a new enabled command and any authority-changing edit enter `state.commandAuthorization.status: "required"` and remain disabled until standing authorization completes. A successful activation changes the marker to `"ready"` and arms the schedule; each actual occurrence still revalidates the live grant. To retry an expired activation, run `openclaw automations enable <jobId>`. Existing command jobs created before this activation protocol are adopted on their next explicit edit or enable operation.
 
 Disable automations: `cron.enabled: false` or `OPENCLAW_SKIP_CRON=1`.
 

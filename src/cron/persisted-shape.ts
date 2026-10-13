@@ -37,7 +37,13 @@ function getInvalidCronJobStateTimestampField(state: unknown): string | undefine
     return field;
   }
   const atMs = asRecord(record.autoDisabled).atMs;
-  return atMs !== undefined && !isValidStateTimestamp(atMs) ? "autoDisabled.atMs" : undefined;
+  if (atMs !== undefined && !isValidStateTimestamp(atMs)) {
+    return "autoDisabled.atMs";
+  }
+  const authorizationUpdatedAtMs = asRecord(record.commandAuthorization).updatedAtMs;
+  return authorizationUpdatedAtMs !== undefined && !isValidStateTimestamp(authorizationUpdatedAtMs)
+    ? "commandAuthorization.updatedAtMs"
+    : undefined;
 }
 
 /** Rejects caller-authored state timestamps that cannot round-trip through Date and SQLite. */

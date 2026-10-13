@@ -236,6 +236,7 @@ export function createJob(
   // Accepting caller state here would let imports spoof restart catch-up ownership.
   delete initialState.scheduleActivatedAtMs;
   delete initialState.autoDisabled;
+  delete initialState.commandAuthorization;
   assertCronJobStateTimestamps(initialState);
   const job: CronStoredJob = {
     id,
@@ -427,6 +428,7 @@ export function applyJobPatch(
     // alone owns the boundary that decides whether restart catch-up can run.
     delete statePatch.scheduleActivatedAtMs;
     delete statePatch.autoDisabled;
+    delete statePatch.commandAuthorization;
     assertCronJobStateTimestamps(statePatch);
     job.state = { ...job.state, ...statePatch };
   }

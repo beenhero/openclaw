@@ -50,6 +50,17 @@ describe("cron protocol schema", () => {
     expect(patchState?.properties?.scheduleActivatedAtMs).toBeUndefined();
   });
 
+  it("reports command authorization readiness without accepting it in state patches", () => {
+    const stateProperties = (CronJobStateSchema as SchemaLike).properties ?? {};
+    expect(stateProperties.commandAuthorization).toBeDefined();
+
+    const updateProperties = (CronUpdateParamsSchema as SchemaLike).properties ?? {};
+    const patchProperties = (updateProperties.patch as SchemaLike | undefined)?.properties ?? {};
+    const patchStateProperties =
+      (patchProperties.state as SchemaLike | undefined)?.properties ?? {};
+    expect(patchStateProperties.commandAuthorization).toBeUndefined();
+  });
+
   it("documents that pacing requires at least one bound", () => {
     expect((CronPacingSchema as SchemaLike).description).toContain(
       "at least one of min or max is required",

@@ -126,6 +126,7 @@ export function assertProofFresh(
 }
 
 /** Clears both structures. Test-only. Also resets the default ledger singleton. */
+// oxlint-disable-next-line eslint/no-underscore-dangle -- Retain the established public test-reset seam.
 export function __resetProofRegistryForTest(): void {
   consumedRecords.clear();
   seenProofs.clear();
@@ -163,9 +164,18 @@ export type CapabilityApprovalVerdict =
       kind: "deny";
       requestId: string;
       reason?: string;
+      denialKind?: "policy" | "authorization-required";
       failureDisposition?: "failed" | "timed_out";
     }
   | { kind: "fallthrough" };
+
+/**
+ * A resolver owns its advertised approval budget. Core gives it a short
+ * settlement-only grace after that budget so it can return a structured deny
+ * instead of racing the host timeout callback. An allow that arrives during
+ * this grace is always rejected as late.
+ */
+export const APPROVAL_RESOLVER_SETTLEMENT_GRACE_MS = 1_000;
 
 /**
  * Runs the capability-scoped approval resolver decision loop for the supplied
@@ -227,19 +237,26 @@ export async function decideCapabilityApproval(
     };
   }
 
-  // Step 4: build a combined abort controller so the deadline timer can abort
-  // the resolver the same way an externally-cancelled signal can.
+  // Step 4: build a combined abort controller. External cancellation aborts
+  // immediately. The advertised resolver budget is followed by a short
+  // settlement-only grace; only a structured deny may survive that boundary.
   const resolverAbort = new AbortController();
-  const onRunAbort = () => resolverAbort.abort();
-  if (opts.signal) {
-    if (opts.signal.aborted) {
-      resolverAbort.abort();
-    } else {
-      opts.signal.addEventListener("abort", onRunAbort, { once: true });
-    }
+  let rejectRunAbort: ((error: Error) => void) | undefined;
+  const runAbortPromise = new Promise<never>((_, reject) => {
+    rejectRunAbort = reject;
+  });
+  const onRunAbort = () => {
+    resolverAbort.abort(opts.signal?.reason);
+    rejectRunAbort?.(new Error("approval lifecycle aborted"));
+  };
+  if (opts.signal?.aborted) {
+    onRunAbort();
+  } else {
+    opts.signal?.addEventListener("abort", onRunAbort, { once: true });
   }
 
-  let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+  let budgetTimer: ReturnType<typeof setTimeout> | undefined;
+  let hardDeadlineTimer: ReturnType<typeof setTimeout> | undefined;
   let verdict: import("./host-hooks.js").ApprovalDecision | undefined;
   let timedOut = false;
 
@@ -249,34 +266,46 @@ export async function decideCapabilityApproval(
       deadlineMs: opts.deadlineMs,
     });
 
-    // Bridge-enforced deadline: a resolver that never resolves cannot park the
-    // approval forever.  The timeout rejects; the catch below maps it to
-    // denied/timed_out.  Aborting the resolver signal lets a cooperative
-    // resolver stop waiting early.
-    const deadlinePromise = new Promise<never>((_, reject) => {
-      deadlineTimer = setTimeout(() => {
+    // At the advertised budget boundary, mark the request late but leave the
+    // resolver alive briefly so a provider-owned deadline can return a
+    // machine-readable deny. The hard deadline then aborts and rejects.
+    const hardDeadlinePromise = new Promise<never>((_, reject) => {
+      budgetTimer = setTimeout(() => {
         timedOut = true;
-        resolverAbort.abort();
-        reject(new Error("approval resolver timed out"));
       }, opts.deadlineMs);
+      hardDeadlineTimer = setTimeout(() => {
+        timedOut = true;
+        resolverAbort.abort(new Error("approval resolver timed out"));
+        reject(new Error("approval resolver timed out"));
+      }, opts.deadlineMs + APPROVAL_RESOLVER_SETTLEMENT_GRACE_MS);
     });
 
-    verdict = await Promise.race([resolvePromise, deadlinePromise]);
+    verdict = await Promise.race([resolvePromise, hardDeadlinePromise, runAbortPromise]);
   } catch {
     verdict = undefined;
   } finally {
-    if (deadlineTimer !== undefined) {
-      clearTimeout(deadlineTimer);
+    if (budgetTimer !== undefined) {
+      clearTimeout(budgetTimer);
     }
-    if (opts.signal) {
-      opts.signal.removeEventListener("abort", onRunAbort);
+    if (hardDeadlineTimer !== undefined) {
+      clearTimeout(hardDeadlineTimer);
     }
+    opts.signal?.removeEventListener("abort", onRunAbort);
   }
 
   // Step 5: map the outcome → verdict type.
 
-  // Deadline expiry.
-  if (timedOut) {
+  // Deadline expiry. A provider may use the settlement grace only to explain
+  // that authorization is still required. Never accept a late allow or a
+  // generic/policy deny as if it had completed within the approval budget.
+  if (
+    timedOut &&
+    !(
+      verdict?.requestId === req.requestId &&
+      verdict.decision === "deny" &&
+      verdict.denialKind === "authorization-required"
+    )
+  ) {
     return {
       kind: "deny",
       requestId: req.requestId,
@@ -312,6 +341,19 @@ export async function decideCapabilityApproval(
     };
   }
 
+  if (
+    verdict.denialKind !== undefined &&
+    verdict.denialKind !== "policy" &&
+    verdict.denialKind !== "authorization-required"
+  ) {
+    return {
+      kind: "deny",
+      requestId: req.requestId,
+      reason: verdict.reason ?? "approval resolver returned an invalid denial kind",
+      failureDisposition: "failed",
+    };
+  }
+
   // Clean policy DENY (matching requestId) = a DECISION, not a failure.
   // Emit NO failureDisposition → the caller's graceful-block branch (front-stage
   // veto / codex "decline") fires, mirroring a codex curl-deny.
@@ -320,6 +362,7 @@ export async function decideCapabilityApproval(
       kind: "deny",
       requestId: req.requestId,
       reason: verdict.reason ?? "denied by resolver",
+      ...(verdict.denialKind ? { denialKind: verdict.denialKind } : {}),
     };
   }
 

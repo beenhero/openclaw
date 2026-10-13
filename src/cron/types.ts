@@ -411,6 +411,25 @@ export type CronJobState = {
    * jobs whose schedule has not changed, where every computed slot is real.
    */
   scheduleActivatedAtMs?: number;
+  /** Server-owned activation state for a protected command automation. */
+  commandAuthorization?:
+    | {
+        status: "required";
+        providerId: string;
+        authorityRevision: string;
+        definitionDigest: string;
+        updatedAtMs: number;
+        reason?: string;
+      }
+    | {
+        status: "ready";
+        providerId: string;
+        authorityRevision: string;
+        definitionDigest: string;
+        decisionRef: string;
+        proofRef: string;
+        updatedAtMs: number;
+      };
   /** Exact startup catch-up slot protected from future-slot repair across restarts. */
   startupCatchupAtMs?: number;
   /** Exact paced completion slot protected from future-slot repair until consumed. */
@@ -563,7 +582,10 @@ export type CronStoreFile = {
 };
 
 type CronJobStateInput = Partial<
-  Omit<CronJobState, "autoDisabled" | "scheduleActivatedAtMs" | "streamSourceIdentity">
+  Omit<
+    CronJobState,
+    "autoDisabled" | "scheduleActivatedAtMs" | "streamSourceIdentity" | "commandAuthorization"
+  >
 >;
 
 /** Create input accepted by cron APIs before id/timestamps/state are assigned. */

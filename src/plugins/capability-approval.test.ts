@@ -6,6 +6,7 @@ import {
   computeParamsDigest,
   decideCapabilityApproval,
   fingerprintJson,
+  APPROVAL_RESOLVER_SETTLEMENT_GRACE_MS,
   recordAndConsumeProof,
 } from "./capability-approval.js";
 import type { PluginJsonValue } from "./host-hook-json.js";
@@ -111,7 +112,7 @@ describe("decideCapabilityApproval", () => {
     expect(verdict).toEqual({
       kind: "allow",
       requestId: req.requestId,
-      proofRef: `sha256:${"299546ae6a6cae5c7110d7c47258f564d78ceae93168da1033c6e3d46c725194"}`,
+      proofRef: "sha256:299546ae6a6cae5c7110d7c47258f564d78ceae93168da1033c6e3d46c725194",
     });
     expect(JSON.stringify(verdict)).not.toContain(proof);
   });
@@ -135,6 +136,55 @@ describe("decideCapabilityApproval", () => {
     expect(
       (verdict as { kind: "deny"; failureDisposition?: string }).failureDisposition,
     ).toBeUndefined();
+  });
+
+  it("preserves a structured authorization-required deny at the resolver budget", async () => {
+    vi.useFakeTimers();
+    setActivePluginRegistry(
+      makeRegistryWithResolver(
+        (request) =>
+          new Promise<ApprovalDecision>((resolve) => {
+            setTimeout(() => {
+              resolve({
+                requestId: request.requestId,
+                decision: "deny",
+                denialKind: "authorization-required",
+                reason: "approval window elapsed",
+              });
+            }, 3000);
+          }),
+      ),
+    );
+
+    const verdictPromise = decideCapabilityApproval(makeRequest(), { deadlineMs: 3000 });
+    await vi.advanceTimersByTimeAsync(3000);
+    await expect(verdictPromise).resolves.toEqual({
+      kind: "deny",
+      requestId: makeRequest().requestId,
+      denialKind: "authorization-required",
+      reason: "approval window elapsed",
+    });
+  });
+
+  it("rejects an allow that arrives during settlement grace", async () => {
+    vi.useFakeTimers();
+    setActivePluginRegistry(
+      makeRegistryWithResolver(
+        (request) =>
+          new Promise<ApprovalDecision>((resolve) => {
+            setTimeout(() => {
+              resolve({ requestId: request.requestId, decision: "allow" });
+            }, 3001);
+          }),
+      ),
+    );
+
+    const verdictPromise = decideCapabilityApproval(makeRequest(), { deadlineMs: 3000 });
+    await vi.advanceTimersByTimeAsync(3001);
+    await expect(verdictPromise).resolves.toMatchObject({
+      kind: "deny",
+      failureDisposition: "timed_out",
+    });
   });
 
   it("deny — resolver throws → {kind:'deny',failureDisposition:'failed'}", async () => {
@@ -182,7 +232,6 @@ describe("decideCapabilityApproval", () => {
     vi.useFakeTimers();
     setActivePluginRegistry(
       makeRegistryWithResolver(
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         (_req, opts) =>
           new Promise<ApprovalDecision>((resolve) => {
             // Cooperatively stop when aborted; otherwise hang forever.
@@ -194,7 +243,7 @@ describe("decideCapabilityApproval", () => {
     );
 
     const verdictPromise = decideCapabilityApproval(makeRequest(), { deadlineMs: 3000 });
-    await vi.advanceTimersByTimeAsync(3001);
+    await vi.advanceTimersByTimeAsync(3000 + APPROVAL_RESOLVER_SETTLEMENT_GRACE_MS + 1);
     const verdict = await verdictPromise;
     expect(verdict.kind).toBe("deny");
     const d = verdict as { kind: "deny"; failureDisposition?: string };

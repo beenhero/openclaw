@@ -13,6 +13,7 @@ import { findTaskByRunId, listTaskRecordsUnsorted } from "../../tasks/task-regis
 import { resetTaskRegistryForTests } from "../../tasks/task-runtime.test-helpers.js";
 import { formatTaskStatusDetail } from "../../tasks/task-status.js";
 import { withEnvAsync } from "../../test-utils/env.js";
+import { publishPythonInlineArtifact } from "../python-inline-artifact.js";
 import { createCronExecutionId } from "../run-id.js";
 import * as cronSchedule from "../schedule.js";
 import { readCronJobScratchState, writeCronJobScratch } from "../scratch-store.js";
@@ -25,6 +26,7 @@ import type { CronJob } from "../types.js";
 import { start, stop } from "./ops-lifecycle.js";
 import {
   add,
+  completeCommandAuthorization,
   remove,
   removeAgentJobsTransactional,
   removeStaleJobFamily,
@@ -41,6 +43,83 @@ import { runMissedJobs } from "./timer.js";
 
 const { logger, makeStorePath } = setupCronServiceSuite({
   prefix: "cron-service-ops-seam",
+});
+
+describe("command authorization activation", () => {
+  it("keeps a new command unscheduled until standing authority is ready", async () => {
+    const { storePath } = await makeStorePath();
+    const now = Date.parse("2026-09-29T05:00:00.000Z");
+    const sourcePath = path.join(path.dirname(storePath), "activation.py");
+    await fs.mkdir(path.dirname(sourcePath), { recursive: true });
+    await fs.writeFile(sourcePath, "print('activation test')\n");
+    const payload = await publishPythonInlineArtifact({
+      sourcePath,
+      pythonPath: "/usr/bin/python3",
+      cwd: path.dirname(sourcePath),
+    });
+    const state = createCronServiceState({
+      storePath,
+      cronEnabled: true,
+      cronConfig: { executionAuthorization: { command: "sigil-automation" } },
+      defaultAgentId: "main",
+      log: logger,
+      nowMs: () => now,
+      enqueueSystemEvent: vi.fn(),
+      requestHeartbeat: vi.fn(),
+      runCommandJob: vi.fn(async () => ({ status: "ok" as const })),
+      runIsolatedAgentJob: vi.fn(async () => ({ status: "ok" as const })),
+    });
+
+    const staged = await add(state, {
+      name: "activation gated",
+      enabled: true,
+      schedule: { kind: "every", everyMs: 60_000 },
+      sessionTarget: "isolated",
+      wakeMode: "now",
+      payload,
+      delivery: { mode: "none" },
+    });
+    expect(staged).toMatchObject({
+      enabled: false,
+      state: {
+        commandAuthorization: {
+          status: "required",
+          providerId: "sigil-automation",
+          authorityRevision: expect.stringMatching(/^sha256:[a-f0-9]{64}$/),
+        },
+      },
+    });
+    expect(staged.state.nextRunAtMs).toBeUndefined();
+    const marker = staged.state.commandAuthorization!;
+    const activated = await completeCommandAuthorization(state, {
+      jobId: staged.id,
+      providerId: marker.providerId,
+      authorityRevision: marker.authorityRevision,
+      definitionDigest: marker.definitionDigest,
+      allowed: true,
+      decisionRef: "decision:test",
+      proofRef: "proof:test",
+    });
+    expect(activated).toMatchObject({
+      enabled: true,
+      state: { commandAuthorization: { status: "ready", proofRef: "proof:test" } },
+    });
+    expect(activated?.state.nextRunAtMs).toBeGreaterThan(now);
+
+    const metadataOnly = await update(state, staged.id, { name: "renamed activation gated" });
+    expect(metadataOnly.enabled).toBe(true);
+    expect(metadataOnly.state.commandAuthorization).toMatchObject({ status: "ready" });
+
+    const authorityChange = await update(state, staged.id, {
+      schedule: { kind: "every", everyMs: 120_000 },
+    });
+    expect(authorityChange.enabled).toBe(false);
+    expect(authorityChange.state.commandAuthorization).toMatchObject({ status: "required" });
+    expect(authorityChange.state.nextRunAtMs).toBeUndefined();
+    if (state.timer) {
+      clearTimeout(state.timer);
+    }
+  });
 });
 
 function requireDeclarativeAddResult(result: CronAddResult) {
