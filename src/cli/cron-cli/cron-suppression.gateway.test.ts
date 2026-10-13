@@ -151,6 +151,7 @@ describe("cron CLI delivery suppression readback", () => {
             deliveryRequested: phase !== "not-requested",
             undeliveredRunStatus: "ok",
             spawnOnlyHandoff: false,
+            requesterYielded: false,
             sourceDeliveryOutcome: {
               visibleDeliveries: [],
               verifiedMessageToolDelivery: false,

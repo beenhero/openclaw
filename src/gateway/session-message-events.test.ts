@@ -1066,6 +1066,7 @@ describe("session.message websocket events", () => {
         deliveryRequested: true,
         undeliveredRunStatus: "ok",
         spawnOnlyHandoff: false,
+        requesterYielded: false,
         sourceDeliveryOutcome: {
           visibleDeliveries: [],
           verifiedMessageToolDelivery: false,

@@ -31,9 +31,13 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EventFrame } from "../../packages/gateway-protocol/src/index.js";
 import type { GatewayClient } from "../gateway/client.js";
-import { AcpGatewayAgent } from "./translator.js";
+import type { AcpGatewayAgent } from "./translator.js";
 import { promptAgent } from "./translator.prompt-harness.test-support.js";
-import { createAcpConnection, createAcpGateway } from "./translator.test-helpers.js";
+import {
+  createAcpConnection,
+  createAcpGateway,
+  createAcpGatewayAgent,
+} from "./translator.test-helpers.js";
 
 vi.mock("./commands.js", () => ({
   getAvailableCommands: () => [],
@@ -125,7 +129,7 @@ async function createHarness(
   });
 
   const connection = createAcpConnection({ requestPermission });
-  const agent = new AcpGatewayAgent(connection, createAcpGateway(request), { sessionStore });
+  const agent = createAcpGatewayAgent(connection, createAcpGateway(request), { sessionStore });
   const promptPromise = promptAgent(agent, SESSION_ID);
 
   await vi.waitFor(() => {
