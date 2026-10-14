@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   formatNodeInvokeFailureFollowup,
+  formatNodeInvokeFailureToolResult,
   invokeNodeSystemRun,
 } from "./bash-tools.exec-host-node-failure.js";
 import {
@@ -70,11 +71,40 @@ describe("invokeNodeSystemRun failure classification", () => {
   });
 
   it.each([
+    gatewayNodeInvokeError({ code: "TIMEOUT", nodeCommandDispatched: false }),
+    Object.assign(new Error("approval timed out"), {
+      details: { code: "EXTERNAL_POLICY_DENIED", nodeCommandDispatched: false },
+    }),
+  ])(
+    "reports a proven pre-dispatch failure as not executed without making it retry-safe",
+    async (error) => {
+      const failure = await invokeFailure(error);
+      expect(failure).toMatchObject({ reason: "not-executed", retrySafe: false });
+      const result = formatNodeInvokeFailureToolResult({
+        failure,
+        nodeId: "node-1",
+        command: "touch witness",
+        startedAt: Date.now(),
+        cwd: "/work",
+      });
+      expect(result.details).toMatchObject({ status: "failed", reason: "not-executed" });
+      if (result.details.status !== "failed") {
+        throw new Error("expected failed execution details");
+      }
+      expect(result.details.aggregated).toContain("was not executed");
+      expect(result.details.aggregated).not.toContain("may have executed");
+    },
+  );
+
+  it.each([
     {
-      name: "deadline before dispatch",
-      error: gatewayNodeInvokeError({
-        code: "TIMEOUT",
-        nodeCommandDispatched: false,
+      name: "deadline after dispatch",
+      error: gatewayNodeInvokeError({ code: "TIMEOUT", nodeCommandDispatched: true }),
+    },
+    {
+      name: "gateway policy refusal after dispatch without a node refusal result",
+      error: Object.assign(new Error("policy refused after dispatch"), {
+        details: { code: "SYSTEM_RUN_DENIED", nodeCommandDispatched: true },
       }),
     },
     {

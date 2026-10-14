@@ -467,6 +467,7 @@ export const nodeInvokeHandlers: GatewayRequestHandlers = {
                 details: {
                   ...policyResult.details,
                   ...(policyResult.code ? { code: policyResult.code } : {}),
+                  nodeCommandDispatched,
                 },
               }),
             );

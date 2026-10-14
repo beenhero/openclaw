@@ -8,6 +8,14 @@ import { callGatewayTool } from "./tools/gateway.js";
 
 type NodeInvokeFailure =
   | {
+      reason: "not-executed";
+      retrySafe: false;
+      code?: string;
+      message: string;
+      nodeCommandDispatched: false;
+      requestSent?: boolean;
+    }
+  | {
       reason: "policy-denied";
       retrySafe: false;
       code: "SYSTEM_RUN_DENIED";
@@ -41,7 +49,8 @@ function classifyNodeInvokeFailure(error: unknown): NodeInvokeFailure {
   const errorRecord = asNullableRecord(error);
   const details = asNullableRecord(errorRecord?.details);
   const nodeError = asNullableRecord(details?.nodeError);
-  const code = readString(nodeError?.code);
+  const nodeCode = readString(nodeError?.code);
+  const code = nodeCode ?? readString(details?.code);
   const message =
     readString(nodeError?.message) ??
     (error instanceof Error ? error.message : readString(error)) ??
@@ -51,14 +60,24 @@ function classifyNodeInvokeFailure(error: unknown): NodeInvokeFailure {
   const requestSent =
     typeof errorRecord?.requestSent === "boolean" ? errorRecord.requestSent : undefined;
 
-  if (code === "SYSTEM_RUN_DENIED") {
-    return { reason: "policy-denied", retrySafe: false, code, message };
+  if (nodeCode === "SYSTEM_RUN_DENIED") {
+    return { reason: "policy-denied", retrySafe: false, code: nodeCode, message };
   }
   if (code === "NOT_CONNECTED" && nodeCommandDispatched === false) {
     return {
       reason: "not-dispatched",
       retrySafe: true,
       code,
+      message,
+      nodeCommandDispatched,
+      ...(requestSent !== undefined ? { requestSent } : {}),
+    };
+  }
+  if (nodeCommandDispatched === false) {
+    return {
+      reason: "not-executed",
+      retrySafe: false,
+      ...(code ? { code } : {}),
       message,
       nodeCommandDispatched,
       ...(requestSent !== undefined ? { requestSent } : {}),
@@ -85,15 +104,20 @@ function formatNodeInvokeFailureText(params: {
           `Node command outcome is unknown for ${params.nodeId}.`,
           "The command may have executed. Do not rerun it automatically.",
         ]
-      : params.failure.reason === "policy-denied"
+      : params.failure.reason === "not-executed"
         ? [
-            `Node command was denied before execution on ${params.nodeId}.`,
-            "Resolve the reported refusal before retrying.",
+            `Node command was not executed on ${params.nodeId}.`,
+            "The invocation stopped before command dispatch. Resolve the reported failure before requesting a new execution.",
           ]
-        : [
-            `Node command was not dispatched to ${params.nodeId}.`,
-            "It can be retried after the node reconnects.",
-          ];
+        : params.failure.reason === "policy-denied"
+          ? [
+              `Node command was denied before execution on ${params.nodeId}.`,
+              "Resolve the reported refusal before retrying.",
+            ]
+          : [
+              `Node command was not dispatched to ${params.nodeId}.`,
+              "It can be retried after the node reconnects.",
+            ];
   return [
     ...summary,
     "",
@@ -113,9 +137,11 @@ export function formatNodeInvokeFailureFollowup(params: {
   const prefix =
     params.failure.reason === "outcome-unknown"
       ? `Exec outcome unknown (node=${params.nodeId} id=${params.approvalId}, outcome-unknown)`
-      : params.failure.reason === "policy-denied"
-        ? `Exec denied (node=${params.nodeId} id=${params.approvalId}, policy-denied)`
-        : `Exec not dispatched (node=${params.nodeId} id=${params.approvalId}, not-dispatched)`;
+      : params.failure.reason === "not-executed"
+        ? `Exec not executed (node=${params.nodeId} id=${params.approvalId}, not-executed)`
+        : params.failure.reason === "policy-denied"
+          ? `Exec denied (node=${params.nodeId} id=${params.approvalId}, policy-denied)`
+          : `Exec not dispatched (node=${params.nodeId} id=${params.approvalId}, not-dispatched)`;
   return `${prefix}\n${formatNodeInvokeFailureText(params)}`;
 }
 

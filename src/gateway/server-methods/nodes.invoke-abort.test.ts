@@ -14,7 +14,9 @@ const mocks = vi.hoisted(() => ({
   isNodePairingGenerationCurrent: vi.fn(async () => true),
   isNodeCommandAllowed: vi.fn((): { ok: true } | { ok: false; reason: string } => ({ ok: true })),
   resolveNodeCommandAllowlist: vi.fn(() => new Set<string>()),
-  applyPluginNodeInvokePolicy: vi.fn(async () => undefined),
+  applyPluginNodeInvokePolicy: vi.fn<
+    typeof import("../node-invoke-plugin-policy.js").applyPluginNodeInvokePolicy
+  >(async () => null),
   sanitizeNodeInvokeParamsForForwarding: vi.fn(
     ({
       rawParams,
@@ -105,6 +107,37 @@ function startNodeInvoke(options: {
   });
   return { invocation, respond };
 }
+
+it.each([false, true])(
+  "retains host-owned dispatch provenance when plugin policy fails (dispatched=%s)",
+  async (dispatched) => {
+    const invoke = vi.fn();
+    mocks.applyPluginNodeInvokePolicy.mockImplementationOnce(async (params) => {
+      if (dispatched) {
+        params.onNodeCommandDispatched?.();
+      }
+      return {
+        ok: false,
+        code: "EXTERNAL_POLICY_DENIED",
+        message: "approval timed out",
+        details: { nodeCommandDispatched: !dispatched },
+      };
+    });
+    const { invocation, respond } = startNodeInvoke({ invoke });
+    await invocation;
+    expect(invoke).not.toHaveBeenCalled();
+    expect(respond).toHaveBeenCalledWith(
+      false,
+      undefined,
+      expect.objectContaining({
+        details: expect.objectContaining({
+          code: "EXTERNAL_POLICY_DENIED",
+          nodeCommandDispatched: dispatched,
+        }),
+      }),
+    );
+  },
+);
 
 function createNodeInvokeStreamClient(
   stream: GatewayNodeInvokeStream,
